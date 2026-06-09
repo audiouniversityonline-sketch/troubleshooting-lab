@@ -1560,9 +1560,11 @@ function useViewport() {
 // Uniform scale-to-fit. Measures the available box (the scroll container) and
 // returns the factor that fits a fixed designW x designH board inside it.
 // min(width-ratio, height-ratio) so it always fits both axes; clamped so it
-// never shrinks below 0.45 or grows past 1.3 (modest upscaling fills big
-// monitors without ballooning the controls). A ResizeObserver on the viewport
-// catches window resizes, TopBar reflow, and OS/browser zoom alike.
+// never shrinks below 0.45 or grows past 3.0. The high upper bound lets the
+// board fill big monitors and fullscreen (a 4K screen fills width at ~2.46);
+// past ~4680px wide it stops growing so controls don't get absurd. A
+// ResizeObserver on the viewport catches window resizes, TopBar reflow, and
+// OS/browser zoom alike.
 function useFitScale(viewportRef, designW, designH, enabled) {
   const [scale, setScale] = useS2(1);
   useE2(() => {
@@ -1572,7 +1574,7 @@ function useFitScale(viewportRef, designW, designH, enabled) {
       const availW = el.clientWidth, availH = el.clientHeight;
       if (!availW || !availH) return;
       const raw = Math.min(availW / designW, availH / designH);
-      setScale(Math.max(0.45, Math.min(1.3, raw)));
+      setScale(Math.max(0.45, Math.min(3, raw)));
     };
     recompute();
     const ro = new ResizeObserver(recompute);
@@ -3809,6 +3811,27 @@ function App() {
 
 function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed }) {
   const [picker, setPicker] = uS(false);
+  // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
+  // column width, so this is the reliable "use my whole screen" path: it puts
+  // the app's document into the browser's fullscreen (the iframe needs
+  // allow="fullscreen", which the embed snippet sets). Combined with the
+  // raised scale cap, the board fills a big monitor when fullscreen.
+  const [isFs, setIsFs] = uS(typeof document !== 'undefined' && !!document.fullscreenElement);
+  uE(() => {
+    const onFs = () => setIsFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+  const toggleFullscreen = () => {
+    try {
+      if (document.fullscreenElement) {
+        (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+      } else {
+        const el = document.documentElement;
+        (el.requestFullscreen || el.webkitRequestFullscreen || function(){}).call(el);
+      }
+    } catch (e) {}
+  };
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -3856,6 +3879,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           borderColor: audioOn ? '#2c9d52' : '#38383e',
           fontWeight: 700, padding: '6px 12px',
         }}>{audioOn ? '🔊 SOUND ON' : '🔇 SOUND OFF'}</button>
+        <button onClick={toggleFullscreen} className="mono ui-no-select" title="Fill the screen" style={{ ...navBtn, padding: '6px 12px' }}>{isFs ? '⤢ EXIT' : '⤢ FULL SCREEN'}</button>
         <button onClick={onRestart} className="mono ui-no-select" style={{ ...navBtn, padding: '6px 14px' }}>↻ RESET</button>
       </div>
     </div>
