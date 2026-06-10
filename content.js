@@ -294,23 +294,27 @@ window.LEVELS = [
     // level stays up). NEXT TURN: add an EQ on the aux outputs as the real,
     // surgical fix; HPF is the stopgap so the level is solvable today.
     symptom: 'The singer still can\'t hear herself well in her wedge. Turn her vocal up in the monitor for her. Careful, monitors feed back when you push them too hard.',
-    hint: 'Turn up AUX 1 on the vocal to give her more in the wedge. If it starts to ring, turn on HPF on the vocal channel to pull the low end out of the loop so you can keep her level up.',
+    hint: 'Turn up AUX 1 on the vocal to give her more in her wedge. When it starts to ring, look at the monitor EQ on her wedge: the ringing frequency glows. Pull that band down to cut it. The ring stops and her level stays up. (HPF only helps low-frequency ring, not this one.)',
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
-      { source: 'vocal', dest: 'wedge', min: 0.6 },
+      { source: 'vocal', dest: 'wedge', min: 0.7 },
     ],
     sabotage: (s) => {
-      // Vocal live in the PA, wedge up (kept). A little vocal in the wedge, not
-      // enough for the singer, and below the feedback threshold for now.
+      // Vocal live in the PA. Her wedge has been pushed up all night (volume
+      // cranked, kept), with a little vocal in it but not enough. Pushing AUX 1
+      // up to give her what she wants crosses into feedback. Her wedge rings at
+      // its resonant band (wedge.ringBand, mid-high); HPF won't fix that, so the
+      // student has to ring it out on the monitor EQ. Wedge volume kept with
+      // headroom so the loud send doesn't clip while she's still ringing.
       s.master.fader = 0.75; s.master.mute = false;
       s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
-      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.7; s.outputs.wedge.mute = false;
       s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
       s.channels[0].aux1 = 0.2;
       s.channels[0].highpass = false;
       return s;
     },
-    solution: 'Turn up the vocal in her wedge, then turn on HPF on the vocal to stop the ring while keeping her level.',
+    solution: 'Turn up the vocal in her wedge, then ring it out: pull the glowing band down on her monitor EQ to cut the ringing frequency.',
     defaultInspect: 'wedge',
   },
 ];

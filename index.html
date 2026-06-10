@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=14"></script>
+<script src="content.js?v=16"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -169,6 +169,18 @@ const DESTINATIONS = {
   wedge2: { label: 'Wedge 2',         short: 'WEDGE 2', stereo: false, description: 'Floor wedge for Vocal Mic 2.' },
 };
 
+// Graphic EQ on the monitor sends — the band frequencies, low to high. A cut on
+// the band a wedge rings at (its ringBand) drops the feedback loop at that
+// frequency. Bands 0-1 are "low" (an HPF can help there); 2-4 are mid/high
+// (only the EQ rings those out). EQ_CUT_DB = the cut at a band's full setting.
+const EQ_BANDS = ['125', '400', '1k', '2.5k', '6.3k'];
+const EQ_CUT_DB = 12;
+// Linear relief multiplier from a band's cut fraction (0 flat .. 1 full cut).
+function eqBandRelief(cutFrac) {
+  const c = Math.max(0, Math.min(1, cutFrac || 0));
+  return Math.pow(10, (-EQ_CUT_DB * c) / 20);
+}
+
 const DEFAULT_CHANNEL = {
   label: '—',
   gain: 0.0,
@@ -212,8 +224,12 @@ function defaultState() {
     outputs: {
       pa_l:   { on: true, mute: false, volume: 0.7 },
       pa_r:   { on: true, mute: false, volume: 0.7 },
-      wedge:  { on: true, mute: false, volume: 0.0 },
-      wedge2: { on: true, mute: false, volume: 0.0 },
+      // eq: per-band cut on the monitor send, 0 (flat) .. 1 (full -12 dB cut),
+      // one entry per EQ_BANDS frequency. ringBand: the band this wedge rings
+      // at when it feeds back (its resonant frequency). Cutting that band on
+      // the monitor EQ rings the wedge out.
+      wedge:  { on: true, mute: false, volume: 0.0, eq: [0, 0, 0, 0, 0], ringBand: 3 },
+      wedge2: { on: true, mute: false, volume: 0.0, eq: [0, 0, 0, 0, 0], ringBand: 2 },
       amp:    { on: true },
     },
     cables: {
@@ -923,6 +939,17 @@ function detectFeedback(s, audio) {
   const WEDGE_COUPLING = 1.0;   // wedge points at the mic
   const MAINS_COUPLING = 0.22;  // mains face away — only ring when cranked hard
   const RING_THRESHOLD = 0.55;
+  const o = s.outputs || {};
+  // Loop gain through one wedge for a mic, after that wedge's EQ cut at its
+  // ring band and (for a low ring band only) an HPF on the channel. The EQ is
+  // the surgical fix; HPF only helps low-frequency ringing.
+  const wedgeRisk = (w, contrib, hpf) => {
+    if (!w || !contrib) return 0;
+    const band = w.ringBand != null ? w.ringBand : 2;
+    const eqRelief = w.eq ? eqBandRelief(w.eq[band]) : 1.0;
+    const hpfRelief = (hpf && band <= 1) ? 0.6 : 1.0;
+    return contrib * WEDGE_COUPLING * eqRelief * hpfRelief;
+  };
   for (let i = 0; i < s.channels.length; i++) {
     const ch = s.channels[i];
     if (ch.mute) continue;
@@ -935,13 +962,14 @@ function detectFeedback(s, audio) {
     if (srcDef.kind === 'condenser' && !ch.phantom) continue;
     const c = audio.contributions[srcKey];
     if (!c) continue;
-    const hpfRelief = ch.highpass ? 0.6 : 1.0;
-    // Loop gain through whichever speaker is hottest for this mic.
-    const wedgeLoop = Math.max(c.wedge || 0, c.wedge2 || 0) * WEDGE_COUPLING;
-    const mainsLoop = ((c.pa_l || 0) + (c.pa_r || 0)) * MAINS_COUPLING;
-    const risk = Math.max(wedgeLoop, mainsLoop) * hpfRelief;
+    const w1 = wedgeRisk(o.wedge, c.wedge || 0, ch.highpass);
+    const w2 = wedgeRisk(o.wedge2, c.wedge2 || 0, ch.highpass);
+    const mainsLoop = ((c.pa_l || 0) + (c.pa_r || 0)) * MAINS_COUPLING * (ch.highpass ? 0.6 : 1.0);
+    const risk = Math.max(w1, w2, mainsLoop);
     if (risk > RING_THRESHOLD) {
-      return { channelIdx: i, riskAmount: risk };
+      // Which wedge is ringing, so the UI can highlight its ring band.
+      const ringWedge = w1 >= w2 && w1 >= mainsLoop ? 'wedge' : (w2 >= mainsLoop ? 'wedge2' : null);
+      return { channelIdx: i, riskAmount: risk, ringWedge, ringBand: ringWedge ? (o[ringWedge].ringBand) : null };
     }
   }
   return null;
@@ -1903,7 +1931,41 @@ function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePowe
   );
 }
 
-function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, label = 'STAGE WEDGE', accent = 'var(--aux)' }) {
+// One band of the monitor EQ. value = cut fraction (0 flat .. 1 full cut). The
+// visible bar is the pass level (1 - cut), so pulling it down cuts that band —
+// like a graphic-EQ slider. When this band is the one ringing, it glows red.
+function EqBand({ value, onChange, label, ringing, accent }) {
+  const ref = React.useRef(null);
+  const startRef = React.useRef(null);
+  const fitScale = React.useContext(window.FitScaleContext) || 1;
+  const H = 24;
+  const onDown = (e) => { e.preventDefault(); e.stopPropagation(); try { ref.current.setPointerCapture(e.pointerId); } catch(_){} startRef.current = { y: e.clientY, v: value || 0 }; };
+  const onMove = (e) => { if (!startRef.current) return; const dy = (e.clientY - startRef.current.y) / (fitScale || 1); let v = startRef.current.v + dy / H; v = Math.max(0, Math.min(1, v)); onChange(v); };
+  const onUp = (e) => { startRef.current = null; try { ref.current.releasePointerCapture(e.pointerId); } catch(_){} };
+  const pass = 1 - (value || 0);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+      <div ref={ref} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} className="ui-no-select"
+        style={{ width: 8, height: H, background: '#0a0a0c', border: '1px solid ' + (ringing ? 'var(--hot)' : '#2a2a2e'), borderRadius: 2, position: 'relative', cursor: 'ns-resize',
+          boxShadow: ringing ? '0 0 7px rgba(255,70,48,0.7)' : 'none', animation: ringing ? 'pulse 0.9s ease-in-out infinite' : 'none' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: pass * (H - 2), background: ringing ? 'var(--hot)' : accent, opacity: 0.85, borderRadius: '0 0 1px 1px' }}/>
+      </div>
+      <div className="mono" style={{ fontSize: 5, lineHeight: 1, color: ringing ? 'var(--hot)' : 'var(--ink-3)' }}>{label}</div>
+    </div>
+  );
+}
+
+function EqStrip({ eq, onChange, ringBand, accent }) {
+  return (
+    <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', padding: '1px 2px', background: '#141417', border: '1px solid #2a2a2e', borderRadius: 3 }} title="Monitor EQ — pull a band down to cut that frequency">
+      {EQ_BANDS.map((lbl, i) => (
+        <EqBand key={i} value={eq ? eq[i] : 0} onChange={(v) => onChange(i, v)} label={lbl} ringing={ringBand === i} accent={accent}/>
+      ))}
+    </div>
+  );
+}
+
+function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, label = 'STAGE WEDGE', accent = 'var(--aux)', eq, onEqChange, ringBand }) {
   const animate = on && !mute && level > 0.05;
   const intensity = Math.min(1, level);
   // Resolve the accent var to an rgba glow color so we can reuse the variable
@@ -1961,6 +2023,12 @@ function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume,
           <window.Knob value={volume} onChange={onVolume} size={20} color={accent}/>
           <window.ButtonPad active={mute} onClick={(e) => { e.stopPropagation(); onToggleMute(); }} label="M" color="var(--hot)" width={14} height={14} fontSize={8}/>
         </div>
+        {eq && onEqChange && (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, opacity: on ? 1 : 0.5 }}>
+            <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, writingMode: 'vertical-rl', transform: 'rotate(180deg)', lineHeight: 1 }}>EQ</div>
+            <EqStrip eq={eq} onChange={onEqChange} ringBand={ringBand} accent={accent}/>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2287,6 +2355,15 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // hears the speaker they're setting. Bundled into one setState with the
   // volume change. paInsp/wedgeInsp map the output to its listening dest.
   const setOutInspect = (key, patch, dest) => setState(prev => ({ ...prev, outputs: { ...prev.outputs, [key]: { ...prev.outputs[key], ...patch } }, inspect: dest }));
+  // Monitor-EQ band change: cut one band on a wedge, and follow your ears to
+  // that wedge so you hear the ring-out happen.
+  const setWedgeEq = (key, band, v) => setState(prev => {
+    const w = prev.outputs[key]; const eq = (w.eq || [0, 0, 0, 0, 0]).slice(); eq[band] = v;
+    return { ...prev, outputs: { ...prev.outputs, [key]: { ...w, eq } }, inspect: key };
+  });
+  // Which wedge band is ringing right now (for the EQ highlight).
+  const fb = window.detectFeedback ? window.detectFeedback(state, audio) : null;
+  const ringBandFor = (key) => (fb && fb.ringWedge === key) ? fb.ringBand : null;
 
   // Single stage area — no more flank columns. Performers sit upstage
   // (bass DI, keys DI) and mid-stage (vocal 1, vocal 2). The downstage
@@ -2339,6 +2416,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onTogglePower={() => setOut('wedge', { on: !state.outputs.wedge.on })}
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
               onVolume={(v) => setOutInspect('wedge', { volume: v }, 'wedge')}
+              eq={state.outputs.wedge.eq} onEqChange={(band, v) => setWedgeEq('wedge', band, v)} ringBand={ringBandFor('wedge')}
               isInspected={state.inspect === 'wedge'}
               onSelect={() => setState({ ...state, inspect: 'wedge' })}/>
           </div>
@@ -2350,6 +2428,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onTogglePower={() => setOut('wedge2', { on: !state.outputs.wedge2.on })}
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
               onVolume={(v) => setOutInspect('wedge2', { volume: v }, 'wedge2')}
+              eq={state.outputs.wedge2.eq} onEqChange={(band, v) => setWedgeEq('wedge2', band, v)} ringBand={ringBandFor('wedge2')}
               isInspected={state.inspect === 'wedge2'}
               onSelect={() => setState({ ...state, inspect: 'wedge2' })}/>
           </div>
@@ -4342,7 +4421,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
               The system is <b style={{ color: 'var(--hot)' }}>feeding back</b>. The mic is picking up its own sound from the wedge, and it keeps building. The whole room hears it.
             </div>
             <div style={{ fontSize: 11, color: 'var(--ink-2)' }}>
-              Three ways to stop it: turn down the channel's <b>AUX 1</b> send, turn down the <b>wedge volume</b>, or turn on <b>HPF</b> to cut the low end out of the loop.
+              Ring it out: on the wedge that's ringing, pull down the <b style={{ color: 'var(--hot)' }}>glowing band</b> on its monitor EQ to cut that frequency. That stops the ring without losing the level. (HPF only helps a low-frequency ring.)
             </div>
           </div>
         ) : (clips && clips.length > 0) ? (
