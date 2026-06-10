@@ -204,7 +204,7 @@ window.LEVELS = [
       { source: 'vocal2', dest: 'pa', min: 0.3 },
     ],
     symptom: 'The system is up. Bring in your vocal mics: a dynamic on channel 1 and a condenser on channel 2. PFL each one to check it in your headphones, set its gain, then bring it up. One of them needs power.',
-    hint: 'PFL each mic and set its gain in your headphones before you bring it up in the room. The dynamic on channel 1 needs no power. The condenser on channel 2 is dead until you turn on +48V phantom: turn it on while the channel is muted, then bring it up.',
+    hint: 'PFL each mic to check it in your headphones, set its gain, then bring it up. The dynamic on channel 1 needs no power. The condenser on channel 2 needs +48V phantom. Turn +48V on while the channel is muted and NOT in PFL, then PFL to check it: turning +48V on while you are listening in PFL pops your headphones.',
     sabotage: (s) => {
       // System set up (master at unity, PA at a good level, wedges still up from
       // Test the Wedges). The two vocal channels start muted, faders down, gain
@@ -239,7 +239,7 @@ window.LEVELS = [
       { source: 'laptop', dest: 'pa', min: 0.3 },
     ],
     symptom: 'Now the instruments. Set up both direct boxes: an active DI on the bass (channel 3) and a passive DI on the keyboard (channel 4). PFL each, set its gain, then bring it up. One of them needs power.',
-    hint: 'PFL each DI and set its gain before you bring it up. The active DI on the bass (channel 3) has electronics that need +48V phantom, just like a condenser: turn it on while the channel is muted. The passive DI on the keyboard (channel 4) needs no power.',
+    hint: 'PFL each DI to check it, set its gain, then bring it up. The active DI on the bass (channel 3) has electronics that need +48V phantom, just like a condenser: turn +48V on while the channel is muted and NOT in PFL (it pops your headphones if you do it while listening in PFL). The passive DI on the keyboard (channel 4) needs no power.',
     sabotage: (s) => {
       // Mics from the last level kept as set, but muted so the audio stops.
       s.channels[0].mute = true; s.channels[0].fader = 0.72; s.channels[0].gain = 0.5; s.channels[0].phantom = false;
@@ -260,11 +260,11 @@ window.LEVELS = [
   {
     id: 6,
     title: 'Monitor Mix',
-    // The wedge volume is already up (set back in Test the Wedges and kept).
-    // So this is purely about the aux send: the singer's vocal isn't going to
-    // her wedge yet. Open AUX 1 on the vocal to feed her monitor.
-    symptom: "The singer can't hear herself in her wedge. The PA sounds fine, and her wedge is on.",
-    hint: 'Her wedge volume is already up. Send her vocal to it by turning up AUX 1 on the vocal channel.',
+    // A positive setup task, not a problem: build the singer her monitor mix.
+    // The wedge volume is already up (set in Test the Wedges and kept), so this
+    // is purely the aux send: open AUX 1 on the vocal to feed her wedge.
+    symptom: 'The singer needs to hear themselves on stage. Send her vocal to her wedge so she can hear herself.',
+    hint: 'Her wedge is on and turned up. Send her vocal to it by turning up AUX 1 on the vocal channel.',
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
       { source: 'vocal', dest: 'wedge', min: 0.35 },
@@ -293,7 +293,7 @@ window.LEVELS = [
     // For now HPF clears it (drops the low-end loop gain ~40% while the wedge
     // level stays up). NEXT TURN: add an EQ on the aux outputs as the real,
     // surgical fix; HPF is the stopgap so the level is solvable today.
-    symptom: 'The singer needs more of herself in her wedge. Turn her vocal up in the monitor. Watch out, monitors feed back when you push them too hard.',
+    symptom: 'The singer still can\'t hear herself well in her wedge. Turn her vocal up in the monitor for her. Careful, monitors feed back when you push them too hard.',
     hint: 'Turn up AUX 1 on the vocal to give her more in the wedge. If it starts to ring, turn on HPF on the vocal channel to pull the low end out of the loop so you can keep her level up.',
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },

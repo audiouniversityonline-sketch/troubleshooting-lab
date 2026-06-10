@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=13"></script>
+<script src="content.js?v=14"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -1318,7 +1318,8 @@ function PFLBar({ level, hot }) {
   );
 }
 
-function ChannelStrip({ ch, idx, onChange, onPhantomToggle, channelLevel, pflLevel, isFaultStrip, srcLabel, powered = true }) {
+function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLevel, pflLevel, isFaultStrip, srcLabel, powered = true }) {
+  const insp = (dest) => { if (onInspect) onInspect(dest); };
   const set = (patch) => onChange({ ...ch, ...patch });
   // Phantom power has a parent-owned handler so the App can do its
   // safety/pop check at the moment of engagement. Fall back to the local
@@ -1368,8 +1369,8 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, channelLevel, pflLev
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-        <K value={ch.aux1} onChange={(v) => set({ aux1: v })} label="AUX1" size={30} color="var(--aux)" />
-        <K value={ch.aux2} onChange={(v) => set({ aux2: v })} label="AUX2" size={30} color="var(--cool)" />
+        <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={30} color="var(--aux)" />
+        <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={30} color="var(--cool)" />
       </div>
 
       <K value={ch.pan} onChange={(v) => set({ pan: v })} label="PAN" size={32} color="var(--ink)" detentAt={0.5} />
@@ -1383,7 +1384,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, channelLevel, pflLev
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
-        <F value={ch.fader} onChange={(v) => set({ fader: v })} height={172}/>
+        <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>
         <M level={channelLevel} height={172} segments={22}/>
       </div>
 
@@ -1409,7 +1410,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, channelLevel, pflLev
   );
 }
 
-function MasterSection({ master, onChange, paLevel, paRLevel, powered = true }) {
+function MasterSection({ master, onChange, paLevel, paRLevel, powered = true, onInspect }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#2a2a30 0%, #1f1f23 8%, #1c1c20 100%)',
@@ -1444,7 +1445,7 @@ function MasterSection({ master, onChange, paLevel, paRLevel, powered = true }) 
       <BP active={master.mute} onClick={() => onChange({ ...master, mute: !master.mute })} label="MUTE MAIN" color="var(--hot)" width={108} height={22} fontSize={10}/>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: 1 }}>
-        <F value={master.fader} onChange={(v) => onChange({ ...master, fader: v })} height={208}/>
+        <F value={master.fader} onChange={(v) => { onChange({ ...master, fader: v }); if (onInspect) onInspect('pa'); }} height={208}/>
         <div style={{ display: 'flex', gap: 3 }}>
           <M level={paLevel} height={208} segments={26}/>
           <M level={paRLevel} height={208} segments={26}/>
@@ -1457,12 +1458,18 @@ function MasterSection({ master, onChange, paLevel, paRLevel, powered = true }) 
 }
 
 function Console({ state, setState, audio, faultChannelIdx }) {
-  const updateChannel = (i, ch) => {
-    const channels = [...state.channels];
+  // Functional updates so a control change and an auto-inspect switch can be
+  // dispatched back-to-back without one clobbering the other.
+  const updateChannel = (i, ch) => setState(prev => {
+    const channels = [...prev.channels];
     channels[i] = ch;
-    setState({ ...state, channels });
-  };
-  const updateMaster = (m) => setState({ ...state, master: m });
+    return { ...prev, channels };
+  });
+  const updateMaster = (m) => setState(prev => ({ ...prev, master: m }));
+  // Auto-follow: adjusting a control switches "you are listening to" to the
+  // destination that control feeds, so a new user hears what they're changing
+  // (a fader feeds the PA, AUX 1 the first wedge, AUX 2 the second).
+  const inspectTo = (dest) => setState(prev => prev.inspect === dest ? prev : { ...prev, inspect: dest });
 
   // Phantom toggle goes through here so we can run the safety check at the
   // moment the user hits +48V. Turning phantom OFF is always allowed (no
@@ -1481,8 +1488,15 @@ function Console({ state, setState, audio, faultChannelIdx }) {
       const turningOn = !ch.phantom;
       const channels = prev.channels.map((c, j) => j === i ? { ...c, phantom: !c.phantom } : c);
       const next = { ...prev, channels };
-      if (turningOn && window.wouldPopPhantom && window.wouldPopPhantom(prev, i)) {
-        next.phantomPop = { channel: i, at: Date.now() };
+      if (turningOn) {
+        // PFL is pre-fader/pre-mute: if this channel is soloed, the +48V
+        // switch-on transient goes straight to the engineer's headphones,
+        // muted or not. Right in the ears. That's the worst kind of pop.
+        if (ch.solo) {
+          next.phantomPop = { channel: i, at: Date.now(), cause: 'phantom_cans' };
+        } else if (window.wouldPopPhantom && window.wouldPopPhantom(prev, i)) {
+          next.phantomPop = { channel: i, at: Date.now() };
+        }
       }
       return next;
     });
@@ -1560,6 +1574,7 @@ function Console({ state, setState, audio, faultChannelIdx }) {
             idx={i}
             onChange={(c) => updateChannel(i, c)}
             onPhantomToggle={() => togglePhantom(i)}
+            onInspect={inspectTo}
             channelLevel={channelLevels[i]}
             pflLevel={pflLevels[i]}
             isFaultStrip={faultChannelIdx === i}
@@ -1577,6 +1592,7 @@ function Console({ state, setState, audio, faultChannelIdx }) {
         paLevel={masterL}
         paRLevel={masterR}
         powered={mixerOn}
+        onInspect={inspectTo}
       />
     </div>
   );
@@ -2267,6 +2283,10 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   }).filter(Boolean);
 
   const setOut = (key, patch) => setState({ ...state, outputs: { ...state.outputs, [key]: { ...state.outputs[key], ...patch } } });
+  // Auto-follow listening position when a stage volume is adjusted, so the user
+  // hears the speaker they're setting. Bundled into one setState with the
+  // volume change. paInsp/wedgeInsp map the output to its listening dest.
+  const setOutInspect = (key, patch, dest) => setState(prev => ({ ...prev, outputs: { ...prev.outputs, [key]: { ...prev.outputs[key], ...patch } }, inspect: dest }));
 
   // Single stage area — no more flank columns. Performers sit upstage
   // (bass DI, keys DI) and mid-stage (vocal 1, vocal 2). The downstage
@@ -2308,7 +2328,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             signalArriving={(audio.speakerInput?.pa_l || 0) > 0.04}
             onTogglePower={() => setOut('pa_l', { on: !state.outputs.pa_l.on })}
             onToggleMute={() => setOut('pa_l', { mute: !state.outputs.pa_l.mute })}
-            onVolume={(v) => setOut('pa_l', { volume: v })}
+            onVolume={(v) => setOutInspect('pa_l', { volume: v }, 'pa')}
             isInspected={state.inspect === 'pa'}
             onSelect={() => setState({ ...state, inspect: 'pa' })}/>
         </div>
@@ -2318,7 +2338,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             <Wedge label="WEDGE 1" on={state.outputs.wedge.on} mute={state.outputs.wedge.mute} volume={state.outputs.wedge.volume} level={audio.outputs.wedge}
               onTogglePower={() => setOut('wedge', { on: !state.outputs.wedge.on })}
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
-              onVolume={(v) => setOut('wedge', { volume: v })}
+              onVolume={(v) => setOutInspect('wedge', { volume: v }, 'wedge')}
               isInspected={state.inspect === 'wedge'}
               onSelect={() => setState({ ...state, inspect: 'wedge' })}/>
           </div>
@@ -2329,7 +2349,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             <Wedge label="WEDGE 2" accent="var(--cool)" on={state.outputs.wedge2.on} mute={state.outputs.wedge2.mute} volume={state.outputs.wedge2.volume} level={audio.outputs.wedge2}
               onTogglePower={() => setOut('wedge2', { on: !state.outputs.wedge2.on })}
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
-              onVolume={(v) => setOut('wedge2', { volume: v })}
+              onVolume={(v) => setOutInspect('wedge2', { volume: v }, 'wedge2')}
               isInspected={state.inspect === 'wedge2'}
               onSelect={() => setState({ ...state, inspect: 'wedge2' })}/>
           </div>
@@ -2341,7 +2361,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             signalArriving={(audio.speakerInput?.pa_r || 0) > 0.04}
             onTogglePower={() => setOut('pa_r', { on: !state.outputs.pa_r.on })}
             onToggleMute={() => setOut('pa_r', { mute: !state.outputs.pa_r.mute })}
-            onVolume={(v) => setOut('pa_r', { volume: v })}
+            onVolume={(v) => setOutInspect('pa_r', { volume: v }, 'pa')}
             isInspected={state.inspect === 'pa'}
             onSelect={() => setState({ ...state, inspect: 'pa' })}/>
         </div>
@@ -4280,6 +4300,8 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
                     <>You turned the <b style={{ color: 'var(--hot)' }}>amp on</b> with the master up. Sound hit the speakers at full level the moment they came on. In a real venue that's painfully loud and can damage the system.</>
                   ) : cause === 'mixer_pop' ? (
                     <>You turned the <b style={{ color: 'var(--hot)' }}>console on</b> while the amp was already on. A console makes an electrical pop when it powers up, and the amp sent that pop straight to the speakers. Muting the master doesn't prevent this, because the pop is electrical, not sound from the mix.</>
+                  ) : cause === 'phantom_cans' ? (
+                    <>You turned on <b style={{ color: 'var(--hot)' }}>+48V</b> while you were listening to that channel in PFL. PFL is pre-fader, so the switch-on pop went straight to your headphones, right in your ears. Muting the channel doesn't help here. That kind of pop can damage your hearing.</>
                   ) : (
                     <>You turned on <b style={{ color: 'var(--hot)' }}>+48V</b> while the channel was live. That sends a loud pop through the system. In a real venue it can damage speakers and some mics.</>
                   )}
@@ -4291,6 +4313,8 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
                     <>The correct order: <b>pull the master down</b> → turn the amp on → bring the master back up slowly.</>
                   ) : cause === 'mixer_pop' ? (
                     <>The correct order: <b>console on first</b>, before any amp. Then master down, amp on, master back up.</>
+                  ) : cause === 'phantom_cans' ? (
+                    <>The correct order: turn on <b>+48V before you PFL the channel</b> (or release PFL first). Then PFL to check it, release, and bring the channel up.</>
                   ) : (
                     <>The correct order: <b>mute the channel</b> (or pull its fader down) → turn on +48V → wait a moment → bring the channel back up.</>
                   )}
