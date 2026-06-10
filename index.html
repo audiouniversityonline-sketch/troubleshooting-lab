@@ -338,8 +338,14 @@ function computeAudio(s, envelope) {
 
   const o = s.outputs;
   const topo = s.topology || DEFAULT_TOPOLOGY;
-  const ampOn = topo.paRig !== 'amp+passive' || (o.amp && o.amp.on);
+  const passivePA = topo.paRig === 'amp+passive';
+  const ampOn = !passivePA || (o.amp && o.amp.on);
   const paGate = ampOn ? 1 : 0;
+  // In passive mode the speakers have no power switch of their own — the
+  // external amp powers them. So ignore the speaker's `on` flag and let the
+  // amp gate decide. In powered (active) mode each speaker is its own power.
+  const paLOn = passivePA ? true : o.pa_l.on;
+  const paROn = passivePA ? true : o.pa_r.on;
   // PA SPEAKER OUTPUT — main bus × speaker on/mute/volume × amp gate. This is
   // what each speaker is actually producing; the on-speaker LED meter reads
   // from this. Turning the PA down should NOT silence the master meter on
@@ -348,8 +354,8 @@ function computeAudio(s, envelope) {
   // multi-channel mix at default settings doesn't park the speaker LED in
   // the red — there's visible headroom before red, and cranking really hot
   // (user pushes channel gain or speaker volume up) still drives clipping.
-  const paL = o.pa_l.on && !o.pa_l.mute && s.cables.out_pa_l ? mainBusL * o.pa_l.volume * 1.3 * paGate : 0;
-  const paR = o.pa_r.on && !o.pa_r.mute && s.cables.out_pa_r ? mainBusR * o.pa_r.volume * 1.3 * paGate : 0;
+  const paL = paLOn && !o.pa_l.mute && s.cables.out_pa_l ? mainBusL * o.pa_l.volume * 1.3 * paGate : 0;
+  const paR = paROn && !o.pa_r.mute && s.cables.out_pa_r ? mainBusR * o.pa_r.volume * 1.3 * paGate : 0;
 
   // Aux master gains — each aux send bus has a master level knob on the console
   // before it leaves the desk (in addition to per-channel aux send + destination volume).
@@ -392,8 +398,8 @@ function computeAudio(s, envelope) {
       cW1 += aux1[i];
       cW2 += aux2[i];
     }
-    cL *= masterGate * paGate * (o.pa_l.on && !o.pa_l.mute && s.cables.out_pa_l ? o.pa_l.volume * 1.3 : 0);
-    cR *= masterGate * paGate * (o.pa_r.on && !o.pa_r.mute && s.cables.out_pa_r ? o.pa_r.volume * 1.3 : 0);
+    cL *= masterGate * paGate * (paLOn && !o.pa_l.mute && s.cables.out_pa_l ? o.pa_l.volume * 1.3 : 0);
+    cR *= masterGate * paGate * (paROn && !o.pa_r.mute && s.cables.out_pa_r ? o.pa_r.volume * 1.3 : 0);
     cW1 *= aux1MasterGain * (o.wedge.on && !o.wedge.mute && s.cables.out_wedge ? o.wedge.volume * 1.6 : 0);
     cW2 *= aux2MasterGain * (w2.on && !w2.mute && s.cables.out_wedge2 ? w2.volume * 1.6 : 0);
     contributions[srcKey] = { pa_l: cL, pa_r: cR, wedge: cW1, wedge2: cW2 };
@@ -1305,7 +1311,7 @@ function PFLBar({ level, hot }) {
   );
 }
 
-function ChannelStrip({ ch, idx, onChange, onPhantomToggle, channelLevel, pflLevel, isFaultStrip, srcLabel }) {
+function ChannelStrip({ ch, idx, onChange, onPhantomToggle, channelLevel, pflLevel, isFaultStrip, srcLabel, powered = true }) {
   const set = (patch) => onChange({ ...ch, ...patch });
   // Phantom power has a parent-owned handler so the App can do its
   // safety/pop check at the moment of engagement. Fall back to the local
@@ -1324,7 +1330,11 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, channelLevel, pflLev
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
       position: 'relative',
       boxShadow: isFaultStrip ? '0 0 0 1.5px rgba(255,70,48,0.5), 0 0 20px rgba(255,70,48,0.25)' : 'none',
-      transition: 'box-shadow 0.2s',
+      // Console powered down: the whole strip reads as dead — dimmed and
+      // desaturated, the same visual language the speakers/amp use when off.
+      opacity: powered ? 1 : 0.5,
+      filter: powered ? 'none' : 'grayscale(0.75)',
+      transition: 'box-shadow 0.2s, opacity 0.15s, filter 0.15s',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 2px' }}>
         <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', fontWeight: 600 }}>CH</div>
@@ -1333,7 +1343,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, channelLevel, pflLev
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <BP active={ch.phantom} onClick={togglePhantom} label="+48V" color="var(--hot)" width={32} height={13} fontSize={7} />
-        <L on={ch.phantom} color="var(--hot)" size={5}/>
+        <L on={powered && ch.phantom} color="var(--hot)" size={5}/>
       </div>
 
       <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={40} color="var(--accent)" />
@@ -1392,7 +1402,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, channelLevel, pflLev
   );
 }
 
-function MasterSection({ master, onChange, paLevel, paRLevel }) {
+function MasterSection({ master, onChange, paLevel, paRLevel, powered = true }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#2a2a30 0%, #1f1f23 8%, #1c1c20 100%)',
@@ -1402,6 +1412,9 @@ function MasterSection({ master, onChange, paLevel, paRLevel }) {
       padding: '10px 12px 12px',
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
       width: 150,
+      opacity: powered ? 1 : 0.5,
+      filter: powered ? 'none' : 'grayscale(0.75)',
+      transition: 'opacity 0.15s, filter 0.15s',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
         <div className="display" style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent)', letterSpacing: 0.5, lineHeight: 1 }}>MASTER</div>
@@ -1468,8 +1481,13 @@ function Console({ state, setState, audio, faultChannelIdx }) {
     });
   };
 
-  const channelLevels = audio.post.map((p, i) => p * 1.2);
-  const pflLevels = audio.chanIn.map(v => v * 0.95);
+  // When the console is powered down, its meters and LEDs are dead — they draw
+  // no signal because they have no power. So zero every console meter and gate
+  // the indicator LEDs on mixer power. (The master L/R meters already go dark
+  // because the main bus is gated by mixer power upstream.)
+  const mixerOn = state.mixer ? state.mixer.on !== false : true;
+  const channelLevels = audio.post.map((p) => mixerOn ? p * 1.2 : 0);
+  const pflLevels = audio.chanIn.map(v => mixerOn ? v * 0.95 : 0);
 
   // Master L/R meters read from the MAIN BUS (post master fader, pre-PA).
   // Speaker on/off/mute/volume must NOT silence these — that's the speaker's
@@ -1501,7 +1519,6 @@ function Console({ state, setState, audio, faultChannelIdx }) {
             Most levels start with the mixer on (default state) — the Power-On
             Sequence is the lesson that uses this. */}
         {(() => {
-          const mixerOn = state.mixer ? state.mixer.on !== false : true;
           return <>
             <div style={{
               width: 6, height: 6, borderRadius: '50%',
@@ -1540,6 +1557,7 @@ function Console({ state, setState, audio, faultChannelIdx }) {
             pflLevel={pflLevels[i]}
             isFaultStrip={faultChannelIdx === i}
             srcLabel={srcLabel}
+            powered={mixerOn}
           />
         );
       })}
@@ -1551,6 +1569,7 @@ function Console({ state, setState, audio, faultChannelIdx }) {
         onChange={updateMaster}
         paLevel={masterL}
         paRLevel={masterR}
+        powered={mixerOn}
       />
     </div>
   );
@@ -1788,7 +1807,7 @@ function PowerButton({ on, onClick, width = 30, height = 14 }) {
   );
 }
 
-function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePower, onToggleMute, onVolume, isInspected, onSelect }) {
+function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, showPower = true }) {
   const animate = on && !mute && level > 0.05;
   const intensity = Math.min(1, level);
   // signalArriving is what a real powered speaker's "SIG" LED shows: signal
@@ -1850,7 +1869,9 @@ function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePowe
           {sigLit ? 'SIG' : '—'}
         </div>
       </div>
-      <PowerButton on={on} onClick={onTogglePower} width={50} height={14}/>
+      {showPower
+        ? <PowerButton on={on} onClick={onTogglePower} width={50} height={14}/>
+        : <div className="mono" style={{ fontSize: 6.5, letterSpacing: 1, fontWeight: 700, color: 'var(--ink-3)', padding: '2px 0' }}>PASSIVE</div>}
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4, width: '100%', opacity: on ? 1 : 0.55 }}>
         <window.Knob value={volume} onChange={onVolume} size={18} color="var(--accent)"/>
         <window.ButtonPad active={mute} onClick={(e) => { e.stopPropagation(); onToggleMute(); }} label="M" color="var(--hot)" width={14} height={14} fontSize={8}/>
@@ -2226,6 +2247,10 @@ function ZoneHeader({ label, sublabel, badge, accent, badgeColor }) {
 function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, paLRef, paRRef, stageBoxRef }) {
   const topo = state.topology || {};
   const isPassive = topo.paRig === 'amp+passive';
+  // In passive mode the cabinets are dumb — the external amp powers them, so a
+  // speaker reads as "on" when the amp is on, not via any switch of its own.
+  const ampPowered = !!(state.outputs.amp && state.outputs.amp.on);
+  const paShowsOn = isPassive ? ampPowered : null;
   const activePorts = [1, 2, 3, 4].map(p => {
     const srcKey = sourceKeys.find(k => state.cables[k] === p);
     if (!srcKey) return null;
@@ -2271,8 +2296,8 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             the front of the stage. Each one's cable comes out of its bottom
             edge and runs along the front rail back to the stage box. */}
         <div ref={paLRef} style={{ position: 'absolute', bottom: 80, left: '8%', transform: 'translateX(-50%)' }}>
-          <PASpeaker side="L"
-            on={state.outputs.pa_l.on} mute={state.outputs.pa_l.mute} volume={state.outputs.pa_l.volume} level={audio.outputs.pa_l}
+          <PASpeaker side="L" showPower={!isPassive}
+            on={isPassive ? paShowsOn : state.outputs.pa_l.on} mute={state.outputs.pa_l.mute} volume={state.outputs.pa_l.volume} level={audio.outputs.pa_l}
             signalArriving={(audio.speakerInput?.pa_l || 0) > 0.04}
             onTogglePower={() => setOut('pa_l', { on: !state.outputs.pa_l.on })}
             onToggleMute={() => setOut('pa_l', { mute: !state.outputs.pa_l.mute })}
@@ -2304,8 +2329,8 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         <div ref={paRRef} style={{ position: 'absolute', bottom: 80, left: '78%', transform: 'translateX(-50%)' }}>
-          <PASpeaker side="R"
-            on={state.outputs.pa_r.on} mute={state.outputs.pa_r.mute} volume={state.outputs.pa_r.volume} level={audio.outputs.pa_r}
+          <PASpeaker side="R" showPower={!isPassive}
+            on={isPassive ? paShowsOn : state.outputs.pa_r.on} mute={state.outputs.pa_r.mute} volume={state.outputs.pa_r.volume} level={audio.outputs.pa_r}
             signalArriving={(audio.speakerInput?.pa_r || 0) > 0.04}
             onTogglePower={() => setOut('pa_r', { on: !state.outputs.pa_r.on })}
             onToggleMute={() => setOut('pa_r', { mute: !state.outputs.pa_r.mute })}
