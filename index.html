@@ -94,6 +94,9 @@ const SOURCES = {
   guitar: { label: 'Bass DI',     short: 'BASS',    kind: 'di',        icon: 'di',  color: '#ffc93a' },
   laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di',        icon: 'di',  color: '#4ade80' },
   vocal2: { label: 'Vocal Mic 2', short: 'VOCAL 2', kind: 'condenser', icon: 'mic', color: '#ff8e4a' },
+  // Front-of-house stereo playback (a media player at the desk, not on stage).
+  // A line input on a dedicated 5/6 channel used to test the system with music.
+  playback: { label: 'Playback 5/6', short: 'PLAYBACK', kind: 'playback', icon: 'media', color: '#6aa9ff' },
 };
 
 // Per-source amplitude envelope. Real instruments and voices have dynamics:
@@ -189,6 +192,7 @@ function defaultState() {
       makeChannel({ id: 2, label: 'Vocal 2', gain: 0.55, phantom: true,  fader: 0.72, pan: 0.5, aux1: 0.0 }),
       makeChannel({ id: 3, label: 'Bass',    gain: 0.50,                 fader: 0.65, pan: 0.5, aux1: 0.0 }),
       makeChannel({ id: 4, label: 'Keys',    gain: 0.45,                 fader: 0.60, pan: 0.5, aux1: 0.0 }),
+      makeChannel({ id: 5, label: '5/6',     gain: 0.55, stereo: true,   fader: 0.70, pan: 0.5, aux1: 0.0 }),
     ],
     // Mixer / console power state. Default ON for all existing levels.
     // The Power-On Sequence lesson sabotages this to false and teaches the
@@ -212,7 +216,7 @@ function defaultState() {
       out_pa_l: true, out_pa_r: true, out_wedge: true, out_wedge2: true,
     },
     fanOut: [1, 2, 3, 4],
-    sourceMute: { vocal: false, guitar: false, laptop: false, vocal2: false },
+    sourceMute: { vocal: false, guitar: false, laptop: false, vocal2: false, playback: false },
     testing: 'vocal',
     inspect: 'pa',
     topology: {
@@ -236,6 +240,11 @@ const DEFAULT_TOPOLOGY = {
 };
 
 function effectiveChannel(s, srcKey) {
+  // Playback is a FOH line input hardwired to the 5/6 channel — it plugs into
+  // the desk, not the stage snake, so it skips the cable/fan-out path.
+  if (srcKey === 'playback') {
+    return s.channels && s.channels.length >= 5 ? 5 : 0;
+  }
   const port = s.cables[srcKey];
   if (!port || port < 1) return 0;
   const fan = s.fanOut || [1, 2, 3, 4];
@@ -2463,7 +2472,9 @@ function ChannelAnchors({ state, channelRefs, masterLRef, masterRRef, aux1Ref, a
     // teaching moment.
     const portIdx = fanOut.findIndex(ch => ch === i + 1);
     const inputPort = portIdx >= 0 ? portIdx + 1 : null;
-    const label = inputPort != null ? `INPUT ${inputPort}` : 'INPUT —';
+    // Playback is a FOH line input plugged into the desk, not a snake port, so
+    // it's labelled LINE IN rather than getting a (nonexistent) INPUT number.
+    const label = srcKey === 'playback' ? 'LINE IN' : (inputPort != null ? `INPUT ${inputPort}` : 'INPUT —');
     anchors.push(chip('in-' + i, el => channelRefs.current[i + 1] = el, left, label, `CH ${i + 1}`, color));
   }
 
@@ -3187,7 +3198,7 @@ const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } 
 // the board out at this width no matter the window, then scale the whole thing
 // uniformly to fit (see useFitScale). Tune this once so nothing overlaps at
 // scale 1; everything else follows.
-const DESIGN_W = 1560;
+const DESIGN_W = 1680;
 
 // Member progress persistence. Completed levels are saved to the browser keyed
 // by stable level id, so a monthly content drop never wipes what a student
@@ -3224,6 +3235,8 @@ window.deriveInvolves = function deriveInvolves(level) {
   const defaultCables = { vocal: 1, vocal2: 2, guitar: 3, laptop: 4 };
   const defaultFanOut = [1, 2, 3, 4];
   for (const cond of (level.conditions || [])) {
+    // Playback is the FOH line input on channel 5, outside the snake fan-out.
+    if (cond.source === 'playback') { involved.add(5); continue; }
     if (cond.source && defaultCables[cond.source]) {
       const port = defaultCables[cond.source];
       const ch = defaultFanOut[port - 1];
@@ -3461,6 +3474,10 @@ function App() {
       vocal2: { f: 165, det: 1.2, lp: 1700, lfo: 4.5,  type: 'sawtooth' },
       guitar: { f: 110, det: 0.6, lp: 1400, lfo: 4,    type: 'sawtooth' },
       laptop: { f: 440, det: 4.0, lp: 4200, lfo: 0,    type: 'sine' },
+      // Playback music bed: a warm C-major chord pad spread across two octaves
+      // so it reads as music, not a single drone. Lower mix gain because the
+      // extra chord oscillators sum hotter than a normal two-osc source.
+      playback: { f: 130.81, det: 0.7, lp: 2800, lfo: 0, type: 'triangle', chord: [164.81, 196.0, 261.63, 329.63], mixGain: 0.07 },
     };
     // Build the saturation curve once — used by every source's shaper. tanh
     // is odd-symmetric (no DC offset) and gives a musical-sounding soft
@@ -3514,13 +3531,23 @@ function App() {
       filter.Q.value = 0.7;
       filter.connect(drive);
       const mix = ctx.createGain();
-      mix.gain.value = 0.18;
+      mix.gain.value = p.mixGain != null ? p.mixGain : 0.18;
       mix.connect(filter);
       const o1 = ctx.createOscillator();
       o1.type = p.type; o1.frequency.value = p.f;
       const o2 = ctx.createOscillator();
       o2.type = p.type; o2.frequency.value = p.f + p.det;
       o1.connect(mix); o2.connect(mix);
+      // Optional chord tones (the playback bed) summed into the same mix so the
+      // source reads as a chord instead of one note.
+      const chordOscs = [];
+      if (p.chord) {
+        for (const cf of p.chord) {
+          const co = ctx.createOscillator();
+          co.type = p.type; co.frequency.value = cf;
+          co.connect(mix); chordOscs.push(co);
+        }
+      }
       let lfo = null;
       if (p.lfo > 0) {
         lfo = ctx.createOscillator();
@@ -3531,7 +3558,8 @@ function App() {
         lfo.start();
       }
       o1.start(); o2.start();
-      chainsRef.current[k] = { gainL, gainR, filter, drive, shaper, makeup, envelope, o1, o2, lfo };
+      chordOscs.forEach(co => co.start());
+      chainsRef.current[k] = { gainL, gainR, filter, drive, shaper, makeup, envelope, o1, o2, lfo, chordOscs };
     }
     // Feedback ringing tone. High-Q resonance around 3.5 kHz — the band
     // most live mics ring in when a loop builds. Sine + a faint second
