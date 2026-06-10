@@ -874,38 +874,50 @@ window.wouldPopPhantom = wouldPopPhantom;
 window.wouldBlastOnAmpOn = wouldBlastOnAmpOn;
 window.wouldBlastOnMixerOn = wouldBlastOnMixerOn;
 
-// Feedback loop detector. Live-sound feedback is a closed loop: mic picks up
-// the wedge, the channel sends signal to the wedge, the wedge re-amplifies
-// what the mic just heard, on and on until the loop hits unity gain and
-// rings. The three controls that set the loop gain on the desk side are:
-//   - the channel's preamp gain (how much the mic's signal is amplified)
-//   - the channel's aux send (how much of that signal reaches the wedge)
-//   - the wedge's output volume (how loud the wedge plays it back)
-// HPF on the channel is the canonical "first knob to reach for" because it
-// rolls off the low-frequency stage rumble that builds the loop fastest.
-// Engaging it doesn't kill feedback by itself but knocks the risk down
-// enough that the rest of the loop can sit below ring threshold.
+// Feedback loop detector. Live-sound feedback is a closed loop: a mic picks up
+// a speaker it can hear, the desk sends that signal back out the speaker, the
+// speaker re-amplifies what the mic heard, round and round until the loop hits
+// unity gain and rings. So the thing that drives feedback is how LOUD the mic
+// is coming back out of a speaker it can hear — the mic's actual output level
+// at that speaker. That already folds in every gain stage: preamp gain, the
+// fader/aux send that routes it, the master/aux master, AND the speaker's own
+// volume knob. We read those real per-mic output levels straight off the audio
+// engine (audio.contributions[src]) so any control that pushes the output past
+// the ring threshold trips it, including the speaker volume itself.
 //
-// Returns null when safe, or { channelIdx, riskAmount } when the loop is
-// hot. riskAmount > RING_THRESHOLD means the wedge is ringing right now.
-function detectFeedback(s) {
-  if (!s || !s.channels || !s.outputs) return null;
+// Two acoustic paths, different coupling:
+//   - WEDGE: points straight back at the mic, so full coupling. This is the
+//     usual culprit and rings at a moderate level.
+//   - MAINS: face the audience, away from the mic, so weak coupling. They only
+//     ring when driven really hard (gain + fader + master + PA volume all hot).
+// HPF rolls off the low-frequency stage rumble that builds the loop fastest, so
+// engaging it drops the effective loop gain ~40% — often enough on its own to
+// drop a ringing wedge back under threshold. Engine field name is `highpass`.
+//
+// Returns null when safe, or { channelIdx, riskAmount } when a loop is hot.
+function detectFeedback(s, audio) {
+  if (!s || !s.channels || !audio || !audio.contributions) return null;
+  const WEDGE_COUPLING = 1.0;   // wedge points at the mic
+  const MAINS_COUPLING = 0.22;  // mains face away — only ring when cranked hard
+  const RING_THRESHOLD = 0.55;
   for (let i = 0; i < s.channels.length; i++) {
     const ch = s.channels[i];
     if (ch.mute) continue;
     const srcKey = sourceFor(s, i);
     if (!srcKey) continue;
     const srcDef = SOURCES[srcKey];
-    // Only live mics close enough enough to the wedge feed the loop. DIs
-    // and laptop inputs aren't acoustically coupled to the stage.
-    if (srcDef.kind !== 'dynamic' && srcDef.kind !== 'condenser') continue;
+    // Only live mics are acoustically coupled to the stage. DIs and line
+    // inputs (bass DI, keyboard DI) can't feed back. Condensers need phantom.
+    if (!srcDef || (srcDef.kind !== 'dynamic' && srcDef.kind !== 'condenser')) continue;
     if (srcDef.kind === 'condenser' && !ch.phantom) continue;
-    // HPF cuts low-frequency stage rumble (the loudest part of the loop)
-    // by roughly half. Real feedback can still ring even with HPF on, but
-    // it pushes the threshold up. Engine field name is `highpass`.
-    const hpfRelief = ch.highpass ? 0.55 : 1.0;
-    const risk = ch.gain * ch.aux1 * (s.outputs.wedge?.volume || 0) * hpfRelief;
-    if (risk > 0.32) {
+    const c = audio.contributions[srcKey];
+    if (!c) continue;
+    const hpfRelief = ch.highpass ? 0.6 : 1.0;
+    // Loop gain through whichever speaker is hottest for this mic.
+    const wedgeLoop = Math.max(c.wedge || 0, c.wedge2 || 0) * WEDGE_COUPLING;
+    const mainsLoop = ((c.pa_l || 0) + (c.pa_r || 0)) * MAINS_COUPLING;
+    const risk = Math.max(wedgeLoop, mainsLoop) * hpfRelief;
+    if (risk > RING_THRESHOLD) {
       return { channelIdx: i, riskAmount: risk };
     }
   }
@@ -3298,7 +3310,7 @@ function App() {
   // Feedback loop. Same recoverable-warning treatment as clipping/balance:
   // blocks the win, clears the moment the engineer pulls aux send / wedge
   // volume / engages HPF and brings the loop gain back below threshold.
-  const feedback = (window.detectFeedback ? window.detectFeedback(state) : null);
+  const feedback = (window.detectFeedback ? window.detectFeedback(state, audio) : null);
   // Push the risk amount into a ref so the audio animation loop can read
   // it without taking a dependency on state. 0 when no loop is hot.
   feedbackRiskRef.current = feedback ? feedback.riskAmount : 0;
@@ -3372,7 +3384,7 @@ function App() {
       const fbChain = feedbackChainRef.current;
       if (fbChain && fbChain.gain) {
         const risk = feedbackRiskRef.current;
-        const target = risk > 0.32 ? Math.min(0.35, (risk - 0.32) * 2.2) : 0;
+        const target = risk > 0.55 ? Math.min(0.35, (risk - 0.55) * 1.3) : 0;
         const cur = fbChain.gain.gain.value;
         // First-order smoother — about 120 ms to track. Long enough to
         // feel like a ring building, short enough to clear when the
