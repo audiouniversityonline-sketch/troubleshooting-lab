@@ -37,12 +37,13 @@
 //                reaches it (>= min) and stays checked, so the win does NOT
 //                need them all live at once. Win when every entry is checked.
 //                Use with conditions: [] and an explicit involves.
-//   - gainStructure : { refChannel, unity, faderTol } — system gain-structure
-//                lesson. Win also requires the reference channel's fader AND
-//                the master fader to sit at unity (within faderTol). Pair with
-//                a min+max PA corridor in conditions so the room level can
-//                only be set with the speaker volume once the faders are
-//                pinned at unity.
+//   - gainStructure : { refChannel, unity, faderTol, inputBand? } — gain-
+//                structure lesson. Win also requires the reference channel's
+//                fader AND the master fader to sit at unity (within faderTol).
+//                Optional inputBand [lo, hi] also requires the ref channel's
+//                input (chanIn baseline) to sit in a healthy band, so the
+//                student sets the input gain by hand (pair with requirePflCheck
+//                to make them verify it in PFL first).
 //   - conditions, sabotage, defaultInspect, topology, involves: engine fields
 //
 // Prose rule (Kyle, 2026-06-10): write simple and clear, not "in character."
@@ -66,111 +67,120 @@ window.LEVELS = [
   {
     id: 1,
     title: 'Power-On Sequence',
-    // Pure power-on lesson. The console starts NORMAL and safe: faders down,
+    // Pure power-on lesson on an ACTIVE-speaker rig (powered PA speakers, no
+    // separate power amp). The console starts zeroed and safe: faders down,
     // every channel muted, master muted (normalizeChannels handles the
     // channels since there are no conditions; the sabotage mutes the master).
     // Everything is powered off. The win is bringing the rig up in the right
-    // order, NOT sending signal (that's Test the System, level 2). Win =
-    // console on + power amp on + both wedges on, flagged by requirePowerOn.
-    // The only hazard is the POP: turning a power amp or powered wedge on
-    // first, then switching the console on, sends the console's switch-on
-    // transient into a live amp and pops the speakers (wouldPopOnMixerOn ->
+    // order, NOT sending signal (that's the next lessons). Win = console on +
+    // both active PA speakers on + both wedges on, flagged by requirePowerOn
+    // (topology-aware: active mode checks the PA speakers, not an amp).
+    // The only hazard is the POP: turning a powered speaker or wedge on first,
+    // then switching the console on, sends the console's switch-on transient
+    // into a live powered box and pops the speakers (wouldPopOnMixerOn ->
     // cause 'mixer_pop'). So the rule the level teaches is: console first,
-    // amplification last. A pop blocks the win until reset. The master stays
-    // muted throughout, so there's no blast to worry about here.
+    // powered boxes last. A pop blocks the win until reset. Master stays muted,
+    // so there's no blast to worry about here.
     task: true,
     requirePowerOn: true,
     // involves: [] forces normalizeChannels to mute EVERY channel with faders
-    // down (the "normal safe console" start). Without it, deriveInvolves
-    // defaults to [1] to avoid an accidentally-dead desk, which would leave
-    // channel 1 live.
+    // down (the zeroed console start). Without it, deriveInvolves defaults to
+    // [1] to avoid an accidentally-dead desk, which would leave channel 1 live.
     involves: [],
-    symptom: 'Everything is connected and the console is zeroed out (every setting is set to its default state). It\'s time to power on the whole system: the console, the power amp, and the wedges.',
-    hint: 'Power on from the console end first, then the amp and powered speakers last. If you turn an amp or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the power amp and the wedges.',
+    symptom: 'Everything is connected and the console is zeroed out (every setting is set to its default state). It\'s time to power on the whole system: the console, the wedges, and the two PA speakers.',
+    hint: 'Power on from the console end first, then the powered speakers last. If you turn a PA speaker or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the wedges and the PA speakers.',
     conditions: [],
-    topology: { paRig: 'amp+passive' },
+    // Active speakers: powered PA boxes with their own on/off, no power amp.
+    topology: { paRig: 'powered' },
     sabotage: (s) => {
-      // Normal, safe console between shows: channels already muted with faders
+      // Zeroed, safe console between shows: channels already muted with faders
       // down (normalizeChannels, no conditions). Mute the master too, then
-      // power everything off so the only task left is the power-on order.
+      // power off everything with a switch: both active PA speakers and both
+      // wedges. The only task left is the power-on order.
       s.master = { ...s.master, mute: true };
       s.mixer = { on: false };
-      s.outputs.amp.on = false;
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: false };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: false };
       s.outputs.wedge = { ...s.outputs.wedge, on: false };
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false };
       return s;
     },
-    solution: 'Turn the console on first, then the power amp and the wedges.',
+    solution: 'Turn the console on first, then the wedges and the two PA speakers.',
     defaultInspect: 'pa',
   },
   {
     id: 2,
-    title: 'Test the System',
-    // The 5/6 playback channel (FOH line input, channel 5) carries music for
-    // testing. You check a rig one output at a time, not all at once: send
-    // playback to a speaker, confirm it works, move to the next. So this uses
-    // verifyEach — each destination LATCHES "checked" the moment playback
-    // reaches it (>= min) and stays checked for the rest of the attempt. Win
-    // when all four are checked, no matter the order or whether they ever
-    // play together. PA sides come up together on the fader; the wedges are
-    // independent on AUX 1 / AUX 2 (pre-fader) plus their stage volume knobs.
-    // involves: [5] keeps the playback channel live and mutes 1-4 (there are
-    // no conditions to derive that from).
+    title: 'Set the Input Level',
+    // Step 1 of the real-show setup: get the playback reference set on the
+    // input before sending it anywhere. The student PFLs the playback channel
+    // (listening in the cans), sets the input GAIN so the meter sits in the
+    // healthy zone, then brings the channel fader and the master fader to
+    // unity. That's the gain structure: a good input flowing through unity
+    // faders, ready for the room. requirePflCheck = the PFL workflow happened;
+    // gainStructure.inputBand = the input sits healthy; the unity checks pin
+    // the faders. involves: [5] keeps playback live and mutes the mics.
+    // Starts with a too-low input gain so the gain set is hands-on. PA volume
+    // is low so the room stays quiet while the input is dialed in by ear.
     task: true,
     involves: [5],
-    verifyEach: [
-      { source: 'playback', dest: 'pa_l',   min: 0.25, label: 'PA · L plays' },
-      { source: 'playback', dest: 'pa_r',   min: 0.25, label: 'PA · R plays' },
-      { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 plays' },
-      { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 plays' },
-    ],
+    requirePflCheck: true,
+    gainStructure: { refChannel: 5, unity: 0.75, faderTol: 0.06, inputBand: [0.80, 1.00] },
     conditions: [],
-    symptom: 'The system is powered on. Send music from the playback channel to each speaker, one at a time, to confirm every one is working: both sides of the PA and both wedges.',
-    hint: 'Unmute the 5/6 playback channel. Bring its fader up to check the PA, then turn up AUX 1 for Wedge 1 and AUX 2 for Wedge 2 (their volume knobs are on the stage). Each speaker gets checked off once it plays. You do not have to play them all at the same time.',
+    symptom: 'Your playback device is connected but the input is not set. PFL the playback channel, set the input gain so the meter sits healthy in your headphones, then bring the channel fader and the master fader to unity.',
+    hint: 'Press PFL on the playback channel to hear it in your headphones. Turn the GAIN knob until the input meter sits in the healthy zone, not too low, not in the red. Release PFL, then set the playback fader and the master fader to unity (the 0 dB mark).',
     sabotage: (s) => {
-      // Playback channel silent: muted, fader down, sends closed. Wedge
-      // volumes are 0 by default, so the stage walk is part of the lesson.
-      s.channels[4].mute = true;
-      s.channels[4].fader = 0;
-      s.channels[4].aux1 = 0;
-      s.channels[4].aux2 = 0;
-      return s;
-    },
-    solution: 'Send playback to each speaker in turn: the PA on the fader, then each wedge on its AUX send and stage volume.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 3,
-    title: 'System Gain Structure',
-    // Whole-system gain structure, using the playback as a known reference
-    // (familiar mixed music coming in at a good input level, so the gain is
-    // left alone). The discipline: put the channel fader and the master fader
-    // at UNITY (0 dB = 0.75 in this sim), then set how loud the room is with
-    // the PA SPEAKER level, not the faders. That gives a known starting point
-    // with headroom. gainStructure flags the unity-fader checks; the PA
-    // corridor (0.30-0.50 contribution ~= 84-90 dB SPL) is the good-room-level
-    // target, reachable only via the speaker volume once the faders are pinned
-    // at unity. involves: [5] keeps playback live and mutes the mics.
-    task: true,
-    involves: [5],
-    gainStructure: { refChannel: 5, unity: 0.75, faderTol: 0.06 },
-    conditions: [
-      { source: 'playback', dest: 'pa', min: 0.30, max: 0.50 },
-    ],
-    symptom: 'Your reference music is playing and coming in at a good level on the channel. Set the system gain structure: put the playback fader and the master fader at unity, then set how loud the room is with the PA speaker level.',
-    hint: 'Unity is the 0 dB mark each fader is built to sit at. Bring the playback fader and the master fader to unity. With the desk at unity, set the room volume using the PA speaker knobs, not the faders. Watch the loudness meter for a good level.',
-    sabotage: (s) => {
-      // Reference is playing but the gain structure is not set: faders below
-      // unity, speakers too quiet. Input gain is already good (leave it).
+      // Reference connected and playing, but the input gain is too low and the
+      // faders are not set. PA kept quiet so the room isn't loud while the
+      // student sets the input by ear in PFL.
       s.channels[4].mute = false;
-      s.channels[4].gain = 0.55;
-      s.channels[4].fader = 0.35;
+      s.channels[4].gain = 0.25;
+      s.channels[4].fader = 0.4;
       s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
       s.master.fader = 0.5; s.master.mute = false;
       s.outputs.pa_l.volume = 0.3; s.outputs.pa_r.volume = 0.3;
       return s;
     },
-    solution: 'Playback fader and master fader at unity, then set the room level with the PA speaker volume.',
+    solution: 'PFL the playback, set the input gain to the healthy zone, then bring the channel fader and master fader to unity.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 3,
+    title: 'Test the System',
+    // Step 2 of the real-show setup, building on Set the Input Level: the gain
+    // structure is already set (good input, channel + master faders at unity),
+    // so now test each output and set the room level. Send the reference to
+    // each output and confirm it works, then set the level of each. The PA gets
+    // a good-room-level corridor on BOTH sides (0.30-0.50 contribution ~= 84-90
+    // dB SPL, set with each speaker's own volume knob in active mode). The
+    // wedges just need to play (verifyEach latches each once it gets signal).
+    // The faders stay at unity, so the room is set with the speaker volumes.
+    // involves: [5] keeps playback live and mutes the mics.
+    task: true,
+    involves: [5],
+    verifyEach: [
+      { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 plays' },
+      { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 plays' },
+    ],
+    conditions: [
+      { source: 'playback', dest: 'pa_l', min: 0.30, max: 0.50 },
+      { source: 'playback', dest: 'pa_r', min: 0.30, max: 0.50 },
+    ],
+    symptom: 'The input is set and the faders are at unity. Now test the system: send the reference to each speaker, confirm it works, and set a good level in the room on both PA speakers. Check both wedges too.',
+    hint: 'The PA speakers and wedges each have their own volume. Bring up each PA speaker until the room sits at a good level on the loudness meter. Send the reference to the wedges with AUX 1 and AUX 2 and bring up each wedge volume so it plays. Leave the faders at unity.',
+    sabotage: (s) => {
+      // Gain structure already set: good input, channel + master at unity. The
+      // outputs are not set yet: PA speakers too quiet, wedges silent.
+      s.channels[4].mute = false;
+      s.channels[4].gain = 0.5;
+      s.channels[4].fader = 0.75;
+      s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
+      s.master.fader = 0.75; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.3; s.outputs.pa_r.volume = 0.3;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0; s.outputs.wedge2.mute = false;
+      return s;
+    },
+    solution: 'Bring up each PA speaker for a good room level, and send the reference to both wedges on AUX 1 and AUX 2 with their volumes up.',
     defaultInspect: 'pa',
   },
   {

@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=9"></script>
+<script src="content.js?v=10"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -3420,12 +3420,18 @@ function App() {
     // Power-on lesson: the win is bringing the rig up, not sending signal.
     // Console, power amp, and both wedges all on. The pop check (blocked,
     // above) handles wrong order, so this just confirms the end state.
-    const poweredUp = !level.requirePowerOn || (
-      (state.mixer ? state.mixer.on !== false : true) &&
-      !!(state.outputs.amp && state.outputs.amp.on) &&
-      !!(state.outputs.wedge && state.outputs.wedge.on) &&
-      !!(state.outputs.wedge2 && state.outputs.wedge2.on)
-    );
+    const poweredUp = !level.requirePowerOn || (() => {
+      const o = state.outputs;
+      const consoleOn = state.mixer ? state.mixer.on !== false : true;
+      const wedgesOn = !!(o.wedge && o.wedge.on) && !!(o.wedge2 && o.wedge2.on);
+      // Passive rig: the power amp is the PA's switch. Active rig: each PA
+      // speaker is its own powered box. Check whichever applies.
+      const passive = (state.topology && state.topology.paRig) === 'amp+passive';
+      const paOn = passive
+        ? !!(o.amp && o.amp.on)
+        : (!!(o.pa_l && o.pa_l.on) && !!(o.pa_r && o.pa_r.on));
+      return consoleOn && wedgesOn && paOn;
+    })();
     // Verify-each lesson (Test the System): latch each speaker the moment
     // playback reaches it, then require every speaker to have been checked.
     // Latching here (not just in render) keeps the win in sync on the same
@@ -3448,7 +3454,16 @@ function App() {
       const unity = gs.unity != null ? gs.unity : 0.75;
       const tol = gs.faderTol != null ? gs.faderTol : 0.06;
       const refCh = state.channels[(gs.refChannel || 1) - 1];
-      return !!refCh && Math.abs(refCh.fader - unity) <= tol && Math.abs(state.master.fader - unity) <= tol;
+      if (!refCh) return false;
+      const fadersOk = Math.abs(refCh.fader - unity) <= tol && Math.abs(state.master.fader - unity) <= tol;
+      // Optional: the input gain must sit in a healthy band (set by hand in PFL).
+      let inputOk = true;
+      if (gs.inputBand) {
+        const a = window.computeAudio(state);
+        const lvl = (a.chanInBaseline && a.chanInBaseline[(gs.refChannel || 1) - 1]) || 0;
+        inputOk = lvl >= gs.inputBand[0] && lvl <= gs.inputBand[1];
+      }
+      return fadersOk && inputOk;
     })();
     const won = flowOk && pflClear && pflChecked && clean && balanced && noFeedback && poweredUp && verifiedOk && gainOk;
     if (won && !blocked) {
@@ -3832,14 +3847,22 @@ function App() {
     }
   }
 
-  // Unity-fader status for the gain-structure brief.
+  // Unity-fader (+ optional input-gain) status for the gain-structure brief.
   let gainStatus = null;
   if (level.gainStructure) {
     const gs = level.gainStructure;
     const unity = gs.unity != null ? gs.unity : 0.75;
     const tol = gs.faderTol != null ? gs.faderTol : 0.06;
-    const refCh = state.channels[(gs.refChannel || 1) - 1];
+    const idx = (gs.refChannel || 1) - 1;
+    const refCh = state.channels[idx];
+    let inputOk = true;
+    if (gs.inputBand) {
+      const lvl = (audio.chanInBaseline && audio.chanInBaseline[idx]) || 0;
+      inputOk = lvl >= gs.inputBand[0] && lvl <= gs.inputBand[1];
+    }
     gainStatus = {
+      hasInput: !!gs.inputBand,
+      input: inputOk,
       fader: !!refCh && Math.abs(refCh.fader - unity) <= tol,
       master: Math.abs(state.master.fader - unity) <= tol,
     };
@@ -3873,11 +3896,16 @@ function App() {
                     : <BriefCard level={level} conditions={level.conditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
                         verifyStatus={verifyStatus} gainStatus={gainStatus}
-                        powerStatus={{
-                          console: state.mixer ? state.mixer.on !== false : true,
-                          amp: !!(state.outputs.amp && state.outputs.amp.on),
-                          wedges: !!(state.outputs.wedge && state.outputs.wedge.on && state.outputs.wedge2 && state.outputs.wedge2.on),
-                        }}/>
+                        powerStatus={(() => {
+                          const o = state.outputs;
+                          const passive = (state.topology && state.topology.paRig) === 'amp+passive';
+                          return {
+                            console: state.mixer ? state.mixer.on !== false : true,
+                            paStage: passive ? !!(o.amp && o.amp.on) : (!!(o.pa_l && o.pa_l.on) && !!(o.pa_r && o.pa_r.on)),
+                            paLabel: passive ? 'Power amp on' : 'PA speakers on',
+                            wedges: !!(o.wedge && o.wedge.on && o.wedge2 && o.wedge2.on),
+                          };
+                        })()}/>
                 }
               />
             </div>
@@ -4102,7 +4130,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   }
   if (level.requirePowerOn && powerStatus) {
     extras.push({ label: 'Console powered on', pass: !!powerStatus.console, color: 'var(--cool)' });
-    extras.push({ label: 'Power amp on', pass: !!powerStatus.amp, color: 'var(--cool)' });
+    extras.push({ label: powerStatus.paLabel || 'PA on', pass: !!powerStatus.paStage, color: 'var(--cool)' });
     extras.push({ label: 'Wedges on', pass: !!powerStatus.wedges, color: 'var(--cool)' });
   }
   if (level.verifyEach && verifyStatus) {
@@ -4111,6 +4139,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
     }
   }
   if (level.gainStructure && gainStatus) {
+    if (gainStatus.hasInput) extras.push({ label: 'Input level healthy', pass: !!gainStatus.input, color: 'var(--cool)' });
     extras.push({ label: 'Playback fader at unity', pass: !!gainStatus.fader, color: 'var(--cool)' });
     extras.push({ label: 'Master fader at unity', pass: !!gainStatus.master, color: 'var(--cool)' });
   }
