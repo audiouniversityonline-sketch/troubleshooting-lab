@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=8"></script>
+<script src="content.js?v=9"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -3440,7 +3440,17 @@ function App() {
         if (!verifiedRef.current[v.dest]) verifiedOk = false;
       }
     }
-    const won = flowOk && pflClear && pflChecked && clean && balanced && noFeedback && poweredUp && verifiedOk;
+    // System gain-structure lesson: the reference channel fader and the master
+    // fader must both sit at unity. With those pinned, the PA corridor in
+    // conditions can only be met with the speaker volume — that's the lesson.
+    const gainOk = !level.gainStructure || (() => {
+      const gs = level.gainStructure;
+      const unity = gs.unity != null ? gs.unity : 0.75;
+      const tol = gs.faderTol != null ? gs.faderTol : 0.06;
+      const refCh = state.channels[(gs.refChannel || 1) - 1];
+      return !!refCh && Math.abs(refCh.fader - unity) <= tol && Math.abs(state.master.fader - unity) <= tol;
+    })();
+    const won = flowOk && pflClear && pflChecked && clean && balanced && noFeedback && poweredUp && verifiedOk && gainOk;
     if (won && !blocked) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
@@ -3822,6 +3832,19 @@ function App() {
     }
   }
 
+  // Unity-fader status for the gain-structure brief.
+  let gainStatus = null;
+  if (level.gainStructure) {
+    const gs = level.gainStructure;
+    const unity = gs.unity != null ? gs.unity : 0.75;
+    const tol = gs.faderTol != null ? gs.faderTol : 0.06;
+    const refCh = state.channels[(gs.refChannel || 1) - 1];
+    gainStatus = {
+      fader: !!refCh && Math.abs(refCh.fader - unity) <= tol,
+      master: Math.abs(state.master.fader - unity) <= tol,
+    };
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'radial-gradient(ellipse at 30% 0%, #1a1a1f 0%, #0e0e10 50%, #08080a 100%)', position: 'relative' }}>
       <TopBar
@@ -3849,7 +3872,7 @@ function App() {
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={level.conditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
-                        verifyStatus={verifyStatus}
+                        verifyStatus={verifyStatus} gainStatus={gainStatus}
                         powerStatus={{
                           console: state.mixer ? state.mixer.on !== false : true,
                           amp: !!(state.outputs.amp && state.outputs.amp.on),
@@ -4046,7 +4069,7 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus }) {
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus }) {
   // Compute per-condition pass / level, and whether all conditions pass.
   const condStates = (conditions || []).map(c => {
     const cont = audio.contributions[c.source];
@@ -4086,6 +4109,10 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
     for (const v of level.verifyEach) {
       extras.push({ label: v.label || (v.dest + ' plays'), pass: !!verifyStatus[v.dest], color: 'var(--cool)' });
     }
+  }
+  if (level.gainStructure && gainStatus) {
+    extras.push({ label: 'Playback fader at unity', pass: !!gainStatus.fader, color: 'var(--cool)' });
+    extras.push({ label: 'Master fader at unity', pass: !!gainStatus.master, color: 'var(--cool)' });
   }
   const allFlowPass = condStates.length === 0 || condStates.every(s => s.pass);
   const allExtrasPass = extras.every(e => e.pass);

@@ -37,6 +37,12 @@
 //                reaches it (>= min) and stays checked, so the win does NOT
 //                need them all live at once. Win when every entry is checked.
 //                Use with conditions: [] and an explicit involves.
+//   - gainStructure : { refChannel, unity, faderTol } — system gain-structure
+//                lesson. Win also requires the reference channel's fader AND
+//                the master fader to sit at unity (within faderTol). Pair with
+//                a min+max PA corridor in conditions so the room level can
+//                only be set with the speaker volume once the faders are
+//                pinned at unity.
 //   - conditions, sabotage, defaultInspect, topology, involves: engine fields
 //
 // Prose rule (Kyle, 2026-06-10): write simple and clear, not "in character."
@@ -135,6 +141,40 @@ window.LEVELS = [
   },
   {
     id: 3,
+    title: 'System Gain Structure',
+    // Whole-system gain structure, using the playback as a known reference
+    // (familiar mixed music coming in at a good input level, so the gain is
+    // left alone). The discipline: put the channel fader and the master fader
+    // at UNITY (0 dB = 0.75 in this sim), then set how loud the room is with
+    // the PA SPEAKER level, not the faders. That gives a known starting point
+    // with headroom. gainStructure flags the unity-fader checks; the PA
+    // corridor (0.30-0.50 contribution ~= 84-90 dB SPL) is the good-room-level
+    // target, reachable only via the speaker volume once the faders are pinned
+    // at unity. involves: [5] keeps playback live and mutes the mics.
+    task: true,
+    involves: [5],
+    gainStructure: { refChannel: 5, unity: 0.75, faderTol: 0.06 },
+    conditions: [
+      { source: 'playback', dest: 'pa', min: 0.30, max: 0.50 },
+    ],
+    symptom: 'Your reference music is playing and coming in at a good level on the channel. Set the system gain structure: put the playback fader and the master fader at unity, then set how loud the room is with the PA speaker level.',
+    hint: 'Unity is the 0 dB mark each fader is built to sit at. Bring the playback fader and the master fader to unity. With the desk at unity, set the room volume using the PA speaker knobs, not the faders. Watch the loudness meter for a good level.',
+    sabotage: (s) => {
+      // Reference is playing but the gain structure is not set: faders below
+      // unity, speakers too quiet. Input gain is already good (leave it).
+      s.channels[4].mute = false;
+      s.channels[4].gain = 0.55;
+      s.channels[4].fader = 0.35;
+      s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
+      s.master.fader = 0.5; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.3; s.outputs.pa_r.volume = 0.3;
+      return s;
+    },
+    solution: 'Playback fader and master fader at unity, then set the room level with the PA speaker volume.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 4,
     title: 'Patch & Cable Check',
     symptom: 'The vocal mic channel is silent. The other channels are working.',
     hint: 'Check the cables before you touch any knobs. Each source card shows which channel its cable is plugged into.',
@@ -144,7 +184,7 @@ window.LEVELS = [
     defaultInspect: 'pa',
   },
   {
-    id: 4,
+    id: 5,
     title: 'Phantom Power',
     // The condenser mic is Vocal Mic 2 (source 'vocal2', patched to channel 2).
     // It's dark because phantom is off. Dynamics (Vocal Mic 1) don't need +48V,
@@ -158,9 +198,10 @@ window.LEVELS = [
     defaultInspect: 'pa',
   },
   {
-    id: 5,
-    // The mic-preamp gain beat. Room level was set with playback back in
-    // Test the System; this is the other half: set the preamp per channel.
+    id: 6,
+    // The mic-preamp gain beat. The whole-system gain structure was set with
+    // the playback reference back in System Gain Structure (level 3); this is
+    // the other half: set the preamp gain per mic channel.
     title: 'Gain Staging',
     symptom: 'The vocal mic is barely registering on the channel meter, even though the fader is up.',
     hint: 'Volume starts at the GAIN knob, not the fader. Turn up GAIN until the channel meter sits in the healthy zone. Leave the fader where it is.',
@@ -170,7 +211,7 @@ window.LEVELS = [
     defaultInspect: 'pa',
   },
   {
-    id: 6,
+    id: 7,
     title: 'Check in PFL',
     // Procedural lesson: real engineers solo (PFL) a new channel into the
     // headphones, listen to verify signal, then bring the fader up. Doing
@@ -194,7 +235,7 @@ window.LEVELS = [
     defaultInspect: 'pa',
   },
   {
-    id: 7,
+    id: 8,
     // Sits after PFL on purpose: by now every stage has been taught on its
     // own, and this one is the synthesis. Walk the whole path.
     title: 'Signal Path',
@@ -203,19 +244,6 @@ window.LEVELS = [
     conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
     sabotage: (s) => { s.channels[0].fader = 0; s.channels[0].gain = 0; s.master.fader = 0; return s; },
     solution: 'Turn up the channel gain, the channel fader, and the master fader.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 8,
-    title: 'Mute Check',
-    // Two beats: a channel mute and a master mute, both engaged. The student
-    // catches the channel mute first (more obvious), then has to find the
-    // master mute when the room is still silent.
-    symptom: 'The vocal channel meter is moving, but the room is silent.',
-    hint: 'Check the mute buttons first. Look at the channel mutes, then the master.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].mute = true; s.master.mute = true; return s; },
-    solution: 'Unmute the vocal channel and the master.',
     defaultInspect: 'pa',
   },
   {
@@ -294,6 +322,19 @@ window.CHALLENGE_BANK = [
     ],
     sabotage: (s) => { s.channels[0].pan = 0; return s; },
     solution: 'Pan the vocal to center.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'C-mute-check',
+    title: 'Mute Check',
+    // Moved out of the Essentials 2026-06-10 when System Gain Structure took a
+    // slot and Kyle chose to hold the free tier at 10. Dormant until challenge
+    // mode ships. Two beats: a channel mute and a master mute, both engaged.
+    symptom: 'The vocal channel meter is moving, but the room is silent.',
+    hint: 'Check the mute buttons first. Look at the channel mutes, then the master.',
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => { s.channels[0].mute = true; s.master.mute = true; return s; },
+    solution: 'Unmute the vocal channel and the master.',
     defaultInspect: 'pa',
   },
   // {
