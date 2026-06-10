@@ -111,36 +111,39 @@ window.LEVELS = [
   {
     id: 2,
     title: 'Set the Input Level',
-    // Step 1 of the real-show setup: get the playback reference set on the
-    // input before sending it anywhere. The student PFLs the playback channel
-    // (listening in the cans), sets the input GAIN so the meter sits in the
-    // healthy zone, then brings the channel fader and the master fader to
-    // unity. That's the gain structure: a good input flowing through unity
-    // faders, ready for the room. requirePflCheck = the PFL workflow happened;
-    // gainStructure.inputBand = the input sits healthy; the unity checks pin
-    // the faders. involves: [5] keeps playback live and mutes the mics.
-    // Starts with a too-low input gain so the gain set is hands-on. PA volume
-    // is low so the room stays quiet while the input is dialed in by ear.
+    // Step 1 of the real-show setup, picking up exactly where Power-On left
+    // off: the rig is on but the console is still zeroed (every channel muted,
+    // faders down, master muted). The playback is connected with a too-low
+    // input gain. The student PFLs the playback (listening in the cans), sets
+    // the input GAIN so the meter sits in the healthy zone, then unmutes and
+    // brings the channel and the master up to unity. That's the gain
+    // structure: a good input flowing through unity faders, live and ready.
+    // requirePflCheck = the PFL workflow happened; gainStructure.inputBand =
+    // the input sits healthy; the unity checks require unmuted + at unity.
+    // involves: [5] keeps playback live and mutes the mics. The start state
+    // matches Power-On's end so the early lessons build on each other.
     task: true,
     involves: [5],
     requirePflCheck: true,
     gainStructure: { refChannel: 5, unity: 0.75, faderTol: 0.06, inputBand: [0.80, 1.00] },
     conditions: [],
-    symptom: 'Your playback device is connected but the input is not set. PFL the playback channel, set the input gain so the meter sits healthy in your headphones, then bring the channel fader and the master fader to unity.',
-    hint: 'Press PFL on the playback channel to hear it in your headphones. Turn the GAIN knob until the input meter sits in the healthy zone, not too low, not in the red. Release PFL, then set the playback fader and the master fader to unity (the 0 dB mark).',
+    symptom: 'The rig is powered on and the console is still zeroed. Your playback device is connected. PFL the playback channel, set the input gain so the meter sits healthy in your headphones, then unmute and bring the channel and master faders up to unity.',
+    hint: 'Press PFL on the playback channel to hear it in your headphones. Turn the GAIN knob until the input meter sits in the healthy zone, not too low, not in the red. Release PFL, unmute the playback channel and the master, then bring both faders up to unity (the 0 dB mark).',
     sabotage: (s) => {
-      // Reference connected and playing, but the input gain is too low and the
-      // faders are not set. PA kept quiet so the room isn't loud while the
-      // student sets the input by ear in PFL.
-      s.channels[4].mute = false;
+      // Continuous with Power-On: rig on, console still zeroed. Channels muted
+      // with faders down (normalizeChannels for 1-4; this handles 5). Master
+      // muted. The only thing set is a too-low input gain on the playback so
+      // the gain set is hands-on. PA volume left low so the room stays quiet
+      // when the input finally comes up.
+      s.channels[4].mute = true;
+      s.channels[4].fader = 0;
       s.channels[4].gain = 0.25;
-      s.channels[4].fader = 0.4;
       s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
-      s.master.fader = 0.5; s.master.mute = false;
+      s.master.mute = true; s.master.fader = 0.55;
       s.outputs.pa_l.volume = 0.3; s.outputs.pa_r.volume = 0.3;
       return s;
     },
-    solution: 'PFL the playback, set the input gain to the healthy zone, then bring the channel fader and master fader to unity.',
+    solution: 'PFL the playback, set the input gain to the healthy zone, then unmute and bring the channel and master faders up to unity.',
     defaultInspect: 'pa',
   },
   {

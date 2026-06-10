@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=10"></script>
+<script src="content.js?v=11"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -3455,7 +3455,10 @@ function App() {
       const tol = gs.faderTol != null ? gs.faderTol : 0.06;
       const refCh = state.channels[(gs.refChannel || 1) - 1];
       if (!refCh) return false;
-      const fadersOk = Math.abs(refCh.fader - unity) <= tol && Math.abs(state.master.fader - unity) <= tol;
+      // "Up at unity" = unmuted AND fader at the unity mark. The student has to
+      // actually bring the channel and master up, not just nudge the faders.
+      const fadersOk = !refCh.mute && Math.abs(refCh.fader - unity) <= tol
+        && !state.master.mute && Math.abs(state.master.fader - unity) <= tol;
       // Optional: the input gain must sit in a healthy band (set by hand in PFL).
       let inputOk = true;
       if (gs.inputBand) {
@@ -3863,8 +3866,8 @@ function App() {
     gainStatus = {
       hasInput: !!gs.inputBand,
       input: inputOk,
-      fader: !!refCh && Math.abs(refCh.fader - unity) <= tol,
-      master: Math.abs(state.master.fader - unity) <= tol,
+      fader: !!refCh && !refCh.mute && Math.abs(refCh.fader - unity) <= tol,
+      master: !state.master.mute && Math.abs(state.master.fader - unity) <= tol,
     };
   }
 
@@ -4140,8 +4143,8 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   }
   if (level.gainStructure && gainStatus) {
     if (gainStatus.hasInput) extras.push({ label: 'Input level healthy', pass: !!gainStatus.input, color: 'var(--cool)' });
-    extras.push({ label: 'Playback fader at unity', pass: !!gainStatus.fader, color: 'var(--cool)' });
-    extras.push({ label: 'Master fader at unity', pass: !!gainStatus.master, color: 'var(--cool)' });
+    extras.push({ label: 'Playback up at unity', pass: !!gainStatus.fader, color: 'var(--cool)' });
+    extras.push({ label: 'Master up at unity', pass: !!gainStatus.master, color: 'var(--cool)' });
   }
   const allFlowPass = condStates.length === 0 || condStates.every(s => s.pass);
   const allExtrasPass = extras.every(e => e.pass);
