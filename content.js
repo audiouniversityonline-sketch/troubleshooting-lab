@@ -74,7 +74,7 @@ window.LEVELS = [
     // defaults to [1] to avoid an accidentally-dead desk, which would leave
     // channel 1 live.
     involves: [],
-    symptom: 'Everything is connected and the console is set up and muted, ready for the show. Power on the whole system: the console, the power amp, and the wedges.',
+    symptom: 'Everything is connected and the console is zeroed out (every setting is set to its default state). It\'s time to power on the whole system: the console, the power amp, and the wedges.',
     hint: 'Power on from the console end first, then the amp and powered speakers last. If you turn an amp or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the power amp and the wedges.',
     conditions: [],
     topology: { paRig: 'amp+passive' },
