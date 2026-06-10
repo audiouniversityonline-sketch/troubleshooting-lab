@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=5"></script>
+<script src="content.js?v=6"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -3411,7 +3411,16 @@ function App() {
     const clean = clips.length === 0;
     const balanced = !paBalanceIssue;
     const noFeedback = !feedback;
-    const won = flowOk && pflClear && pflChecked && clean && balanced && noFeedback;
+    // Power-on lesson: the win is bringing the rig up, not sending signal.
+    // Console, power amp, and both wedges all on. The pop check (blocked,
+    // above) handles wrong order, so this just confirms the end state.
+    const poweredUp = !level.requirePowerOn || (
+      (state.mixer ? state.mixer.on !== false : true) &&
+      !!(state.outputs.amp && state.outputs.amp.on) &&
+      !!(state.outputs.wedge && state.outputs.wedge.on) &&
+      !!(state.outputs.wedge2 && state.outputs.wedge2.on)
+    );
+    const won = flowOk && pflClear && pflChecked && clean && balanced && noFeedback && poweredUp;
     if (won && !blocked) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
@@ -3803,7 +3812,12 @@ function App() {
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < window.LEVELS.length}
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={level.conditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
-                        pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}/>
+                        pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
+                        powerStatus={{
+                          console: state.mixer ? state.mixer.on !== false : true,
+                          amp: !!(state.outputs.amp && state.outputs.amp.on),
+                          wedges: !!(state.outputs.wedge && state.outputs.wedge.on && state.outputs.wedge2 && state.outputs.wedge2.on),
+                        }}/>
                 }
               />
             </div>
@@ -3995,7 +4009,7 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback }) {
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus }) {
   // Compute per-condition pass / level, and whether all conditions pass.
   const condStates = (conditions || []).map(c => {
     const cont = audio.contributions[c.source];
@@ -4025,6 +4039,11 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   }
   if (level.requirePflCheck) {
     extras.push({ label: 'Checked the channel in PFL', pass: !!pflChecked, color: 'var(--amber)' });
+  }
+  if (level.requirePowerOn && powerStatus) {
+    extras.push({ label: 'Console powered on', pass: !!powerStatus.console, color: 'var(--cool)' });
+    extras.push({ label: 'Power amp on', pass: !!powerStatus.amp, color: 'var(--cool)' });
+    extras.push({ label: 'Wedges on', pass: !!powerStatus.wedges, color: 'var(--cool)' });
   }
   const allFlowPass = condStates.length === 0 || condStates.every(s => s.pass);
   const allExtrasPass = extras.every(e => e.pass);

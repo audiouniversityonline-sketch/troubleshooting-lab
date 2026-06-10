@@ -28,6 +28,10 @@
 //                Changes the UI framing: TASK label instead of the red
 //                SYMPTOM, TASK COMPLETE instead of MIX RESTORED, Recap
 //                instead of Fix.
+//   - requirePowerOn : win on power state, not signal. Passes when the
+//                console, power amp, and both wedges are all on (in an order
+//                that didn't pop). Use with conditions: [] for a pure
+//                power-on lesson that doesn't need signal flow.
 //   - conditions, sabotage, defaultInspect, topology, involves: engine fields
 //
 // Prose rule (Kyle, 2026-06-10): write simple and clear, not "in character."
@@ -51,31 +55,41 @@ window.LEVELS = [
   {
     id: 1,
     title: 'Power-On Sequence',
-    // Cold rig: console, amp, and powered wedges all off, master at unity
-    // (the engineer left it up between shows). Two DISTINCT hazards:
-    //   - POP (electrical): power the console on while an amp it feeds is
-    //     already live and the switch-on transient pops the speakers. Happens
-    //     even with the master muted. Caught by wouldPopOnMixerOn ->
-    //     cause 'mixer_pop'. Fix is the order: console ON before any amp.
-    //   - BLAST (loud signal): power the amp on with the master up and a
-    //     full-level mix slams the room. Caught by wouldBlastOnAmpOn ->
-    //     cause 'amp_loud'. Fix is master DOWN before the amp.
-    // Safe order: console on, master down, amp on, master back up.
+    // Pure power-on lesson. The console starts NORMAL and safe: faders down,
+    // every channel muted, master muted (normalizeChannels handles the
+    // channels since there are no conditions; the sabotage mutes the master).
+    // Everything is powered off. The win is bringing the rig up in the right
+    // order, NOT sending signal (that's Test the System, level 2). Win =
+    // console on + power amp on + both wedges on, flagged by requirePowerOn.
+    // The only hazard is the POP: turning a power amp or powered wedge on
+    // first, then switching the console on, sends the console's switch-on
+    // transient into a live amp and pops the speakers (wouldPopOnMixerOn ->
+    // cause 'mixer_pop'). So the rule the level teaches is: console first,
+    // amplification last. A pop blocks the win until reset. The master stays
+    // muted throughout, so there's no blast to worry about here.
     task: true,
-    symptom: "The system is set up and connected. Now it's time to power things on. Power up the system in the correct order.",
-    hint: "Turn the console on first. Powering the console on while an amp is already on pops the speakers. Then pull the master fader down before you turn on the amp, so nothing blasts through the speakers when they come on. Order: console on, master down, amp on, master up.",
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    requirePowerOn: true,
+    // involves: [] forces normalizeChannels to mute EVERY channel with faders
+    // down (the "normal safe console" start). Without it, deriveInvolves
+    // defaults to [1] to avoid an accidentally-dead desk, which would leave
+    // channel 1 live.
+    involves: [],
+    symptom: 'Everything is connected and the console is set up and muted, ready for the show. Power on the whole system: the console, the power amp, and the wedges.',
+    hint: 'Power on from the console end first, then the amp and powered speakers last. If you turn an amp or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the power amp and the wedges.',
+    conditions: [],
     topology: { paRig: 'amp+passive' },
     sabotage: (s) => {
-      // Cold rig: console off, amp off, powered wedges off. Master left at
-      // default unity (0.55) so the user must actively pull it before the amp.
+      // Normal, safe console between shows: channels already muted with faders
+      // down (normalizeChannels, no conditions). Mute the master too, then
+      // power everything off so the only task left is the power-on order.
+      s.master = { ...s.master, mute: true };
       s.mixer = { on: false };
       s.outputs.amp.on = false;
       s.outputs.wedge = { ...s.outputs.wedge, on: false };
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false };
       return s;
     },
-    solution: 'Turn the console on first, pull the master down, turn the amp on, then bring the master back up.',
+    solution: 'Turn the console on first, then the power amp and the wedges.',
     defaultInspect: 'pa',
   },
   {
