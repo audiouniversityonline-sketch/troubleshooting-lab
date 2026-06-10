@@ -25,65 +25,15 @@
 //   - solution : one sentence, what the fix was (shown on solve)
 //   - conditions, sabotage, defaultInspect, topology, involves: engine fields
 //
-// 10 essentials complete. Power-On Sequence (slot 6) and Check in PFL
-// (slot 7) are the two newest additions; everything else mapped from the
-// older 19-level curriculum. See handoff doc for the consolidation history.
+// Ordered as a "bring a system up and run a show" arc: power on → trace the
+// signal path → patch → phantom → gain → PFL → mute → pan → monitor → feedback.
+// Mic kinds matter here: Vocal Mic 1 is a DYNAMIC (the everyday live vocal, no
+// phantom needed) and is the default in the foundational lessons; Vocal Mic 2
+// is a CONDENSER, introduced in the Phantom Power lesson because condensers are
+// the ones that need +48V. See handoff doc for the consolidation history.
 window.LEVELS = [
   {
     id: 1,
-    title: 'Signal Path',
-    symptom: 'The console is at zero. Nothing is coming out of the PA.',
-    hint: 'Walk from the mic to the speaker. Every stage between has to be open.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].fader = 0; s.channels[0].gain = 0; s.master.fader = 0; return s; },
-    solution: 'Open the channel gain, fader, and master fader.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 2,
-    title: 'Mute Check',
-    // Two beats: a channel mute and a master mute, both engaged. The student
-    // catches the channel mute first (more obvious), then has to find the
-    // master mute when the room is still silent.
-    symptom: 'The vocal channel meter is moving, but the room is silent.',
-    hint: 'Mute is the cheapest first check. Look at the channel mutes, then the master.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].mute = true; s.master.mute = true; return s; },
-    solution: 'Unmute the vocal channel and the master bus.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 3,
-    title: 'Phantom Power',
-    symptom: 'New condenser mic, no signal. The mic LED is dark.',
-    hint: 'Condenser mics need +48V. Never engage it on a hot channel. Pull the fader or mute first.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].phantom = false; return s; },
-    solution: 'Mute the channel, engage +48V, then unmute.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 4,
-    title: 'Gain Staging',
-    symptom: 'Fader is up. The channel meter is barely registering.',
-    hint: 'Set the preamp first. Open GAIN until the channel meter sits in the healthy zone.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].gain = 0; s.channels[0].fader = 0.75; return s; },
-    solution: 'Push GAIN up on the vocal channel until the meter sits healthy.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 5,
-    title: 'Patch & Cable Check',
-    symptom: 'Vocal channel is silent. Other channels look fine.',
-    hint: 'Check the physical connections before you touch a knob. The source card shows which channel each cable lands on.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.cables.vocal = 0; return s; },
-    solution: 'Plug the vocal mic into Ch 1.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 6,
     title: 'Power-On Sequence',
     // Cold rig. Mixer off, amp off, master at unity (the engineer left it
     // up between shows). Two ways to mess this up:
@@ -109,7 +59,51 @@ window.LEVELS = [
     defaultInspect: 'pa',
   },
   {
-    id: 7,
+    id: 2,
+    title: 'Signal Path',
+    symptom: 'The console is at zero. Nothing is coming out of the PA.',
+    hint: 'Walk from the mic to the speaker. Every stage between has to be open.',
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => { s.channels[0].fader = 0; s.channels[0].gain = 0; s.master.fader = 0; return s; },
+    solution: 'Open the channel gain, fader, and master fader.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 3,
+    title: 'Patch & Cable Check',
+    symptom: 'Vocal channel is silent. Other channels look fine.',
+    hint: 'Check the physical connections before you touch a knob. The source card shows which channel each cable lands on.',
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => { s.cables.vocal = 0; return s; },
+    solution: 'Plug the vocal mic into Ch 1.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 4,
+    title: 'Phantom Power',
+    // The condenser mic is Vocal Mic 2 (source 'vocal2', patched to channel 2).
+    // It's dark because phantom is off. Dynamics (Vocal Mic 1) don't need +48V,
+    // so this lesson is where the condenser is introduced. Sabotage targets
+    // channels[1] because deriveInvolves maps vocal2 -> port 2 -> channel 2.
+    symptom: 'New condenser mic, no signal. The mic LED is dark.',
+    hint: 'Condenser mics need +48V. Never engage it on a hot channel. Pull the fader or mute first.',
+    conditions: [{ source: 'vocal2', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => { s.channels[1].phantom = false; return s; },
+    solution: 'Mute the channel, engage +48V, then unmute.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 5,
+    title: 'Gain Staging',
+    symptom: 'Fader is up. The channel meter is barely registering.',
+    hint: 'Set the preamp first. Open GAIN until the channel meter sits in the healthy zone.',
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => { s.channels[0].gain = 0; s.channels[0].fader = 0.75; return s; },
+    solution: 'Push GAIN up on the vocal channel until the meter sits healthy.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 6,
     title: 'Check in PFL',
     // Procedural lesson: real engineers solo (PFL) a new channel into the
     // headphones, listen to verify signal, then bring the fader up. Doing
@@ -129,6 +123,19 @@ window.LEVELS = [
     requirePflCheck: true,
     sabotage: (s) => { s.channels[0].fader = 0; return s; },
     solution: 'PFL the vocal, verify signal in the cans, release PFL, push the fader up.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 7,
+    title: 'Mute Check',
+    // Two beats: a channel mute and a master mute, both engaged. The student
+    // catches the channel mute first (more obvious), then has to find the
+    // master mute when the room is still silent.
+    symptom: 'The vocal channel meter is moving, but the room is silent.',
+    hint: 'Mute is the cheapest first check. Look at the channel mutes, then the master.',
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => { s.channels[0].mute = true; s.master.mute = true; return s; },
+    solution: 'Unmute the vocal channel and the master bus.',
     defaultInspect: 'pa',
   },
   {
@@ -167,13 +174,13 @@ window.LEVELS = [
     // Vocal channel is up, sending to AUX 1, wedge is cranked. Loop gain
     // is past unity; the wedge is ringing the moment the level loads.
     // Three valid fixes per the detectFeedback math:
-    //   - pull channel.aux1 below ~0.45 (most direct, takes the channel
-    //     out of the loop without changing what the audience hears)
-    //   - pull outputs.wedge.volume below ~0.55 (kills it but the singer
-    //     loses the wedge entirely)
-    //   - engage channel.hpf (knocks the low-frequency stage rumble out
-    //     of the loop; risk threshold rises so the same gain/send/volume
-    //     trio that was ringing now sits just under)
+    //   - pull channel.aux1 down (most direct, takes the channel out of the
+    //     loop without changing what the audience hears)
+    //   - pull outputs.wedge.volume down (kills it but the singer loses the
+    //     wedge entirely)
+    //   - engage channel.hpf (knocks the low-frequency stage rumble out of
+    //     the loop; effective loop gain drops ~40% so the wedge sits under
+    //     the ring threshold)
     // Win condition still requires vocal → wedge ≥ 0.3, so just yanking
     // the wedge volume to zero won't solve. Has to be a real fix.
     symptom: 'Wedge is ringing. The mic is hearing itself through the wedge and the loop is feeding back.',

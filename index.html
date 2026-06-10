@@ -77,7 +77,9 @@
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
-<script src="content.js"></script>
+<!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
+     scenarios immediately instead of a cached copy. -->
+<script src="content.js?v=2"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -88,7 +90,7 @@
 <!-- ============================================================ -->
 <script type="text/babel">
 const SOURCES = {
-  vocal:  { label: 'Vocal Mic 1', short: 'VOCAL 1', kind: 'condenser', icon: 'mic', color: '#ff4630' },
+  vocal:  { label: 'Vocal Mic 1', short: 'VOCAL 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630' },
   guitar: { label: 'Bass DI',     short: 'BASS',    kind: 'di',        icon: 'di',  color: '#ffc93a' },
   laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di',        icon: 'di',  color: '#4ade80' },
   vocal2: { label: 'Vocal Mic 2', short: 'VOCAL 2', kind: 'condenser', icon: 'mic', color: '#ff8e4a' },
@@ -183,7 +185,7 @@ function makeChannel(o = {}) { return { ...DEFAULT_CHANNEL, ...o }; }
 function defaultState() {
   return {
     channels: [
-      makeChannel({ id: 1, label: 'Vocal 1', gain: 0.55, phantom: true,  fader: 0.72, pan: 0.5, aux1: 0.0 }),
+      makeChannel({ id: 1, label: 'Vocal 1', gain: 0.55, phantom: false, fader: 0.72, pan: 0.5, aux1: 0.0 }),
       makeChannel({ id: 2, label: 'Vocal 2', gain: 0.55, phantom: true,  fader: 0.72, pan: 0.5, aux1: 0.0 }),
       makeChannel({ id: 3, label: 'Bass',    gain: 0.50,                 fader: 0.65, pan: 0.5, aux1: 0.0 }),
       makeChannel({ id: 4, label: 'Keys',    gain: 0.45,                 fader: 0.60, pan: 0.5, aux1: 0.0 }),
@@ -469,7 +471,7 @@ function traceTo(s, srcKey, dest) {
   if (srcDef.kind === 'condenser') {
     add('+48V', channel ? channel.phantom : false, channel?.phantom ? 'phantom on' : 'needs +48V');
   } else {
-    add('+48V', true, srcDef.kind === 'di' ? 'n/a · DI' : 'n/a · line', false);
+    add('+48V', true, srcDef.kind === 'di' ? 'n/a · DI' : srcDef.kind === 'dynamic' ? 'n/a · dynamic' : 'n/a · line', false);
   }
 
   add('Gain', channel ? channel.gain > 0.05 : false, channel ? (channel.gain <= 0.05 ? 'preamp at 0' : `${Math.round(channel.gain * 60)} dB`) : '—');
@@ -1665,7 +1667,7 @@ function SourceCard({ srcKey, label, kind, muted, isTesting, onTest, onMute, onP
       }}
     >
       <div style={{ width: 42, display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0 }}>
-        {kind === 'condenser' && <MicIcon size={28} glow={signalFlowing}/>}
+        {(kind === 'condenser' || kind === 'dynamic') && <MicIcon size={28} glow={signalFlowing}/>}
         {kind === 'di' && <DIBoxIcon size={34} glow={signalFlowing}/>}
         {kind === 'line' && <LaptopIcon size={42} glow={signalFlowing}/>}
       </div>
@@ -1675,7 +1677,7 @@ function SourceCard({ srcKey, label, kind, muted, isTesting, onTest, onMute, onP
           {isTesting && <div className="mono" style={{ fontSize: 7.5, color: 'var(--accent)', letterSpacing: 0.5, fontWeight: 700 }}>◉ TEST</div>}
         </div>
         <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 1 }}>
-          {kind === 'condenser' ? 'Condenser · +48V' : kind === 'di' ? 'Instrument DI' : 'Line level'}
+          {kind === 'condenser' ? 'Condenser · +48V' : kind === 'dynamic' ? 'Dynamic' : kind === 'di' ? 'Instrument DI' : 'Line level'}
         </div>
         <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
           <div
