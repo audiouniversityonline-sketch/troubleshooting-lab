@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=11"></script>
+<script src="content.js?v=12"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -91,8 +91,11 @@
 <script type="text/babel">
 const SOURCES = {
   vocal:  { label: 'Vocal Mic 1', short: 'VOCAL 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630' },
+  // Bass DI is PASSIVE (transformer, no power). Keyboard DI is ACTIVE
+  // (buffered electronics, needs +48V phantom like a condenser). The
+  // diActive flag drives the phantom gate and the source-card label.
   guitar: { label: 'Bass DI',     short: 'BASS',    kind: 'di',        icon: 'di',  color: '#ffc93a' },
-  laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di',        icon: 'di',  color: '#4ade80' },
+  laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di', diActive: true, icon: 'di', color: '#4ade80' },
   vocal2: { label: 'Vocal Mic 2', short: 'VOCAL 2', kind: 'condenser', icon: 'mic', color: '#ff8e4a' },
   // Front-of-house stereo playback (a media player at the desk, not on stage).
   // A line input on a dedicated 5/6 channel used to test the system with music.
@@ -295,7 +298,9 @@ function computeAudio(s, envelope) {
     if (!srcKey) return { level: 0, srcKey: null };
     if (s.sourceMute[srcKey]) return { level: 0, srcKey };
     const srcDef = SOURCES[srcKey];
-    if (srcDef.kind === 'condenser' && !ch.phantom) return { level: 0, srcKey };
+    // Condensers and ACTIVE DIs need +48V phantom to pass signal. Dynamics and
+    // passive DIs work without it. No phantom on a powered input = dead channel.
+    if ((srcDef.kind === 'condenser' || srcDef.diActive) && !ch.phantom) return { level: 0, srcKey };
     const trim = ch.inputTrim != null ? ch.inputTrim : 1;
     return { level: (0.35 + ch.gain * 1.1) * trim, srcKey };
   });
@@ -483,10 +488,10 @@ function traceTo(s, srcKey, dest) {
   add('Fan-Out', valid, valid ? `→ Ch ${ch}` : 'no channel patched');
   const channel = valid ? s.channels[ch - 1] : null;
 
-  if (srcDef.kind === 'condenser') {
+  if (srcDef.kind === 'condenser' || srcDef.diActive) {
     add('+48V', channel ? channel.phantom : false, channel?.phantom ? 'phantom on' : 'needs +48V');
   } else {
-    add('+48V', true, srcDef.kind === 'di' ? 'n/a · DI' : srcDef.kind === 'dynamic' ? 'n/a · dynamic' : 'n/a · line', false);
+    add('+48V', true, srcDef.kind === 'di' ? 'n/a · passive DI' : srcDef.kind === 'dynamic' ? 'n/a · dynamic' : 'n/a · line', false);
   }
 
   add('Gain', channel ? channel.gain > 0.05 : false, channel ? (channel.gain <= 0.05 ? 'preamp at 0' : `${Math.round(channel.gain * 60)} dB`) : '—');
@@ -1713,7 +1718,7 @@ function LaptopIcon({ size = 60, glow = false }) {
   );
 }
 
-function SourceCard({ srcKey, label, kind, muted, isTesting, onTest, onMute, onPatch, patchTarget, patchColor, signalFlowing }) {
+function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, onMute, onPatch, patchTarget, patchColor, signalFlowing }) {
   return (
     <div
       onClick={onTest}
@@ -1741,7 +1746,7 @@ function SourceCard({ srcKey, label, kind, muted, isTesting, onTest, onMute, onP
           {isTesting && <div className="mono" style={{ fontSize: 7.5, color: 'var(--accent)', letterSpacing: 0.5, fontWeight: 700 }}>◉ TEST</div>}
         </div>
         <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 1 }}>
-          {kind === 'condenser' ? 'Condenser · +48V' : kind === 'dynamic' ? 'Dynamic' : kind === 'di' ? 'Instrument DI' : 'Line level'}
+          {kind === 'condenser' ? 'Condenser · +48V' : kind === 'dynamic' ? 'Dynamic' : kind === 'di' ? (diActive ? 'Active DI · +48V' : 'Passive DI') : 'Line level'}
         </div>
         <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
           <div
@@ -2366,6 +2371,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               srcKey={k}
               label={window.SOURCES[k].label}
               kind={window.SOURCES[k].kind}
+              diActive={window.SOURCES[k].diActive}
               muted={state.sourceMute[k]}
               isTesting={state.testing === k}
               onTest={() => setState({ ...state, testing: k })}

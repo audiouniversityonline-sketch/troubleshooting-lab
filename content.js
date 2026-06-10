@@ -51,17 +51,23 @@
 // Plain sentences that say what's happening beat flavor every time, and
 // they're easier for beginners.
 //
-// Ordered as a building-block arc that mirrors Live Sound 101's intro tasks:
-// power on → test the system with playback music → patch → phantom → gain →
-// PFL → signal path → mute → monitor → feedback. Two gain beats by design:
-// room level early (Test the System, the 5/6 playback channel) and the mic
-// preamp later (Gain Staging).
-// Mic kinds matter here: Vocal Mic 1 is a DYNAMIC (the everyday live vocal, no
-// phantom needed) and is the default in the foundational lessons; Vocal Mic 2
-// is a CONDENSER, introduced in the Phantom Power lesson because condensers are
-// the ones that need +48V. The 5/6 playback channel is a FOH line input
-// hardwired to channel 5 (no snake port). See handoff doc for history.
-// Ids were renumbered for this arc on 2026-06-10, pre-launch. After launch the
+// REFOCUSED 2026-06-10 PM (Kyle): the free Essentials are now setting up a
+// system and learning the standard input types, as a continuous on-site build.
+// The 7 lessons, in order:
+//   1 Power-On Sequence   - bring the rig up in the right order (active speakers)
+//   2 Set the Input Level - PFL the playback, set gain, faders to unity
+//   3 Test the System     - send to each output, set the room level
+//   4 Mic Inputs          - dynamic (no power) + condenser (+48V)
+//   5 DI Boxes            - passive (no power) + active (+48V)
+//   6 Monitor Mix         - send a wedge mix
+//   7 Feedback Awareness  - keep the monitor loop under control
+// The early levels build on each other (each starts where the last ended).
+// Troubleshooting faults (Patch, Gain, PFL, Signal Path, Mute, Pan) live in the
+// paid CHALLENGE_BANK, where "something's broken, fix it" is the point.
+// Source types: Vocal Mic 1 = dynamic, Vocal Mic 2 = condenser (+48V); Bass DI
+// = passive, Keyboard DI = active (diActive, needs +48V like a condenser). The
+// 5/6 playback is a FOH line input on channel 5 (no snake port).
+// Ids renumbered for this arc on 2026-06-10, pre-launch. After launch the
 // append-only rule is absolute.
 window.LEVELS = [
   {
@@ -188,79 +194,67 @@ window.LEVELS = [
   },
   {
     id: 4,
-    title: 'Patch & Cable Check',
-    symptom: 'The vocal mic channel is silent. The other channels are working.',
-    hint: 'Check the cables before you touch any knobs. Each source card shows which channel its cable is plugged into.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.cables.vocal = 0; return s; },
-    solution: 'Plug the vocal mic back into channel 1.',
+    title: 'Mic Inputs',
+    // First real inputs after the system is up: the two vocal mics. Teaches the
+    // dynamic-vs-condenser difference. Vocal Mic 1 (ch1) is a DYNAMIC: no power
+    // needed, just set the gain and bring it up. Vocal Mic 2 (ch2) is a
+    // CONDENSER: dead until +48V phantom is on. Both start muted with the gain
+    // pulled low, so the student sets each gain, turns +48V on for the
+    // condenser (safely, while muted), and brings both up. The condenser's PA
+    // condition can't pass without phantom, so the difference is the lesson.
+    // deriveInvolves maps the conditions to channels 1 and 2; the rest mute.
+    task: true,
+    conditions: [
+      { source: 'vocal',  dest: 'pa', min: 0.3 },
+      { source: 'vocal2', dest: 'pa', min: 0.3 },
+    ],
+    symptom: 'The system is up. Bring in your vocal mics: a dynamic on channel 1 and a condenser on channel 2. Set each mic\'s gain and bring it up. One of them needs power.',
+    hint: 'The dynamic mic on channel 1 needs no power: set its gain and bring the channel up. The condenser on channel 2 is dead until you turn on +48V phantom. Turn +48V on while the channel is muted, then set its gain and bring it up.',
+    sabotage: (s) => {
+      // System set up (master at unity, PA at a good level). The two vocal
+      // channels start muted, faders down, gain pulled low. The condenser's
+      // phantom is off so the student has to know it needs +48V.
+      s.channels[0].mute = true; s.channels[0].fader = 0; s.channels[0].gain = 0.2; s.channels[0].phantom = false;
+      s.channels[1].mute = true; s.channels[1].fader = 0; s.channels[1].gain = 0.2; s.channels[1].phantom = false;
+      s.master.fader = 0.75; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      return s;
+    },
+    solution: 'Set each mic\'s gain and bring it up. The condenser on channel 2 needs +48V phantom (turn it on while muted); the dynamic on channel 1 does not.',
     defaultInspect: 'pa',
   },
   {
     id: 5,
-    title: 'Phantom Power',
-    // The condenser mic is Vocal Mic 2 (source 'vocal2', patched to channel 2).
-    // It's dark because phantom is off. Dynamics (Vocal Mic 1) don't need +48V,
-    // so this lesson is where the condenser is introduced. Sabotage targets
-    // channels[1] because deriveInvolves maps vocal2 -> port 2 -> channel 2.
-    symptom: 'The condenser mic has no signal. Its LED is dark.',
-    hint: 'Condenser mics need +48V phantom power. Never turn it on while the channel is live. Mute the channel first, turn on +48V, then unmute.',
-    conditions: [{ source: 'vocal2', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[1].phantom = false; return s; },
-    solution: 'Mute the channel, turn on +48V, then unmute.',
+    title: 'DI Boxes',
+    // The instrument inputs, and the active-vs-passive DI difference. Bass DI
+    // (ch3, guitar source) is PASSIVE: no power, just set it up. Keyboard DI
+    // (ch4, laptop source, diActive) is ACTIVE: it has electronics inside that
+    // need +48V phantom, same as a condenser, and is dead without it. Both
+    // start muted with low gain; the student sets each gain, turns +48V on for
+    // the active DI (while muted), and brings both up. The active DI's PA
+    // condition can't pass without phantom. The source cards label which is
+    // which (Passive DI / Active DI · +48V).
+    task: true,
+    conditions: [
+      { source: 'guitar', dest: 'pa', min: 0.3 },
+      { source: 'laptop', dest: 'pa', min: 0.3 },
+    ],
+    symptom: 'Now the instruments. Set up both direct boxes: a passive DI on the bass (channel 3) and an active DI on the keyboard (channel 4). Set each gain and bring it up. One of them needs power.',
+    hint: 'The passive DI on the bass (channel 3) needs no power: set its gain and bring it up. The active DI on the keyboard (channel 4) has electronics that need +48V phantom, just like a condenser. Turn +48V on while the channel is muted, then bring it up.',
+    sabotage: (s) => {
+      // System set up. Both DI channels start muted, faders down, gain low. The
+      // active DI's phantom is off so the student has to power it.
+      s.channels[2].mute = true; s.channels[2].fader = 0; s.channels[2].gain = 0.2; s.channels[2].phantom = false;
+      s.channels[3].mute = true; s.channels[3].fader = 0; s.channels[3].gain = 0.2; s.channels[3].phantom = false;
+      s.master.fader = 0.75; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      return s;
+    },
+    solution: 'Set each DI\'s gain and bring it up. The active DI on channel 4 needs +48V phantom (turn it on while muted); the passive DI on channel 3 does not.',
     defaultInspect: 'pa',
   },
   {
     id: 6,
-    // The mic-preamp gain beat. The whole-system gain structure was set with
-    // the playback reference back in System Gain Structure (level 3); this is
-    // the other half: set the preamp gain per mic channel.
-    title: 'Gain Staging',
-    symptom: 'The vocal mic is barely registering on the channel meter, even though the fader is up.',
-    hint: 'Volume starts at the GAIN knob, not the fader. Turn up GAIN until the channel meter sits in the healthy zone. Leave the fader where it is.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].gain = 0; s.channels[0].fader = 0.75; return s; },
-    solution: 'Turn up GAIN on the vocal channel until the meter sits in the healthy zone.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 7,
-    title: 'Check in PFL',
-    // Procedural lesson: real engineers solo (PFL) a new channel into the
-    // headphones, listen to verify signal, then bring the fader up. Doing
-    // it in the other order means the room hears anything that's wrong
-    // (hum, wrong source, missed phantom) before you do.
-    //
-    // Sabotage: vocal channel fader pulled to 0. Everything else healthy.
-    // The student has to PFL the channel first (which auto-routes "your
-    // ears" to the cans, and the channel meter shows incoming signal),
-    // then release PFL and push the fader up.
-    //
-    // Win requires: vocal → PA ≥ 0.3 AND requirePflCheck (the workflow
-    // tracker latched true at some point during this attempt).
-    task: true,
-    symptom: 'A new vocal channel is plugged in. Before you bring it up for the audience, use PFL to check in your headphones that the channel is getting signal.',
-    hint: 'Press PFL on the vocal channel. You are now listening through the headphones. If you see and hear signal, release PFL and bring the fader up.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    requirePflCheck: true,
-    sabotage: (s) => { s.channels[0].fader = 0; return s; },
-    solution: 'Press PFL to check the channel in your headphones, release it, then bring the fader up.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 8,
-    // Sits after PFL on purpose: by now every stage has been taught on its
-    // own, and this one is the synthesis. Walk the whole path.
-    title: 'Signal Path',
-    symptom: 'Nothing is coming out of the PA. Every level on the console is turned all the way down.',
-    hint: 'Follow the signal from the mic to the speaker and turn up each stage along the way.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].fader = 0; s.channels[0].gain = 0; s.master.fader = 0; return s; },
-    solution: 'Turn up the channel gain, the channel fader, and the master fader.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 9,
     title: 'Monitor Mix',
     symptom: "The singer can't hear herself in her wedge. The PA sounds fine.",
     hint: "Send the vocal to her wedge by turning up AUX 1 on the vocal channel. Don't forget the wedge's own volume knob on stage.",
@@ -277,7 +271,7 @@ window.LEVELS = [
     defaultInspect: 'wedge',
   },
   {
-    id: 10,
+    id: 7,
     title: 'Feedback Awareness',
     // Vocal channel is up, sending to AUX 1, wedge is cranked. Loop gain
     // is past unity; the wedge is ringing the moment the level loads.
@@ -321,6 +315,52 @@ window.LEVELS = [
 // Voice has NOT been swept on these yet; that happens when they become
 // challenges (the room/meters split changes what the prose looks like).
 window.CHALLENGE_BANK = [
+  // Moved out of the Essentials 2026-06-10 PM when the free tier refocused on
+  // setup + standard input types (per Kyle). These are troubleshooting faults
+  // that belong in the paid Challenges, where "something's broken, fix it" is
+  // the point. Preserved verbatim; dormant until challenge mode ships.
+  {
+    id: 'C-patch-cable',
+    title: 'Patch & Cable Check',
+    symptom: 'The vocal mic channel is silent. The other channels are working.',
+    hint: 'Check the cables before you touch any knobs. Each source card shows which channel its cable is plugged into.',
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => { s.cables.vocal = 0; return s; },
+    solution: 'Plug the vocal mic back into channel 1.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'C-gain-staging',
+    title: 'Gain Staging',
+    symptom: 'The vocal mic is barely registering on the channel meter, even though the fader is up.',
+    hint: 'Volume starts at the GAIN knob, not the fader. Turn up GAIN until the channel meter sits in the healthy zone. Leave the fader where it is.',
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => { s.channels[0].gain = 0; s.channels[0].fader = 0.75; return s; },
+    solution: 'Turn up GAIN on the vocal channel until the meter sits in the healthy zone.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'C-check-pfl',
+    title: 'Check in PFL',
+    task: true,
+    symptom: 'A new vocal channel is plugged in. Before you bring it up for the audience, use PFL to check in your headphones that the channel is getting signal.',
+    hint: 'Press PFL on the vocal channel. You are now listening through the headphones. If you see and hear signal, release PFL and bring the fader up.',
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    requirePflCheck: true,
+    sabotage: (s) => { s.channels[0].fader = 0; return s; },
+    solution: 'Press PFL to check the channel in your headphones, release it, then bring the fader up.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'C-signal-path',
+    title: 'Signal Path',
+    symptom: 'Nothing is coming out of the PA. Every level on the console is turned all the way down.',
+    hint: 'Follow the signal from the mic to the speaker and turn up each stage along the way.',
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => { s.channels[0].fader = 0; s.channels[0].gain = 0; s.master.fader = 0; return s; },
+    solution: 'Turn up the channel gain, the channel fader, and the master fader.',
+    defaultInspect: 'pa',
+  },
   {
     id: 'C-pan-vocal',
     title: 'Pan the Vocal',
