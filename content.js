@@ -20,10 +20,20 @@
 // Contract per level (kept intentionally small so the prose surface stays
 // editable):
 //   - title    : 2-4 words
-//   - symptom  : one sentence, what the engineer would observe in the room
-//   - hint     : one sentence, gentle nudge if they're stuck
-//   - solution : one sentence, what the fix was (shown on solve)
+//   - symptom  : what's going on, in plain language. For task levels this is
+//                the job to do, not a problem description.
+//   - hint     : a plain nudge if they're stuck
+//   - solution : what the fix was (shown on solve)
+//   - task     : true for setup/procedure levels where nothing is broken.
+//                Changes the UI framing: TASK label instead of the red
+//                SYMPTOM, TASK COMPLETE instead of MIX RESTORED, Recap
+//                instead of Fix.
 //   - conditions, sabotage, defaultInspect, topology, involves: engine fields
+//
+// Prose rule (Kyle, 2026-06-10): write simple and clear, not "in character."
+// Don't reach for engineer slang or scene-setting to sound like the niche.
+// Plain sentences that say what's happening beat flavor every time, and
+// they're easier for beginners.
 //
 // Ordered as a building-block arc that mirrors Live Sound 101's intro tasks:
 // power on → test the system with playback music → patch → phantom → gain →
@@ -51,8 +61,9 @@ window.LEVELS = [
     //     full-level mix slams the room. Caught by wouldBlastOnAmpOn ->
     //     cause 'amp_loud'. Fix is master DOWN before the amp.
     // Safe order: console on, master down, amp on, master back up.
-    symptom: 'Cold rig. Console, amp, and wedges all off, master left at unity. Bring the system up the right way.',
-    hint: "Console on first. Powering the console into a live amp pops the speakers. Then pull the master down before the amp, so a hot mix doesn't slam the room. Order: console, master down, amp, master up.",
+    task: true,
+    symptom: "The system is set up and connected. Now it's time to power things on. Power up the system in the correct order.",
+    hint: "Turn the console on first. Powering the console on while an amp is already on pops the speakers. Then pull the master fader down before you turn on the amp, so nothing blasts through the speakers when they come on. Order: console on, master down, amp on, master up.",
     conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
     topology: { paRig: 'amp+passive' },
     sabotage: (s) => {
@@ -64,7 +75,7 @@ window.LEVELS = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false };
       return s;
     },
-    solution: 'Console on first, then master down, amp on, master back up.',
+    solution: 'Turn the console on first, pull the master down, turn the amp on, then bring the master back up.',
     defaultInspect: 'pa',
   },
   {
@@ -76,8 +87,9 @@ window.LEVELS = [
     // stage (wedge volume defaults to 0). The min+max corridor on the PA
     // conditions is the room-level beat: loud enough to verify, not blasting.
     // normalizeChannels mutes channels 1-4 since only playback is involved.
-    symptom: 'Rig is powered. Before anyone steps on stage, send playback music to every speaker: both sides of the PA and both wedges. Keep the room level comfortable.',
-    hint: 'Bring up the 5/6 playback channel for the mains, then open AUX 1 and AUX 2 to feed the wedges. The wedge volume knobs are on stage. Watch the room SPL while you set the level.',
+    task: true,
+    symptom: 'The system is powered on. Send playback music to every speaker to confirm each one is working: both sides of the PA and both wedges. Keep the room at a comfortable level.',
+    hint: 'Unmute the 5/6 playback channel and bring its fader up to send music to the PA. Turn up AUX 1 and AUX 2 to send it to the wedges. The wedge volume knobs are on the stage. Watch the loudness meter at the bottom while you set the level.',
     conditions: [
       { source: 'playback', dest: 'pa_l',   min: 0.25, max: 0.6 },
       { source: 'playback', dest: 'pa_r',   min: 0.25, max: 0.6 },
@@ -93,17 +105,17 @@ window.LEVELS = [
       s.channels[4].aux2 = 0;
       return s;
     },
-    solution: 'Unmute 5/6 and bring the fader up for the mains, open AUX 1 and AUX 2, then bring up both wedge volumes on stage.',
+    solution: 'Unmute 5/6 and bring its fader up, turn up AUX 1 and AUX 2, then turn up both wedge volumes on stage.',
     defaultInspect: 'pa',
   },
   {
     id: 3,
     title: 'Patch & Cable Check',
-    symptom: 'Vocal channel is silent. Other channels look fine.',
-    hint: 'Check the physical connections before you touch a knob. The source card shows which channel each cable lands on.',
+    symptom: 'The vocal mic channel is silent. The other channels are working.',
+    hint: 'Check the cables before you touch any knobs. Each source card shows which channel its cable is plugged into.',
     conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
     sabotage: (s) => { s.cables.vocal = 0; return s; },
-    solution: 'Plug the vocal mic into Ch 1.',
+    solution: 'Plug the vocal mic back into channel 1.',
     defaultInspect: 'pa',
   },
   {
@@ -113,11 +125,11 @@ window.LEVELS = [
     // It's dark because phantom is off. Dynamics (Vocal Mic 1) don't need +48V,
     // so this lesson is where the condenser is introduced. Sabotage targets
     // channels[1] because deriveInvolves maps vocal2 -> port 2 -> channel 2.
-    symptom: 'New condenser mic, no signal. The mic LED is dark.',
-    hint: 'Condenser mics need +48V. Never engage it on a hot channel. Pull the fader or mute first.',
+    symptom: 'The condenser mic has no signal. Its LED is dark.',
+    hint: 'Condenser mics need +48V phantom power. Never turn it on while the channel is live. Mute the channel first, turn on +48V, then unmute.',
     conditions: [{ source: 'vocal2', dest: 'pa', min: 0.3 }],
     sabotage: (s) => { s.channels[1].phantom = false; return s; },
-    solution: 'Mute the channel, engage +48V, then unmute.',
+    solution: 'Mute the channel, turn on +48V, then unmute.',
     defaultInspect: 'pa',
   },
   {
@@ -125,11 +137,11 @@ window.LEVELS = [
     // The mic-preamp gain beat. Room level was set with playback back in
     // Test the System; this is the other half: set the preamp per channel.
     title: 'Gain Staging',
-    symptom: 'Playback tested fine, but the vocal mic is barely moving the channel meter, even with the fader up.',
-    hint: 'Set the preamp first. Open GAIN until the channel meter sits in the healthy zone. The fader stays near unity.',
+    symptom: 'The vocal mic is barely registering on the channel meter, even though the fader is up.',
+    hint: 'Volume starts at the GAIN knob, not the fader. Turn up GAIN until the channel meter sits in the healthy zone. Leave the fader where it is.',
     conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
     sabotage: (s) => { s.channels[0].gain = 0; s.channels[0].fader = 0.75; return s; },
-    solution: 'Push GAIN up on the vocal channel until the meter sits healthy.',
+    solution: 'Turn up GAIN on the vocal channel until the meter sits in the healthy zone.',
     defaultInspect: 'pa',
   },
   {
@@ -147,12 +159,13 @@ window.LEVELS = [
     //
     // Win requires: vocal → PA ≥ 0.3 AND requirePflCheck (the workflow
     // tracker latched true at some point during this attempt).
-    symptom: 'New vocal channel is patched in. Before you bring it up in front of the audience, verify in your cans that the channel is hot.',
-    hint: 'Engage PFL on the vocal channel. Your ears switch to the cans. If you see signal on the PFL meter, release it and bring the channel up.',
+    task: true,
+    symptom: 'A new vocal channel is plugged in. Before you bring it up for the audience, use PFL to check in your headphones that the channel is getting signal.',
+    hint: 'Press PFL on the vocal channel. You are now listening through the headphones. If you see and hear signal, release PFL and bring the fader up.',
     conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
     requirePflCheck: true,
     sabotage: (s) => { s.channels[0].fader = 0; return s; },
-    solution: 'PFL the vocal, verify signal in the cans, release PFL, push the fader up.',
+    solution: 'Press PFL to check the channel in your headphones, release it, then bring the fader up.',
     defaultInspect: 'pa',
   },
   {
@@ -160,11 +173,11 @@ window.LEVELS = [
     // Sits after PFL on purpose: by now every stage has been taught on its
     // own, and this one is the synthesis. Walk the whole path.
     title: 'Signal Path',
-    symptom: 'The console is at zero. Nothing is coming out of the PA.',
-    hint: 'Walk from the mic to the speaker. Every stage between has to be open.',
+    symptom: 'Nothing is coming out of the PA. Every level on the console is turned all the way down.',
+    hint: 'Follow the signal from the mic to the speaker and turn up each stage along the way.',
     conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
     sabotage: (s) => { s.channels[0].fader = 0; s.channels[0].gain = 0; s.master.fader = 0; return s; },
-    solution: 'Open the channel gain, fader, and master fader.',
+    solution: 'Turn up the channel gain, the channel fader, and the master fader.',
     defaultInspect: 'pa',
   },
   {
@@ -174,17 +187,17 @@ window.LEVELS = [
     // catches the channel mute first (more obvious), then has to find the
     // master mute when the room is still silent.
     symptom: 'The vocal channel meter is moving, but the room is silent.',
-    hint: 'Mute is the cheapest first check. Look at the channel mutes, then the master.',
+    hint: 'Check the mute buttons first. Look at the channel mutes, then the master.',
     conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
     sabotage: (s) => { s.channels[0].mute = true; s.master.mute = true; return s; },
-    solution: 'Unmute the vocal channel and the master bus.',
+    solution: 'Unmute the vocal channel and the master.',
     defaultInspect: 'pa',
   },
   {
     id: 9,
     title: 'Monitor Mix',
-    symptom: "Singer can't hear herself in the wedge. The PA is fine.",
-    hint: "Send the vocal to her wedge with AUX 1. Don't forget the wedge volume on stage.",
+    symptom: "The singer can't hear herself in her wedge. The PA sounds fine.",
+    hint: "Send the vocal to her wedge by turning up AUX 1 on the vocal channel. Don't forget the wedge's own volume knob on stage.",
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
       { source: 'vocal', dest: 'wedge', min: 0.35 },
@@ -194,7 +207,7 @@ window.LEVELS = [
       s.channels.forEach(c => c.aux1 = 0);
       return s;
     },
-    solution: 'Open AUX 1 on the vocal channel and bring up the wedge volume.',
+    solution: 'Turn up AUX 1 on the vocal channel and turn up the wedge volume on stage.',
     defaultInspect: 'wedge',
   },
   {
@@ -212,8 +225,8 @@ window.LEVELS = [
     //     the ring threshold)
     // Win condition still requires vocal → wedge ≥ 0.3, so just yanking
     // the wedge volume to zero won't solve. Has to be a real fix.
-    symptom: 'Wedge is ringing. The mic is hearing itself through the wedge and the loop is feeding back.',
-    hint: 'Three knobs in the loop: the channel aux send, the wedge volume, and HPF on the channel. Any one of them low enough breaks the loop.',
+    symptom: 'The system is feeding back. The mic is picking up its own sound from the wedge, and it keeps getting louder.',
+    hint: 'Three ways to stop it: turn down AUX 1 on the vocal channel, turn down the wedge volume, or turn on HPF to cut the low end out of the loop.',
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
       { source: 'vocal', dest: 'wedge', min: 0.3 },
@@ -225,7 +238,7 @@ window.LEVELS = [
       s.channels[0].highpass = false;
       return s;
     },
-    solution: 'Pull AUX 1 (or wedge volume) down. HPF on the vocal channel pulls stage rumble out of the loop.',
+    solution: 'Turn down AUX 1 or the wedge volume, or turn on HPF on the vocal channel.',
     defaultInspect: 'wedge',
   },
 ];

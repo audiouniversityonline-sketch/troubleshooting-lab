@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=4"></script>
+<script src="content.js?v=5"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -608,7 +608,7 @@ function detectClipping(audio, state) {
           stage: 'preamp',
           id: i,
           label: `Channel ${i + 1} preamp`,
-          fix: 'Pull the GAIN back. The fader can\'t fix an overdriven preamp. The distortion is already baked into the signal.',
+          fix: 'Turn the GAIN down. The fader can\'t fix an overdriven preamp, because the distortion happens before the fader.',
         });
       }
     });
@@ -627,7 +627,7 @@ function detectClipping(audio, state) {
           stage: 'channel',
           id: i,
           label: `Channel ${i + 1}`,
-          fix: 'Pull the channel FADER back. The channel meter is pinning.',
+          fix: 'Turn the channel FADER down. The channel meter is in the red.',
         });
       }
     });
@@ -645,7 +645,7 @@ function detectClipping(audio, state) {
         stage: 'master',
         id: L > R ? 'L' : 'R',
         label: 'Master Bus',
-        fix: 'Pull the MASTER fader back, or ease individual channel faders down. The bus is summing too hot.',
+        fix: 'Turn the MASTER fader down, or turn down some channel faders. Too many loud channels add up.',
       }];
     }
   }
@@ -654,10 +654,10 @@ function detectClipping(audio, state) {
   // overdriven by its own volume knob.
   if (audio && audio.outputs) {
     const speakers = [
-      { key: 'pa_l',   label: 'PA L',     fix: 'Pull PA L volume back.' },
-      { key: 'pa_r',   label: 'PA R',     fix: 'Pull PA R volume back.' },
-      { key: 'wedge',  label: 'Wedge 1',  fix: 'Pull Wedge 1 volume back.' },
-      { key: 'wedge2', label: 'Wedge 2',  fix: 'Pull Wedge 2 volume back.' },
+      { key: 'pa_l',   label: 'PA L',     fix: 'Turn the PA L volume down.' },
+      { key: 'pa_r',   label: 'PA R',     fix: 'Turn the PA R volume down.' },
+      { key: 'wedge',  label: 'Wedge 1',  fix: 'Turn the Wedge 1 volume down.' },
+      { key: 'wedge2', label: 'Wedge 2',  fix: 'Turn the Wedge 2 volume down.' },
     ];
     const speakerClips = [];
     for (const s of speakers) {
@@ -827,7 +827,7 @@ function detectGainStagingMistakes(state, audio, level) {
     if (lvl < COLD && ch.gain < 0.85) {
       mistakes.push({
         kind: 'cold_channel',
-        message: 'Channel ' + chNum + '\'s meter is barely registering, but the audience can still hear the channel. Something downstream got pushed up to compensate. That boosts noise and hiss along with the signal. Open GAIN until the channel\'s own meter sits in the healthy zone, then pull the other controls back to normal.',
+        message: 'Channel ' + chNum + '\'s meter is barely registering, but the audience can still hear the channel. Something later in the chain got turned up to compensate, and that boosts noise and hiss along with the signal. Turn GAIN up until the channel\'s own meter sits in the healthy zone, then bring the other controls back to normal.',
       });
     } else if (lvl < COLD + 0.10 && ch.gain >= 0.85) {
       mistakes.push({
@@ -837,7 +837,7 @@ function detectGainStagingMistakes(state, audio, level) {
     } else if (lvl > HOT) {
       mistakes.push({
         kind: 'hot_channel',
-        message: 'Channel ' + chNum + '\'s meter is parked near the top. The steady level looks safe right now, but a singer leaning in or a drum hit can easily be 10 dB louder than what you\'re seeing, and that peak will clip. Pull GAIN back until the meter sits in the healthy zone with peakroom to spare.',
+        message: 'Channel ' + chNum + '\'s meter is sitting near the top. It looks safe right now, but a singer leaning in or a drum hit can easily be 10 dB louder than what you\'re seeing, and that peak will distort. Turn GAIN down until the meter sits in the healthy zone with room to spare.',
       });
     }
   }
@@ -847,7 +847,7 @@ function detectGainStagingMistakes(state, audio, level) {
   if (state.master && state.master.fader > 0.90) {
     mistakes.push({
       kind: 'hot_master',
-      message: 'The master fader is jammed near the top. Master sits at unity. If the mix is too quiet with the master at a normal spot, the amp or speakers are where to adjust. Those get dialed in for each room.',
+      message: 'The master fader is pushed near the top. It normally sits at its unity mark. If the mix is too quiet with the master at a normal position, adjust the amp or speaker level instead. Those get set once for each room.',
     });
   }
 
@@ -859,7 +859,7 @@ function detectGainStagingMistakes(state, audio, level) {
   if (paLv > 0.90 || paRv > 0.90) {
     mistakes.push({
       kind: 'hot_speakers',
-      message: 'The PA speakers are cranked. Speaker level is set once when the system gets tuned for the room, then left alone. Moving it mid-show changes how every channel sounds, and because the speakers feed back into every mic on stage, it raises the chance of feedback. If a single channel is too quiet, fix it on the channel. If the whole room needs to be louder, that\'s a master fader move.',
+      message: 'The PA speaker volume is turned up too high. Speaker level gets set once when the system is tuned for the room, then left alone. Changing it mid-show changes how everything sounds and raises the chance of feedback. If one channel is too quiet, fix that channel. If the whole room needs to be louder, use the master fader.',
     });
   }
 
@@ -4093,24 +4093,24 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
               <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ color: 'var(--ink)' }}>
                   {cause === 'plug' ? (
-                    <>You plugged a cable into a <b style={{ color: 'var(--hot)' }}>live channel</b>. The contact transient blew through the PA. In a real venue that pop can damage tweeters and rattle the room.</>
+                    <>You plugged a cable into a <b style={{ color: 'var(--hot)' }}>live channel</b>. Plugging in makes a loud pop, and the channel was on, so the pop went through the PA. In a real venue that can damage speakers.</>
                   ) : cause === 'amp_loud' ? (
-                    <>You powered the <b style={{ color: 'var(--hot)' }}>amp on</b> with the master up. A full-level mix slammed into the PA the instant the speakers came alive. In a real venue, this would have been very abrupt and potentially could have damaged the system.</>
+                    <>You turned the <b style={{ color: 'var(--hot)' }}>amp on</b> with the master up. Sound hit the speakers at full level the moment they came on. In a real venue that's painfully loud and can damage the system.</>
                   ) : cause === 'mixer_pop' ? (
-                    <>You powered the <b style={{ color: 'var(--hot)' }}>console on</b> while the amp was already live. The switch-on transient went straight into the amp and popped the speakers. This happens even with the master muted, because it's an electrical pop, not program level.</>
+                    <>You turned the <b style={{ color: 'var(--hot)' }}>console on</b> while the amp was already on. A console makes an electrical pop when it powers up, and the amp sent that pop straight to the speakers. Muting the master doesn't prevent this, because the pop is electrical, not sound from the mix.</>
                   ) : (
-                    <>You engaged <b style={{ color: 'var(--hot)' }}>+48V</b> with the channel live. In a real venue that DC pop can blow tweeters or damage ribbon mics.</>
+                    <>You turned on <b style={{ color: 'var(--hot)' }}>+48V</b> while the channel was live. That sends a loud pop through the system. In a real venue it can damage speakers and some mics.</>
                   )}
                 </div>
                 <div style={{ color: 'var(--ink-2)' }}>
                   {cause === 'plug' ? (
-                    <>Safe sequence: <b>mute the channel</b> (or pull its fader down) → plug the cable in → bring the channel back up.</>
+                    <>The correct order: <b>mute the channel</b> (or pull its fader down) → plug the cable in → bring the channel back up.</>
                   ) : cause === 'amp_loud' ? (
-                    <>Safe sequence: <b>pull the master down</b> → power the amp on → bring the master back up gently.</>
+                    <>The correct order: <b>pull the master down</b> → turn the amp on → bring the master back up slowly.</>
                   ) : cause === 'mixer_pop' ? (
-                    <>Safe sequence: <b>console on first</b>, before any amp. Then master down, amp on, master back up.</>
+                    <>The correct order: <b>console on first</b>, before any amp. Then master down, amp on, master back up.</>
                   ) : (
-                    <>Safe sequence: <b>mute the channel</b> (or pull its fader down) → engage phantom → wait a beat → bring the channel back up.</>
+                    <>The correct order: <b>mute the channel</b> (or pull its fader down) → turn on +48V → wait a moment → bring the channel back up.</>
                   )}
                 </div>
                 {onReset && (
@@ -4133,10 +4133,10 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
              pulled below the loop unity gain clears the ringing. */
           <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ color: 'var(--ink)' }}>
-              The wedge is <b style={{ color: 'var(--hot)' }}>ringing</b>. The mic is hearing itself through the wedge and the loop is feeding back on itself. The whole room hears it.
+              The system is <b style={{ color: 'var(--hot)' }}>feeding back</b>. The mic is picking up its own sound from the wedge, and it keeps building. The whole room hears it.
             </div>
             <div style={{ fontSize: 11, color: 'var(--ink-2)' }}>
-              Three knobs kill it: pull the channel's <b>AUX 1</b> send, pull the <b>wedge volume</b>, or engage <b>HPF</b> on the channel to drop stage rumble out of the loop.
+              Three ways to stop it: turn down the channel's <b>AUX 1</b> send, turn down the <b>wedge volume</b>, or turn on <b>HPF</b> to cut the low end out of the loop.
             </div>
           </div>
         ) : (clips && clips.length > 0) ? (
@@ -4161,9 +4161,9 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
               <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <div style={{ color: 'var(--ink)' }}>
                   {audienceLive ? (
-                    <>Sound is <b style={{ color: 'var(--hot)' }}>distorting</b>. Something on the signal chain is in the red. The audience hears clipping.</>
+                    <>The sound is <b style={{ color: 'var(--hot)' }}>distorting</b>. Something in the signal chain is in the red, and the audience can hear it.</>
                   ) : (
-                    <>Something on the signal chain is <b style={{ color: 'var(--hot)' }}>peaking into red</b>. The audience can't hear it yet because the signal isn't reaching the PA, but bringing the room up like this would distort. Fix the gain staging first.</>
+                    <>Something in the signal chain is <b style={{ color: 'var(--hot)' }}>in the red</b>. The audience can't hear it yet because the signal isn't reaching the PA, but it will distort as soon as it does. Fix the level first.</>
                   )}
                 </div>
                 {clips.map((c, i) => (
@@ -4180,16 +4180,18 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
              the warning clears. */
           <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ color: 'var(--ink)' }}>
-              Stereo PA is <b style={{ color: 'var(--hot)' }}>imbalanced</b>. The room is hearing a lopsided mix. One side is louder than the other, or silent.
+              The two sides of the PA <b style={{ color: 'var(--hot)' }}>don't match</b>. One side is louder than the other, or silent.
             </div>
             <div style={{ fontSize: 11, color: 'var(--ink-2)' }}>{paBalanceIssue.fix}</div>
           </div>
         ) : null}
       </div>
 
-      {/* SYMPTOM zone */}
-      <div style={zoneStyle('var(--hot)', 'rgba(255,70,48,0.08)')}>
-        {zoneLabel('var(--hot)', '⚠ SYMPTOM')}
+      {/* SYMPTOM / TASK zone. Setup levels (level.task) aren't describing a
+          problem, so they get a neutral TASK label instead of the red
+          warning SYMPTOM treatment. */}
+      <div style={zoneStyle(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? 'rgba(255,255,255,0.03)' : 'rgba(255,70,48,0.08)')}>
+        {zoneLabel(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? '▸ TASK' : '⚠ SYMPTOM')}
         <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.4 }}>{level.symptom}</div>
       </div>
 
@@ -4262,11 +4264,11 @@ function SolvedCard({ level, onNext, hasNext, coaching }) {
       boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 4px 14px rgba(0,0,0,0.5), 0 0 30px rgba(74,222,128,0.15)',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>✓ MIX RESTORED</div>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>{level.task ? '✓ TASK COMPLETE' : '✓ MIX RESTORED'}</div>
         <div className="display" style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.1 }}>{level.title}</div>
       </div>
       <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-        <span style={{ color: 'var(--green)', fontWeight: 600 }}>Fix: </span>{level.solution}
+        <span style={{ color: 'var(--green)', fontWeight: 600 }}>{level.task ? 'Recap: ' : 'Fix: '}</span>{level.solution}
       </div>
       {Array.isArray(coaching) && coaching.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, borderTop: '1px solid rgba(255,181,71,0.22)', paddingTop: 5 }}>
