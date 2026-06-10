@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=3"></script>
+<script src="content.js?v=4"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -4207,7 +4207,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
                 <span style={{ flex: 1, color: s.pass ? 'var(--green)' : 'var(--ink-2)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {s.srcLabel} → {s.destLabel}
                 </span>
-                <span className="mono" style={{ color: s.pass ? 'var(--green)' : 'var(--ink-2)', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                <span className="mono" style={{ color: s.pass ? 'var(--green)' : (s.c.max != null && s.lvl > s.c.max ? 'var(--amber)' : 'var(--ink-2)'), fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
                   {Math.round(s.lvl * 100)}%
                 </span>
               </div>
@@ -4215,11 +4215,18 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
                 <div style={{
                   position: 'absolute', top: 0, left: 0, height: '100%',
                   width: `${s.fill * 100}%`,
-                  background: s.pass ? 'var(--green)' : 'var(--cool)',
+                  background: s.pass ? 'var(--green)' : (s.c.max != null && s.lvl > s.c.max ? 'var(--amber)' : 'var(--cool)'),
                   boxShadow: s.pass ? '0 0 6px rgba(74,222,128,0.5)' : 'none',
                   transition: 'width 0.18s',
                 }}/>
               </div>
+              {/* Range conditions (a max with or without a min) get the target
+                  spelled out on its own line so the row label never truncates. */}
+              {s.c.max != null && !s.pass && (
+                <div className="mono" style={{ marginLeft: 14, fontSize: 9, fontWeight: 700, letterSpacing: 0.4, color: s.lvl > s.c.max ? 'var(--amber)' : 'var(--ink-3)' }}>
+                  {s.lvl > s.c.max ? 'TOO LOUD · ' : ''}KEEP {s.targetTxt}
+                </div>
+              )}
             </div>
           ))}
           {extras.map((e, i) => (

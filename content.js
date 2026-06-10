@@ -25,12 +25,18 @@
 //   - solution : one sentence, what the fix was (shown on solve)
 //   - conditions, sabotage, defaultInspect, topology, involves: engine fields
 //
-// Ordered as a "bring a system up and run a show" arc: power on → trace the
-// signal path → patch → phantom → gain → PFL → mute → pan → monitor → feedback.
+// Ordered as a building-block arc that mirrors Live Sound 101's intro tasks:
+// power on → test the system with playback music → patch → phantom → gain →
+// PFL → signal path → mute → monitor → feedback. Two gain beats by design:
+// room level early (Test the System, the 5/6 playback channel) and the mic
+// preamp later (Gain Staging).
 // Mic kinds matter here: Vocal Mic 1 is a DYNAMIC (the everyday live vocal, no
 // phantom needed) and is the default in the foundational lessons; Vocal Mic 2
 // is a CONDENSER, introduced in the Phantom Power lesson because condensers are
-// the ones that need +48V. See handoff doc for the consolidation history.
+// the ones that need +48V. The 5/6 playback channel is a FOH line input
+// hardwired to channel 5 (no snake port). See handoff doc for history.
+// Ids were renumbered for this arc on 2026-06-10, pre-launch. After launch the
+// append-only rule is absolute.
 window.LEVELS = [
   {
     id: 1,
@@ -63,12 +69,31 @@ window.LEVELS = [
   },
   {
     id: 2,
-    title: 'Signal Path',
-    symptom: 'The console is at zero. Nothing is coming out of the PA.',
-    hint: 'Walk from the mic to the speaker. Every stage between has to be open.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].fader = 0; s.channels[0].gain = 0; s.master.fader = 0; return s; },
-    solution: 'Open the channel gain, fader, and master fader.',
+    title: 'Test the System',
+    // The 5/6 playback channel (FOH line input, channel 5) carries music for
+    // testing. Verify every destination gets signal: both PA sides via the
+    // fader, both wedges via AUX 1/AUX 2 plus the wedge volume knobs on
+    // stage (wedge volume defaults to 0). The min+max corridor on the PA
+    // conditions is the room-level beat: loud enough to verify, not blasting.
+    // normalizeChannels mutes channels 1-4 since only playback is involved.
+    symptom: 'Rig is powered. Before anyone steps on stage, send playback music to every speaker: both sides of the PA and both wedges. Keep the room level comfortable.',
+    hint: 'Bring up the 5/6 playback channel for the mains, then open AUX 1 and AUX 2 to feed the wedges. The wedge volume knobs are on stage. Watch the room SPL while you set the level.',
+    conditions: [
+      { source: 'playback', dest: 'pa_l',   min: 0.25, max: 0.6 },
+      { source: 'playback', dest: 'pa_r',   min: 0.25, max: 0.6 },
+      { source: 'playback', dest: 'wedge',  min: 0.25 },
+      { source: 'playback', dest: 'wedge2', min: 0.25 },
+    ],
+    sabotage: (s) => {
+      // Playback channel silent: muted, fader down, sends closed. Wedge
+      // volumes are 0 by default, so the stage walk is part of the lesson.
+      s.channels[4].mute = true;
+      s.channels[4].fader = 0;
+      s.channels[4].aux1 = 0;
+      s.channels[4].aux2 = 0;
+      return s;
+    },
+    solution: 'Unmute 5/6 and bring the fader up for the mains, open AUX 1 and AUX 2, then bring up both wedge volumes on stage.',
     defaultInspect: 'pa',
   },
   {
@@ -97,9 +122,11 @@ window.LEVELS = [
   },
   {
     id: 5,
+    // The mic-preamp gain beat. Room level was set with playback back in
+    // Test the System; this is the other half: set the preamp per channel.
     title: 'Gain Staging',
-    symptom: 'Fader is up. The channel meter is barely registering.',
-    hint: 'Set the preamp first. Open GAIN until the channel meter sits in the healthy zone.',
+    symptom: 'Playback tested fine, but the vocal mic is barely moving the channel meter, even with the fader up.',
+    hint: 'Set the preamp first. Open GAIN until the channel meter sits in the healthy zone. The fader stays near unity.',
     conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
     sabotage: (s) => { s.channels[0].gain = 0; s.channels[0].fader = 0.75; return s; },
     solution: 'Push GAIN up on the vocal channel until the meter sits healthy.',
@@ -130,6 +157,18 @@ window.LEVELS = [
   },
   {
     id: 7,
+    // Sits after PFL on purpose: by now every stage has been taught on its
+    // own, and this one is the synthesis. Walk the whole path.
+    title: 'Signal Path',
+    symptom: 'The console is at zero. Nothing is coming out of the PA.',
+    hint: 'Walk from the mic to the speaker. Every stage between has to be open.',
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => { s.channels[0].fader = 0; s.channels[0].gain = 0; s.master.fader = 0; return s; },
+    solution: 'Open the channel gain, fader, and master fader.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 8,
     title: 'Mute Check',
     // Two beats: a channel mute and a master mute, both engaged. The student
     // catches the channel mute first (more obvious), then has to find the
@@ -139,19 +178,6 @@ window.LEVELS = [
     conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
     sabotage: (s) => { s.channels[0].mute = true; s.master.mute = true; return s; },
     solution: 'Unmute the vocal channel and the master bus.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 8,
-    title: 'Pan the Vocal',
-    symptom: 'Vocal is loud on the left side of the room, missing on the right.',
-    hint: 'Find PAN on the vocal channel and set it back to center.',
-    conditions: [
-      { source: 'vocal', dest: 'pa_l', min: 0.25 },
-      { source: 'vocal', dest: 'pa_r', min: 0.25 },
-    ],
-    sabotage: (s) => { s.channels[0].pan = 0; return s; },
-    solution: 'Pan the vocal to center.',
     defaultInspect: 'pa',
   },
   {
@@ -216,6 +242,22 @@ window.LEVELS = [
 // Voice has NOT been swept on these yet; that happens when they become
 // challenges (the room/meters split changes what the prose looks like).
 window.CHALLENGE_BANK = [
+  {
+    id: 'C-pan-vocal',
+    title: 'Pan the Vocal',
+    // Cut from the Essentials 2026-06-10 when Test the System took its slot.
+    // Dormant until challenge mode ships; prose not yet reworked for the
+    // challenge presentation (symptom-only, hidden solution).
+    symptom: 'Vocal is loud on the left side of the room, missing on the right.',
+    hint: 'Find PAN on the vocal channel and set it back to center.',
+    conditions: [
+      { source: 'vocal', dest: 'pa_l', min: 0.25 },
+      { source: 'vocal', dest: 'pa_r', min: 0.25 },
+    ],
+    sabotage: (s) => { s.channels[0].pan = 0; return s; },
+    solution: 'Pan the vocal to center.',
+    defaultInspect: 'pa',
+  },
   // {
   //   id: 'C-master-mute', title: 'Master Mute', ...
   // },
