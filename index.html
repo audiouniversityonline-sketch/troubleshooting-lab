@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=12"></script>
+<script src="content.js?v=13"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -91,11 +91,13 @@
 <script type="text/babel">
 const SOURCES = {
   vocal:  { label: 'Vocal Mic 1', short: 'VOCAL 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630' },
-  // Bass DI is PASSIVE (transformer, no power). Keyboard DI is ACTIVE
-  // (buffered electronics, needs +48V phantom like a condenser). The
-  // diActive flag drives the phantom gate and the source-card label.
-  guitar: { label: 'Bass DI',     short: 'BASS',    kind: 'di',        icon: 'di',  color: '#ffc93a' },
-  laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di', diActive: true, icon: 'di', color: '#4ade80' },
+  // Bass DI is ACTIVE (buffered electronics, needs +48V phantom like a
+  // condenser). Keyboard DI is PASSIVE (transformer, no power). The diActive
+  // flag drives the phantom gate and the source-card label. (Real rule of
+  // thumb is the opposite pairing, but either box works on either source;
+  // this assignment is Kyle's choice for the lesson.)
+  guitar: { label: 'Bass DI',     short: 'BASS',    kind: 'di', diActive: true, icon: 'di', color: '#ffc93a' },
+  laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di',        icon: 'di',  color: '#4ade80' },
   vocal2: { label: 'Vocal Mic 2', short: 'VOCAL 2', kind: 'condenser', icon: 'mic', color: '#ff8e4a' },
   // Front-of-house stereo playback (a media player at the desk, not on stage).
   // A line input on a dedicated 5/6 channel used to test the system with music.
@@ -3362,6 +3364,11 @@ function App() {
   // we record that the workflow was followed rather than just the end state.
   const pflCheckedRef = uR(false);
 
+  // Which channels have been PFL'd at some point this attempt (channel number
+  // -> true). Drives requirePflEach (Mic Inputs / DI Boxes: PFL each input
+  // before you bring it up). Reset on level change.
+  const pflChannelsRef = uR({});
+
   // Per-destination "checked" latch for verifyEach levels (Test the System).
   // Once playback reaches a speaker, that speaker stays checked for the rest
   // of the attempt, so the student verifies them one at a time. Reset on
@@ -3418,6 +3425,9 @@ function App() {
     // channel before sending it to the room? Tracked by pflCheckedRef
     // (latched true on any solo engage during the level).
     const pflChecked = !level.requirePflCheck || pflCheckedRef.current;
+    // PFL each listed channel (Mic Inputs / DI Boxes): every input verified in
+    // the cans before it goes to the room.
+    const pflEachOk = !level.requirePflEach || level.requirePflEach.every(ch => pflChannelsRef.current[ch]);
     // Distortion blocks the win for as long as anything is in the red. The
     // moment the user backs off, the block lifts. No reset required.
     const clean = clips.length === 0;
@@ -3474,7 +3484,7 @@ function App() {
       }
       return fadersOk && inputOk;
     })();
-    const won = flowOk && pflClear && pflChecked && clean && balanced && noFeedback && poweredUp && verifiedOk && gainOk;
+    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && poweredUp && verifiedOk && gainOk;
     if (won && !blocked) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
@@ -3795,6 +3805,7 @@ function App() {
     // Reset the procedural PFL tracker so each level scores its own
     // workflow rather than counting an earlier solo as a check.
     pflCheckedRef.current = false;
+    pflChannelsRef.current = {};
     // Reset the per-speaker verify latches so each attempt starts unchecked.
     verifiedRef.current = {};
   };
@@ -3804,6 +3815,11 @@ function App() {
   uE(() => {
     if (state.channels && state.channels.some(c => c.solo)) {
       pflCheckedRef.current = true;
+    }
+    // Latch each channel that gets soloed (PFL'd) so requirePflEach can confirm
+    // every input was checked in the cans, one by one.
+    if (state.channels) {
+      state.channels.forEach((c, i) => { if (c.solo) pflChannelsRef.current[i + 1] = true; });
     }
   }, [state.channels]);
   const restart = () => loadLevel(levelIdx);
@@ -3856,6 +3872,18 @@ function App() {
     }
   }
 
+  // Per-channel PFL checklist for the brief (Mic Inputs / DI Boxes). Checked if
+  // latched OR currently soloed, so it tracks the moment you press PFL.
+  let pflEachStatus = null;
+  if (level.requirePflEach) {
+    pflEachStatus = level.requirePflEach.map(ch => {
+      const srcKey = audio.chanInSource[ch - 1];
+      const lbl = srcKey && window.SOURCES[srcKey] ? window.SOURCES[srcKey].label : ('Channel ' + ch);
+      const checked = !!pflChannelsRef.current[ch] || !!(state.channels[ch - 1] && state.channels[ch - 1].solo);
+      return { label: 'Checked ' + lbl + ' in PFL', pass: checked };
+    });
+  }
+
   // Unity-fader (+ optional input-gain) status for the gain-structure brief.
   let gainStatus = null;
   if (level.gainStructure) {
@@ -3904,7 +3932,7 @@ function App() {
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={level.conditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
-                        verifyStatus={verifyStatus} gainStatus={gainStatus}
+                        verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus}
                         powerStatus={(() => {
                           const o = state.outputs;
                           const passive = (state.topology && state.topology.paRig) === 'amp+passive';
@@ -4106,7 +4134,7 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus }) {
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus }) {
   // Compute per-condition pass / level, and whether all conditions pass.
   const condStates = (conditions || []).map(c => {
     const cont = audio.contributions[c.source];
@@ -4136,6 +4164,9 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   }
   if (level.requirePflCheck) {
     extras.push({ label: 'Checked the channel in PFL', pass: !!pflChecked, color: 'var(--amber)' });
+  }
+  if (level.requirePflEach && pflEachStatus) {
+    for (const p of pflEachStatus) extras.push({ label: p.label, pass: !!p.pass, color: 'var(--amber)' });
   }
   if (level.requirePowerOn && powerStatus) {
     extras.push({ label: 'Console powered on', pass: !!powerStatus.console, color: 'var(--cool)' });

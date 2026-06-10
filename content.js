@@ -103,7 +103,7 @@ window.LEVELS = [
       // down (normalizeChannels, no conditions). Mute the master too, then
       // power off everything with a switch: both active PA speakers and both
       // wedges. The only task left is the power-on order.
-      s.master = { ...s.master, mute: true };
+      s.master = { ...s.master, mute: true, fader: 0 };
       s.mixer = { on: false };
       s.outputs.pa_l = { ...s.outputs.pa_l, on: false };
       s.outputs.pa_r = { ...s.outputs.pa_r, on: false };
@@ -118,79 +118,73 @@ window.LEVELS = [
     id: 2,
     title: 'Set the Input Level',
     // Step 1 of the real-show setup, picking up exactly where Power-On left
-    // off: the rig is on but the console is still zeroed (every channel muted,
-    // faders down, master muted). The playback is connected with a too-low
-    // input gain. The student PFLs the playback (listening in the cans), sets
-    // the input GAIN so the meter sits in the healthy zone, then unmutes and
-    // brings the channel and the master up to unity. That's the gain
-    // structure: a good input flowing through unity faders, live and ready.
+    // off: the rig is on but the console is fully zeroed (every channel muted,
+    // faders all the way down, master muted AND its fader at 0, playback gain
+    // all the way down). The student PFLs the playback, sets the input GAIN
+    // healthy, unmutes and brings the channel + master to unity, THEN sets how
+    // loud the room is with the PA speaker volume (the SPL beat lives here now).
     // requirePflCheck = the PFL workflow happened; gainStructure.inputBand =
-    // the input sits healthy; the unity checks require unmuted + at unity.
-    // involves: [5] keeps playback live and mutes the mics. The start state
-    // matches Power-On's end so the early lessons build on each other.
+    // input sits healthy; unity checks require unmuted + at unity; the PA
+    // corridor (0.30-0.50 ~= 84-90 dB SPL) is the room level set with the
+    // speaker volume. involves: [5] keeps playback live and mutes the mics.
     task: true,
     involves: [5],
     requirePflCheck: true,
     gainStructure: { refChannel: 5, unity: 0.75, faderTol: 0.06, inputBand: [0.80, 1.00] },
-    conditions: [],
-    symptom: 'The rig is powered on and the console is still zeroed. Your playback device is connected. PFL the playback channel, set the input gain so the meter sits healthy in your headphones, then unmute and bring the channel and master faders up to unity.',
-    hint: 'Press PFL on the playback channel to hear it in your headphones. Turn the GAIN knob until the input meter sits in the healthy zone, not too low, not in the red. Release PFL, unmute the playback channel and the master, then bring both faders up to unity (the 0 dB mark).',
+    conditions: [
+      { source: 'playback', dest: 'pa', min: 0.30, max: 0.50 },
+    ],
+    symptom: 'The rig is on and the console is fully zeroed. Your playback device is connected. PFL the playback, set the input gain healthy in your headphones, unmute and bring the channel and master faders to unity, then set the PA speaker level for a good loudness in the room.',
+    hint: 'Press PFL on the playback to hear it in your headphones. Set the GAIN so the meter sits in the healthy zone. Release PFL, unmute the playback and the master, and bring both faders up to unity. Then bring up the PA speaker volume until the room sits at a good level on the loudness meter.',
     sabotage: (s) => {
-      // Continuous with Power-On: rig on, console still zeroed. Channels muted
-      // with faders down (normalizeChannels for 1-4; this handles 5). Master
-      // muted. The only thing set is a too-low input gain on the playback so
-      // the gain set is hands-on. PA volume left low so the room stays quiet
-      // when the input finally comes up.
+      // Continuous with Power-On: rig on, console fully zeroed. Channel muted,
+      // fader 0, GAIN all the way down. Master muted, fader 0. PA speaker volume
+      // all the way down too, since the student sets the room level here.
       s.channels[4].mute = true;
       s.channels[4].fader = 0;
-      s.channels[4].gain = 0.25;
+      s.channels[4].gain = 0;
       s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
-      s.master.mute = true; s.master.fader = 0.55;
-      s.outputs.pa_l.volume = 0.3; s.outputs.pa_r.volume = 0.3;
+      s.master.mute = true; s.master.fader = 0;
+      s.outputs.pa_l.volume = 0; s.outputs.pa_r.volume = 0;
       return s;
     },
-    solution: 'PFL the playback, set the input gain to the healthy zone, then unmute and bring the channel and master faders up to unity.',
+    solution: 'PFL the playback, set the input gain healthy, unmute and bring the channel and master to unity, then set the PA speaker volume for a good room level.',
     defaultInspect: 'pa',
   },
   {
     id: 3,
-    title: 'Test the System',
-    // Step 2 of the real-show setup, building on Set the Input Level: the gain
-    // structure is already set (good input, channel + master faders at unity),
-    // so now test each output and set the room level. Send the reference to
-    // each output and confirm it works, then set the level of each. The PA gets
-    // a good-room-level corridor on BOTH sides (0.30-0.50 contribution ~= 84-90
-    // dB SPL, set with each speaker's own volume knob in active mode). The
-    // wedges just need to play (verifyEach latches each once it gets signal).
-    // The faders stay at unity, so the room is set with the speaker volumes.
-    // involves: [5] keeps playback live and mutes the mics.
+    title: 'Test the Wedges',
+    // The monitor wedges, on their own. The PA was already set in Set the Input
+    // Level, so we don't re-check it here. This introduces the wedges and which
+    // aux feeds which: AUX 1 -> Wedge 1, AUX 2 -> Wedge 2. The student sends the
+    // reference out each aux and brings up each wedge volume until it plays.
+    // verifyEach latches each wedge once it gets signal. The PA, gain and faders
+    // stay as set in Level 2. The wedge volumes the student sets here are kept
+    // for the rest of the build (Levels 4-7 start with them up).
     task: true,
     involves: [5],
     verifyEach: [
       { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 plays' },
       { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 plays' },
     ],
-    conditions: [
-      { source: 'playback', dest: 'pa_l', min: 0.30, max: 0.50 },
-      { source: 'playback', dest: 'pa_r', min: 0.30, max: 0.50 },
-    ],
-    symptom: 'The input is set and the faders are at unity. Now test the system: send the reference to each speaker, confirm it works, and set a good level in the room on both PA speakers. Check both wedges too.',
-    hint: 'The PA speakers and wedges each have their own volume. Bring up each PA speaker until the room sits at a good level on the loudness meter. Send the reference to the wedges with AUX 1 and AUX 2 and bring up each wedge volume so it plays. Leave the faders at unity.',
+    conditions: [],
+    symptom: 'The PA is set. Now bring up your monitor wedges. Send the reference out to each wedge and confirm it plays. AUX 1 feeds Wedge 1, AUX 2 feeds Wedge 2.',
+    hint: 'Turn up AUX 1 on the playback channel and bring up the Wedge 1 volume on stage until it plays. Do the same with AUX 2 for Wedge 2. Each wedge gets checked off once it is playing.',
     sabotage: (s) => {
-      // Gain structure already set: good input, channel + master at unity. The
-      // outputs are not set yet: PA speakers too quiet, wedges silent.
+      // Carried from Set the Input Level: good input, faders at unity, PA set.
+      // The wedges are not up yet: sends closed, wedge volumes down.
       s.channels[4].mute = false;
       s.channels[4].gain = 0.5;
       s.channels[4].fader = 0.75;
       s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
       s.master.fader = 0.75; s.master.mute = false;
-      s.outputs.pa_l.volume = 0.3; s.outputs.pa_r.volume = 0.3;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
       s.outputs.wedge.on = true; s.outputs.wedge.volume = 0; s.outputs.wedge.mute = false;
       s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0; s.outputs.wedge2.mute = false;
       return s;
     },
-    solution: 'Bring up each PA speaker for a good room level, and send the reference to both wedges on AUX 1 and AUX 2 with their volumes up.',
-    defaultInspect: 'pa',
+    solution: 'Open AUX 1 and AUX 2 on the playback and bring up each wedge volume on stage until both play.',
+    defaultInspect: 'wedge',
   },
   {
     id: 4,
@@ -204,101 +198,119 @@ window.LEVELS = [
     // condition can't pass without phantom, so the difference is the lesson.
     // deriveInvolves maps the conditions to channels 1 and 2; the rest mute.
     task: true,
+    requirePflEach: [1, 2],
     conditions: [
       { source: 'vocal',  dest: 'pa', min: 0.3 },
       { source: 'vocal2', dest: 'pa', min: 0.3 },
     ],
-    symptom: 'The system is up. Bring in your vocal mics: a dynamic on channel 1 and a condenser on channel 2. Set each mic\'s gain and bring it up. One of them needs power.',
-    hint: 'The dynamic mic on channel 1 needs no power: set its gain and bring the channel up. The condenser on channel 2 is dead until you turn on +48V phantom. Turn +48V on while the channel is muted, then set its gain and bring it up.',
+    symptom: 'The system is up. Bring in your vocal mics: a dynamic on channel 1 and a condenser on channel 2. PFL each one to check it in your headphones, set its gain, then bring it up. One of them needs power.',
+    hint: 'PFL each mic and set its gain in your headphones before you bring it up in the room. The dynamic on channel 1 needs no power. The condenser on channel 2 is dead until you turn on +48V phantom: turn it on while the channel is muted, then bring it up.',
     sabotage: (s) => {
-      // System set up (master at unity, PA at a good level). The two vocal
-      // channels start muted, faders down, gain pulled low. The condenser's
-      // phantom is off so the student has to know it needs +48V.
+      // System set up (master at unity, PA at a good level, wedges still up from
+      // Test the Wedges). The two vocal channels start muted, faders down, gain
+      // low. The condenser's phantom is off so the student has to know it needs
+      // +48V. PFL each channel to check it before bringing it up.
       s.channels[0].mute = true; s.channels[0].fader = 0; s.channels[0].gain = 0.2; s.channels[0].phantom = false;
       s.channels[1].mute = true; s.channels[1].fader = 0; s.channels[1].gain = 0.2; s.channels[1].phantom = false;
       s.master.fader = 0.75; s.master.mute = false;
       s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
       return s;
     },
-    solution: 'Set each mic\'s gain and bring it up. The condenser on channel 2 needs +48V phantom (turn it on while muted); the dynamic on channel 1 does not.',
+    solution: 'PFL each mic, set its gain, and bring it up. The condenser on channel 2 needs +48V phantom (turn it on while muted); the dynamic on channel 1 does not.',
     defaultInspect: 'pa',
   },
   {
     id: 5,
     title: 'DI Boxes',
     // The instrument inputs, and the active-vs-passive DI difference. Bass DI
-    // (ch3, guitar source) is PASSIVE: no power, just set it up. Keyboard DI
-    // (ch4, laptop source, diActive) is ACTIVE: it has electronics inside that
-    // need +48V phantom, same as a condenser, and is dead without it. Both
-    // start muted with low gain; the student sets each gain, turns +48V on for
-    // the active DI (while muted), and brings both up. The active DI's PA
-    // condition can't pass without phantom. The source cards label which is
-    // which (Passive DI / Active DI · +48V).
+    // (ch3, guitar source, diActive) is ACTIVE: electronics inside need +48V
+    // phantom, same as a condenser, dead without it. Keyboard DI (ch4, laptop)
+    // is PASSIVE: no power. Both start muted, low gain; the student PFLs each,
+    // sets the gain, turns +48V on for the active DI (while muted), brings both
+    // up. The active DI's PA condition can't pass without phantom. The mics
+    // from the previous level stay set the way they were but muted (audio off)
+    // so the build carries forward. Source cards label Active/Passive DI.
     task: true,
+    requirePflEach: [3, 4],
     conditions: [
       { source: 'guitar', dest: 'pa', min: 0.3 },
       { source: 'laptop', dest: 'pa', min: 0.3 },
     ],
-    symptom: 'Now the instruments. Set up both direct boxes: a passive DI on the bass (channel 3) and an active DI on the keyboard (channel 4). Set each gain and bring it up. One of them needs power.',
-    hint: 'The passive DI on the bass (channel 3) needs no power: set its gain and bring it up. The active DI on the keyboard (channel 4) has electronics that need +48V phantom, just like a condenser. Turn +48V on while the channel is muted, then bring it up.',
+    symptom: 'Now the instruments. Set up both direct boxes: an active DI on the bass (channel 3) and a passive DI on the keyboard (channel 4). PFL each, set its gain, then bring it up. One of them needs power.',
+    hint: 'PFL each DI and set its gain before you bring it up. The active DI on the bass (channel 3) has electronics that need +48V phantom, just like a condenser: turn it on while the channel is muted. The passive DI on the keyboard (channel 4) needs no power.',
     sabotage: (s) => {
-      // System set up. Both DI channels start muted, faders down, gain low. The
-      // active DI's phantom is off so the student has to power it.
+      // Mics from the last level kept as set, but muted so the audio stops.
+      s.channels[0].mute = true; s.channels[0].fader = 0.72; s.channels[0].gain = 0.5; s.channels[0].phantom = false;
+      s.channels[1].mute = true; s.channels[1].fader = 0.72; s.channels[1].gain = 0.5; s.channels[1].phantom = true;
+      // Both DI channels start muted, faders down, gain low. The active DI
+      // (bass, ch3) has phantom off so the student has to power it.
       s.channels[2].mute = true; s.channels[2].fader = 0; s.channels[2].gain = 0.2; s.channels[2].phantom = false;
       s.channels[3].mute = true; s.channels[3].fader = 0; s.channels[3].gain = 0.2; s.channels[3].phantom = false;
       s.master.fader = 0.75; s.master.mute = false;
       s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
       return s;
     },
-    solution: 'Set each DI\'s gain and bring it up. The active DI on channel 4 needs +48V phantom (turn it on while muted); the passive DI on channel 3 does not.',
+    solution: 'PFL each DI, set its gain, and bring it up. The active DI on the bass (channel 3) needs +48V phantom (turn it on while muted); the passive DI on the keyboard (channel 4) does not.',
     defaultInspect: 'pa',
   },
   {
     id: 6,
     title: 'Monitor Mix',
-    symptom: "The singer can't hear herself in her wedge. The PA sounds fine.",
-    hint: "Send the vocal to her wedge by turning up AUX 1 on the vocal channel. Don't forget the wedge's own volume knob on stage.",
+    // The wedge volume is already up (set back in Test the Wedges and kept).
+    // So this is purely about the aux send: the singer's vocal isn't going to
+    // her wedge yet. Open AUX 1 on the vocal to feed her monitor.
+    symptom: "The singer can't hear herself in her wedge. The PA sounds fine, and her wedge is on.",
+    hint: 'Her wedge volume is already up. Send her vocal to it by turning up AUX 1 on the vocal channel.',
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
       { source: 'vocal', dest: 'wedge', min: 0.35 },
     ],
     sabotage: (s) => {
-      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0; s.outputs.wedge.mute = false;
+      // System set up: vocal live in the PA, wedge up (kept from Test the
+      // Wedges). The vocal just isn't in the monitor yet (aux sends closed).
+      s.master.fader = 0.75; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
       s.channels.forEach(c => c.aux1 = 0);
       return s;
     },
-    solution: 'Turn up AUX 1 on the vocal channel and turn up the wedge volume on stage.',
+    solution: 'Turn up AUX 1 on the vocal channel to send her vocal to her wedge.',
     defaultInspect: 'wedge',
   },
   {
     id: 7,
     title: 'Feedback Awareness',
-    // Vocal channel is up, sending to AUX 1, wedge is cranked. Loop gain
-    // is past unity; the wedge is ringing the moment the level loads.
-    // Three valid fixes per the detectFeedback math:
-    //   - pull channel.aux1 down (most direct, takes the channel out of the
-    //     loop without changing what the audience hears)
-    //   - pull outputs.wedge.volume down (kills it but the singer loses the
-    //     wedge entirely)
-    //   - engage channel.hpf (knocks the low-frequency stage rumble out of
-    //     the loop; effective loop gain drops ~40% so the wedge sits under
-    //     the ring threshold)
-    // Win condition still requires vocal → wedge ≥ 0.3, so just yanking
-    // the wedge volume to zero won't solve. Has to be a real fix.
-    symptom: 'The system is feeding back. The mic is picking up its own sound from the wedge, and it keeps getting louder.',
-    hint: 'Three ways to stop it: turn down AUX 1 on the vocal channel, turn down the wedge volume, or turn on HPF to cut the low end out of the loop.',
+    // Does NOT start ringing. The singer has a little of herself in the wedge
+    // (aux 1 low) and asks for more. As the student turns AUX 1 up to give her
+    // more, the loop gain crosses the ring threshold and the wedge starts to
+    // feed back. To win, the student needs the vocal LOUD in the wedge
+    // (>= 0.6) AND no feedback, so pulling the send back down won't do it.
+    // For now HPF clears it (drops the low-end loop gain ~40% while the wedge
+    // level stays up). NEXT TURN: add an EQ on the aux outputs as the real,
+    // surgical fix; HPF is the stopgap so the level is solvable today.
+    symptom: 'The singer needs more of herself in her wedge. Turn her vocal up in the monitor. Watch out, monitors feed back when you push them too hard.',
+    hint: 'Turn up AUX 1 on the vocal to give her more in the wedge. If it starts to ring, turn on HPF on the vocal channel to pull the low end out of the loop so you can keep her level up.',
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
-      { source: 'vocal', dest: 'wedge', min: 0.3 },
+      { source: 'vocal', dest: 'wedge', min: 0.6 },
     ],
     sabotage: (s) => {
-      s.outputs.wedge.on = true; s.outputs.wedge.mute = false;
-      s.outputs.wedge.volume = 0.85;
-      s.channels[0].aux1 = 0.8;
+      // Vocal live in the PA, wedge up (kept). A little vocal in the wedge, not
+      // enough for the singer, and below the feedback threshold for now.
+      s.master.fader = 0.75; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
+      s.channels[0].aux1 = 0.2;
       s.channels[0].highpass = false;
       return s;
     },
-    solution: 'Turn down AUX 1 or the wedge volume, or turn on HPF on the vocal channel.',
+    solution: 'Turn up the vocal in her wedge, then turn on HPF on the vocal to stop the ring while keeping her level.',
     defaultInspect: 'wedge',
   },
 ];
