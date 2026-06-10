@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=2"></script>
+<script src="content.js?v=3"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -707,25 +707,24 @@ function wouldBlastOnAmpOn(s) {
   return true;
 }
 
-// Mixer turn-on safety check. The same loud-blast event as the amp version,
-// but from the other side of the order-of-operations error: amp is already
-// on, master is up, and the engineer powers the console on without dropping
-// the master first. The moment the desk starts passing signal, that signal
-// goes straight into the already-live amp. Same warning, same recovery.
-function wouldBlastOnMixerOn(s) {
-  if (!s || !s.master) return false;
-  // Amp not on (or rig is powered, not amp+passive)? No live output stage
-  // for the blast to hit. Safe.
+// Mixer turn-on safety check — the ELECTRICAL pop. This is a different failure
+// from the amp-on blast. Powering the console on while an amp it feeds (the
+// main power amp, or a powered wedge) is already live sends the desk's switch-
+// on transient straight into that live amp, and it pops the speakers. It
+// happens regardless of the master, muted or not, because it's a DC/switch
+// transient, not program level. The fix is the order: always power the console
+// on FIRST, before any amp, so there's nothing live to pop into.
+function wouldPopOnMixerOn(s) {
+  if (!s || !s.outputs) return false;
+  const o = s.outputs;
+  const c = s.cables || {};
   const topo = s.topology || {};
-  if (topo.paRig === 'amp+passive') {
-    if (!s.outputs.amp || !s.outputs.amp.on) return false;
-  }
-  // Master pulled or muted? Safe.
-  if (s.master.mute) return false;
-  if (s.master.fader <= 0.1) return false;
-  const anyHotChannel = s.channels && s.channels.some(c => !c.mute && c.fader > 0.05 && c.gain > 0.05);
-  if (!anyHotChannel) return false;
-  return true;
+  // Is a power amp / powered output stage the desk feeds already live?
+  const mainLive = topo.paRig === 'amp+passive'
+    ? !!(o.amp && o.amp.on && (c.out_pa_l || c.out_pa_r))
+    : !!((o.pa_l && o.pa_l.on && c.out_pa_l) || (o.pa_r && o.pa_r.on && c.out_pa_r));
+  const wedgeLive = !!((o.wedge && o.wedge.on && c.out_wedge) || (o.wedge2 && o.wedge2.on && c.out_wedge2));
+  return mainLive || wedgeLive;
 }
 
 window.SOURCES = SOURCES;
@@ -874,7 +873,7 @@ function detectGainStagingMistakes(state, audio, level) {
 
 window.wouldPopPhantom = wouldPopPhantom;
 window.wouldBlastOnAmpOn = wouldBlastOnAmpOn;
-window.wouldBlastOnMixerOn = wouldBlastOnMixerOn;
+window.wouldPopOnMixerOn = wouldPopOnMixerOn;
 
 // Feedback loop detector. Live-sound feedback is a closed loop: a mic picks up
 // a speaker it can hear, the desk sends that signal back out the speaker, the
@@ -1508,8 +1507,8 @@ function Console({ state, setState, audio, faultChannelIdx }) {
                   const wasOn = prev.mixer ? prev.mixer.on !== false : true;
                   const turningOn = !wasOn;
                   const next = { ...prev, mixer: { ...(prev.mixer || {}), on: !wasOn } };
-                  if (turningOn && window.wouldBlastOnMixerOn && window.wouldBlastOnMixerOn(prev)) {
-                    next.phantomPop = { at: Date.now(), cause: 'mixer_loud' };
+                  if (turningOn && window.wouldPopOnMixerOn && window.wouldPopOnMixerOn(prev)) {
+                    next.phantomPop = { at: Date.now(), cause: 'mixer_pop' };
                   }
                   return next;
                 });
@@ -4022,7 +4021,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
             const clipPillText = audienceLive ? '⚠ DISTORTING' : '⚠ PEAKING';
             const balancing = !!paBalanceIssue;
             const ringing = !!feedback;
-            const popPillText = phantomPop && (phantomPop.cause === 'amp_loud' || phantomPop.cause === 'mixer_loud') ? '⚠ BLASTED' : '⚠ POPPED';
+            const popPillText = phantomPop && phantomPop.cause === 'amp_loud' ? '⚠ BLASTED' : '⚠ POPPED';
             const pillText = phantomPop ? popPillText
                           : ringing ? '⚠ RINGING'
                           : clipping ? clipPillText
@@ -4054,11 +4053,11 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
                                abrupt full-level signal hits the speakers
                                as soon as they come alive. Not a DC pop,
                                but an audience-blasting / speaker-stress event.
-               'mixer_loud'  — console flipped on while the amp is already
-                               live and the master is up. The desk starts
-                               passing signal straight into the hot output
-                               stage. Same loud-blast event from the other
-                               side of the power-on order error.
+               'mixer_pop'   — console flipped on while an amp it feeds is
+                               already live. The switch-on transient goes
+                               straight into the live amp and pops the
+                               speakers. Electrical, not program level, so it
+                               happens even with the master muted.
                (default)     — +48V engaged with the channel live */
           (() => {
             const cause = phantomPop.cause;
@@ -4069,8 +4068,8 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
                     <>You plugged a cable into a <b style={{ color: 'var(--hot)' }}>live channel</b>. The contact transient blew through the PA. In a real venue that pop can damage tweeters and rattle the room.</>
                   ) : cause === 'amp_loud' ? (
                     <>You powered the <b style={{ color: 'var(--hot)' }}>amp on</b> with the master up. A full-level mix slammed into the PA the instant the speakers came alive. In a real venue, this would have been very abrupt and potentially could have damaged the system.</>
-                  ) : cause === 'mixer_loud' ? (
-                    <>You powered the <b style={{ color: 'var(--hot)' }}>console on</b> with the amp already live and the master up. The desk dumped a full-level mix straight into the amp the moment it started passing signal. In a real venue, this would have been very abrupt and potentially could have damaged the system.</>
+                  ) : cause === 'mixer_pop' ? (
+                    <>You powered the <b style={{ color: 'var(--hot)' }}>console on</b> while the amp was already live. The switch-on transient went straight into the amp and popped the speakers. This happens even with the master muted, because it's an electrical pop, not program level.</>
                   ) : (
                     <>You engaged <b style={{ color: 'var(--hot)' }}>+48V</b> with the channel live. In a real venue that DC pop can blow tweeters or damage ribbon mics.</>
                   )}
@@ -4080,8 +4079,8 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
                     <>Safe sequence: <b>mute the channel</b> (or pull its fader down) → plug the cable in → bring the channel back up.</>
                   ) : cause === 'amp_loud' ? (
                     <>Safe sequence: <b>pull the master down</b> → power the amp on → bring the master back up gently.</>
-                  ) : cause === 'mixer_loud' ? (
-                    <>Safe sequence: <b>console on first</b> → pull the master down → amp on → bring the master back up gently.</>
+                  ) : cause === 'mixer_pop' ? (
+                    <>Safe sequence: <b>console on first</b>, before any amp. Then master down, amp on, master back up.</>
                   ) : (
                     <>Safe sequence: <b>mute the channel</b> (or pull its fader down) → engage phantom → wait a beat → bring the channel back up.</>
                   )}

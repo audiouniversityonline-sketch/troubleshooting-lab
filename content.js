@@ -35,27 +35,30 @@ window.LEVELS = [
   {
     id: 1,
     title: 'Power-On Sequence',
-    // Cold rig. Mixer off, amp off, master at unity (the engineer left it
-    // up between shows). Two ways to mess this up:
-    //   - Mixer on first → master still up → amp on → BLAST
-    //   - Amp on first → mixer on → BLAST (signal hits the live amp the
-    //     moment the desk starts passing it)
-    // Either fails through the wouldBlast* gates and triggers the BLASTED
-    // event (cause: 'amp_loud'). Safe order: mixer on, master down,
-    // amp on, master back up. Consolidates the old "find the amp"
-    // Output Stage lesson because the student still has to discover the
-    // amp downstream of the master to power it on.
-    symptom: 'Cold rig. Console and amp both off, master left at unity. Bring it up without blasting the PA.',
-    hint: 'Power-on sequence: console first, master down, then the amp. Either piece flipped on with the master up sends a full-level mix straight to the speakers.',
+    // Cold rig: console, amp, and powered wedges all off, master at unity
+    // (the engineer left it up between shows). Two DISTINCT hazards:
+    //   - POP (electrical): power the console on while an amp it feeds is
+    //     already live and the switch-on transient pops the speakers. Happens
+    //     even with the master muted. Caught by wouldPopOnMixerOn ->
+    //     cause 'mixer_pop'. Fix is the order: console ON before any amp.
+    //   - BLAST (loud signal): power the amp on with the master up and a
+    //     full-level mix slams the room. Caught by wouldBlastOnAmpOn ->
+    //     cause 'amp_loud'. Fix is master DOWN before the amp.
+    // Safe order: console on, master down, amp on, master back up.
+    symptom: 'Cold rig. Console, amp, and wedges all off, master left at unity. Bring the system up the right way.',
+    hint: "Console on first. Powering the console into a live amp pops the speakers. Then pull the master down before the amp, so a hot mix doesn't slam the room. Order: console, master down, amp, master up.",
     conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
     topology: { paRig: 'amp+passive' },
     sabotage: (s) => {
+      // Cold rig: console off, amp off, powered wedges off. Master left at
+      // default unity (0.55) so the user must actively pull it before the amp.
       s.mixer = { on: false };
       s.outputs.amp.on = false;
-      // Master left at default unity (0.55) so the user actively pulls it.
+      s.outputs.wedge = { ...s.outputs.wedge, on: false };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false };
       return s;
     },
-    solution: 'Console on, master down, amp on, then master back up.',
+    solution: 'Console on first, then master down, amp on, master back up.',
     defaultInspect: 'pa',
   },
   {
