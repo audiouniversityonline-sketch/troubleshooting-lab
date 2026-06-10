@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=7"></script>
+<script src="content.js?v=8"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -3356,6 +3356,12 @@ function App() {
   // we record that the workflow was followed rather than just the end state.
   const pflCheckedRef = uR(false);
 
+  // Per-destination "checked" latch for verifyEach levels (Test the System).
+  // Once playback reaches a speaker, that speaker stays checked for the rest
+  // of the attempt, so the student verifies them one at a time. Reset on
+  // level change. Keyed by dest (pa_l, pa_r, wedge, wedge2).
+  const verifiedRef = uR({});
+
   // Per-source amplitude envelope state. Updated every animation frame so
   // meters bounce and audio breathes like a real signal. The ref is read by
   // computeAudio; the tick state forces a re-render so visible meters track
@@ -3420,7 +3426,21 @@ function App() {
       !!(state.outputs.wedge && state.outputs.wedge.on) &&
       !!(state.outputs.wedge2 && state.outputs.wedge2.on)
     );
-    const won = flowOk && pflClear && pflChecked && clean && balanced && noFeedback && poweredUp;
+    // Verify-each lesson (Test the System): latch each speaker the moment
+    // playback reaches it, then require every speaker to have been checked.
+    // Latching here (not just in render) keeps the win in sync on the same
+    // state change that completes the last check, so there's no one-frame lag.
+    let verifiedOk = true;
+    if (level.verifyEach && level.verifyEach.length) {
+      const va = window.computeAudio(state);
+      for (const v of level.verifyEach) {
+        const cont = va.contributions[v.source];
+        const lvl = cont ? (v.dest === 'pa' ? Math.max(cont.pa_l, cont.pa_r) : (cont[v.dest] || 0)) : 0;
+        if (lvl >= (v.min != null ? v.min : 0.25)) verifiedRef.current[v.dest] = true;
+        if (!verifiedRef.current[v.dest]) verifiedOk = false;
+      }
+    }
+    const won = flowOk && pflClear && pflChecked && clean && balanced && noFeedback && poweredUp && verifiedOk;
     if (won && !blocked) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
@@ -3741,6 +3761,8 @@ function App() {
     // Reset the procedural PFL tracker so each level scores its own
     // workflow rather than counting an earlier solo as a check.
     pflCheckedRef.current = false;
+    // Reset the per-speaker verify latches so each attempt starts unchecked.
+    verifiedRef.current = {};
   };
 
   // Track when the engineer engages PFL on any channel during the level.
@@ -3786,6 +3808,20 @@ function App() {
 
   if (isMobile) return <MobileNotice/>;
 
+  // Verify-each checklist status for the brief. A speaker shows checked if it
+  // was already latched (verifiedRef) OR is playing right now, so the display
+  // never lags the latch. The win effect owns the persistent latch.
+  let verifyStatus = null;
+  if (level.verifyEach && level.verifyEach.length) {
+    verifyStatus = {};
+    for (const v of level.verifyEach) {
+      const cont = audio.contributions[v.source];
+      const lvl = cont ? (v.dest === 'pa' ? Math.max(cont.pa_l, cont.pa_r) : (cont[v.dest] || 0)) : 0;
+      const liveNow = lvl >= (v.min != null ? v.min : 0.25);
+      verifyStatus[v.dest] = !!verifiedRef.current[v.dest] || liveNow;
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'radial-gradient(ellipse at 30% 0%, #1a1a1f 0%, #0e0e10 50%, #08080a 100%)', position: 'relative' }}>
       <TopBar
@@ -3813,6 +3849,7 @@ function App() {
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={level.conditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
+                        verifyStatus={verifyStatus}
                         powerStatus={{
                           console: state.mixer ? state.mixer.on !== false : true,
                           amp: !!(state.outputs.amp && state.outputs.amp.on),
@@ -4009,7 +4046,7 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus }) {
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus }) {
   // Compute per-condition pass / level, and whether all conditions pass.
   const condStates = (conditions || []).map(c => {
     const cont = audio.contributions[c.source];
@@ -4044,6 +4081,11 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
     extras.push({ label: 'Console powered on', pass: !!powerStatus.console, color: 'var(--cool)' });
     extras.push({ label: 'Power amp on', pass: !!powerStatus.amp, color: 'var(--cool)' });
     extras.push({ label: 'Wedges on', pass: !!powerStatus.wedges, color: 'var(--cool)' });
+  }
+  if (level.verifyEach && verifyStatus) {
+    for (const v of level.verifyEach) {
+      extras.push({ label: v.label || (v.dest + ' plays'), pass: !!verifyStatus[v.dest], color: 'var(--cool)' });
+    }
   }
   const allFlowPass = condStates.length === 0 || condStates.every(s => s.pass);
   const allExtrasPass = extras.every(e => e.pass);

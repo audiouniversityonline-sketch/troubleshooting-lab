@@ -32,6 +32,11 @@
 //                console, power amp, and both wedges are all on (in an order
 //                that didn't pop). Use with conditions: [] for a pure
 //                power-on lesson that doesn't need signal flow.
+//   - verifyEach : [{source, dest, min, label}] — verify outputs one at a
+//                time. Each destination LATCHES checked the moment its source
+//                reaches it (>= min) and stays checked, so the win does NOT
+//                need them all live at once. Win when every entry is checked.
+//                Use with conditions: [] and an explicit involves.
 //   - conditions, sabotage, defaultInspect, topology, involves: engine fields
 //
 // Prose rule (Kyle, 2026-06-10): write simple and clear, not "in character."
@@ -96,20 +101,26 @@ window.LEVELS = [
     id: 2,
     title: 'Test the System',
     // The 5/6 playback channel (FOH line input, channel 5) carries music for
-    // testing. Verify every destination gets signal: both PA sides via the
-    // fader, both wedges via AUX 1/AUX 2 plus the wedge volume knobs on
-    // stage (wedge volume defaults to 0). The min+max corridor on the PA
-    // conditions is the room-level beat: loud enough to verify, not blasting.
-    // normalizeChannels mutes channels 1-4 since only playback is involved.
+    // testing. You check a rig one output at a time, not all at once: send
+    // playback to a speaker, confirm it works, move to the next. So this uses
+    // verifyEach — each destination LATCHES "checked" the moment playback
+    // reaches it (>= min) and stays checked for the rest of the attempt. Win
+    // when all four are checked, no matter the order or whether they ever
+    // play together. PA sides come up together on the fader; the wedges are
+    // independent on AUX 1 / AUX 2 (pre-fader) plus their stage volume knobs.
+    // involves: [5] keeps the playback channel live and mutes 1-4 (there are
+    // no conditions to derive that from).
     task: true,
-    symptom: 'The system is powered on. Send playback music to every speaker to confirm each one is working: both sides of the PA and both wedges. Keep the room at a comfortable level.',
-    hint: 'Unmute the 5/6 playback channel and bring its fader up to send music to the PA. Turn up AUX 1 and AUX 2 to send it to the wedges. The wedge volume knobs are on the stage. Watch the loudness meter at the bottom while you set the level.',
-    conditions: [
-      { source: 'playback', dest: 'pa_l',   min: 0.25, max: 0.6 },
-      { source: 'playback', dest: 'pa_r',   min: 0.25, max: 0.6 },
-      { source: 'playback', dest: 'wedge',  min: 0.25 },
-      { source: 'playback', dest: 'wedge2', min: 0.25 },
+    involves: [5],
+    verifyEach: [
+      { source: 'playback', dest: 'pa_l',   min: 0.25, label: 'PA · L plays' },
+      { source: 'playback', dest: 'pa_r',   min: 0.25, label: 'PA · R plays' },
+      { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 plays' },
+      { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 plays' },
     ],
+    conditions: [],
+    symptom: 'The system is powered on. Send music from the playback channel to each speaker, one at a time, to confirm every one is working: both sides of the PA and both wedges.',
+    hint: 'Unmute the 5/6 playback channel. Bring its fader up to check the PA, then turn up AUX 1 for Wedge 1 and AUX 2 for Wedge 2 (their volume knobs are on the stage). Each speaker gets checked off once it plays. You do not have to play them all at the same time.',
     sabotage: (s) => {
       // Playback channel silent: muted, fader down, sends closed. Wedge
       // volumes are 0 by default, so the stage walk is part of the lesson.
@@ -119,7 +130,7 @@ window.LEVELS = [
       s.channels[4].aux2 = 0;
       return s;
     },
-    solution: 'Unmute 5/6 and bring its fader up, turn up AUX 1 and AUX 2, then turn up both wedge volumes on stage.',
+    solution: 'Send playback to each speaker in turn: the PA on the fader, then each wedge on its AUX send and stage volume.',
     defaultInspect: 'pa',
   },
   {
