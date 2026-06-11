@@ -174,6 +174,10 @@ const DESTINATIONS = {
 // frequency. Bands 0-1 are "low" (an HPF can help there); 2-4 are mid/high
 // (only the EQ rings those out). EQ_CUT_DB = the cut at a band's full setting.
 const EQ_BANDS = ['250', '500', '1k', '2k', '4k'];
+// Center frequency of each band, in Hz. The audible feedback ring is played at
+// the center frequency of whichever band is glowing, so what you hear and what
+// you see (and cut) are always the same note. Index-aligned with EQ_BANDS.
+const EQ_BAND_HZ = [250, 500, 1000, 2000, 4000];
 const EQ_CUT_DB = 12;
 // Linear relief multiplier from a band's cut fraction (0 flat .. 1 full cut).
 function eqBandRelief(cutFrac) {
@@ -3522,6 +3526,9 @@ function App() {
   // during render, and the audio chain creation needs the chain ref.
   const feedbackChainRef = uR(null);
   const feedbackRiskRef = uR(0);
+  // Which EQ band (index into EQ_BAND_HZ) is currently ringing, so the audio
+  // loop can tune the ring tone to that band's center frequency. null = no ring.
+  const feedbackBandRef = uR(null);
 
   const audio = uM(() => window.computeAudio(state, envelopeRef.current), [state, envTick]);
 
@@ -3541,6 +3548,9 @@ function App() {
   // Push the risk amount into a ref so the audio animation loop can read
   // it without taking a dependency on state. 0 when no loop is hot.
   feedbackRiskRef.current = feedback ? feedback.riskAmount : 0;
+  // Tone frequency tracks the glowing band. Hold the last band when the loop
+  // clears so the ring decays at the same pitch instead of jumping.
+  if (feedback && feedback.ringBand != null) feedbackBandRef.current = feedback.ringBand;
   // Auto-open the Monitor EQ panel the moment a wedge starts ringing, so the
   // engineer is taken right to the ring-out (the band is glowing). Only on the
   // no-feedback -> feedback transition, so closing it by hand mid-ring sticks.
@@ -3670,6 +3680,18 @@ function App() {
       if (fbChain && fbChain.gain) {
         const risk = feedbackRiskRef.current;
         const target = risk > 0.55 ? Math.min(0.35, (risk - 0.55) * 1.3) : 0;
+        // Tune the ring to the center frequency of the glowing band, so the
+        // pitch you hear matches the band you cut. Glide (setTargetAtTime) to
+        // avoid a click if the ringing wedge — and therefore the band — changes.
+        const band = feedbackBandRef.current;
+        const ctxNow = ctxRef.current;
+        if (band != null && fbChain.osc && ctxNow) {
+          const hz = EQ_BAND_HZ[band];
+          if (hz) {
+            fbChain.osc.frequency.setTargetAtTime(hz, ctxNow.currentTime, 0.02);
+            if (fbChain.osc2) fbChain.osc2.frequency.setTargetAtTime(hz * 2.41, ctxNow.currentTime, 0.02);
+          }
+        }
         const cur = fbChain.gain.gain.value;
         // First-order smoother — about 120 ms to track. Long enough to
         // feel like a ring building, short enough to clear when the
@@ -3795,21 +3817,25 @@ function App() {
       chordOscs.forEach(co => co.start());
       chainsRef.current[k] = { gainL, gainR, filter, drive, shaper, makeup, envelope, o1, o2, lfo, chordOscs };
     }
-    // Feedback ringing tone. High-Q resonance around 3.5 kHz — the band
-    // most live mics ring in when a loop builds. Sine + a faint second
-    // partial keeps it musical instead of harsh. Gain starts at zero;
-    // the animation loop ramps it up when detectFeedback fires.
+    // Feedback ringing tone. The primary oscillator sits exactly on the
+    // center frequency of whichever EQ band is glowing — the animation loop
+    // retunes it from feedbackBandRef — so the ring you hear is the same note
+    // you cut. The second oscillator is a faint inharmonic partial (×2.41, an
+    // off-grid ratio that never lands on another band) to keep it sounding
+    // like a real ring instead of a lab test tone. Gain starts at zero; the
+    // animation loop ramps it up when detectFeedback fires.
     {
       const fbGain = ctx.createGain();
       fbGain.gain.value = 0;
       fbGain.connect(stereoMerger, 0, 0);
       fbGain.connect(stereoMerger, 0, 1);
+      const startHz = 2000; // wedge 1's default ring band (2 kHz)
       const fbOsc = ctx.createOscillator();
-      fbOsc.type = 'sine'; fbOsc.frequency.value = 3500;
+      fbOsc.type = 'sine'; fbOsc.frequency.value = startHz;
       const fbOsc2 = ctx.createOscillator();
-      fbOsc2.type = 'sine'; fbOsc2.frequency.value = 5240;
+      fbOsc2.type = 'sine'; fbOsc2.frequency.value = startHz * 2.41;
       const fbMix = ctx.createGain(); fbMix.gain.value = 0.6;
-      const fbMix2 = ctx.createGain(); fbMix2.gain.value = 0.25;
+      const fbMix2 = ctx.createGain(); fbMix2.gain.value = 0.18;
       fbOsc.connect(fbMix); fbMix.connect(fbGain);
       fbOsc2.connect(fbMix2); fbMix2.connect(fbGain);
       fbOsc.start(); fbOsc2.start();
