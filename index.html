@@ -956,11 +956,20 @@ window.wouldPopOnMixerOn = wouldPopOnMixerOn;
 // drop a ringing wedge back under threshold. Engine field name is `highpass`.
 //
 // Returns null when safe, or { channelIdx, riskAmount } when a loop is hot.
+// Hysteresis memory for detectFeedback. A loop that has started ringing
+// keeps ringing until the loop gain drops clearly below the onset point —
+// physically true (the ring sustains itself) and it stops the warning from
+// strobing when the level wobbles right at the threshold (program envelope
+// swings push the loop above and below it many times a second at onset).
+// Module-level is safe here: every caller in a frame passes the same state,
+// so the flag settles to the same answer for all of them.
+let _ringActive = false;
 function detectFeedback(s, audio) {
   if (!s || !s.channels || !audio || !audio.contributions) return null;
   const WEDGE_COUPLING = 1.0;   // wedge points at the mic
   const MAINS_COUPLING = 0.22;  // mains face away — only ring when cranked hard
-  const RING_THRESHOLD = 0.55;
+  // Enter at 0.55; once ringing, only release below 0.45.
+  const RING_THRESHOLD = _ringActive ? 0.45 : 0.55;
   const o = s.outputs || {};
   // Loop gain through one wedge for a mic, after that wedge's EQ cut at its
   // ring band and (for a low ring band only) an HPF on the channel. The EQ is
@@ -991,9 +1000,11 @@ function detectFeedback(s, audio) {
     if (risk > RING_THRESHOLD) {
       // Which wedge is ringing, so the UI can highlight its ring band.
       const ringWedge = w1 >= w2 && w1 >= mainsLoop ? 'wedge' : (w2 >= mainsLoop ? 'wedge2' : null);
+      _ringActive = true;
       return { channelIdx: i, riskAmount: risk, ringWedge, ringBand: ringWedge ? (o[ringWedge].ringBand) : null };
     }
   }
+  _ringActive = false;
   return null;
 }
 window.detectFeedback = detectFeedback;
@@ -2415,8 +2426,11 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // volume change. paInsp/wedgeInsp map the output to its listening dest.
   const setOutInspect = (key, patch, dest) => setState(prev => ({ ...prev, outputs: { ...prev.outputs, [key]: { ...prev.outputs[key], ...patch } }, inspect: dest }));
   // Which wedge is ringing right now, so it gets a red glow on stage (the
-  // graphic EQ itself lives in the Monitor EQ panel).
-  const fb = window.detectFeedback ? window.detectFeedback(state, audio) : null;
+  // graphic EQ itself lives in the Monitor EQ panel). Baseline audio (no
+  // envelope), matching the App's detection — keeps the glow steady instead
+  // of strobing with the program level, and keeps the shared hysteresis
+  // flag in detectFeedback consistent across both call sites.
+  const fb = window.detectFeedback ? window.detectFeedback(state, window.computeAudio(state)) : null;
   const ringingWedge = fb ? fb.ringWedge : null;
 
   // Single stage area — no more flank columns. Performers sit upstage
@@ -3490,6 +3504,30 @@ function MobileNotice() {
   );
 }
 
+// Locks the brief/solved sidebar slot to its measured height at level load.
+// Without this, warning text swapping in and out (feedback, clipping, pop
+// messages) changes the BriefCard's height, which changes the canvas height,
+// which changes the scale-to-fit factor — and every control on the board
+// shifts while the student is mid-gesture. With the lock, the slot is a
+// fixed box for the whole level: content swaps inside it, and content
+// taller than the lock paints downward into the empty space below the slot
+// (overflow visible) instead of re-flowing the board. Re-measures only when
+// the level changes. Window resizes are safe to ignore: the canvas lays out
+// at a fixed design width, so text wraps identically at every window size.
+function StableSlot({ levelKey, children }) {
+  const ref = uR(null);
+  const [lockH, setLockH] = uS(null);
+  uE(() => { setLockH(null); }, [levelKey]);
+  uE(() => {
+    if (lockH == null && ref.current) setLockH(ref.current.offsetHeight);
+  }, [lockH]);
+  return (
+    <div ref={ref} style={{ height: lockH != null ? lockH : 'auto', overflow: 'visible', position: 'relative' }}>
+      {children}
+    </div>
+  );
+}
+
 function App() {
   const [levelIdx, setLevelIdx] = uS(0);
   const [state, setState] = uS(() => {
@@ -3567,7 +3605,13 @@ function App() {
   // Feedback loop. Same recoverable-warning treatment as clipping/balance:
   // blocks the win, clears the moment the engineer pulls aux send / wedge
   // volume / engages HPF and brings the loop gain back below threshold.
-  const feedback = (window.detectFeedback ? window.detectFeedback(state, audio) : null);
+  // Detected on the BASELINE audio (no envelope) — same reasoning as the
+  // preamp clip block: feedback margin is a property of the loop GAIN (the
+  // knob settings), not of where the program material happens to be this
+  // frame. Envelope-driven detection made the warning strobe at onset as
+  // peaks crossed the threshold and troughs fell back under it.
+  const audioBaseline = uM(() => window.computeAudio(state), [state]);
+  const feedback = (window.detectFeedback ? window.detectFeedback(state, audioBaseline) : null);
   // Push the risk amount into a ref so the audio animation loop can read
   // it without taking a dependency on state. 0 when no loop is hot.
   feedbackRiskRef.current = feedback ? feedback.riskAmount : 0;
@@ -4171,7 +4215,8 @@ function App() {
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={fitScale}
                 sidebarContent={
-                  solved
+                  <StableSlot levelKey={levelIdx}>
+                  {solved
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < window.LEVELS.length}
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={level.conditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
@@ -4192,7 +4237,8 @@ function App() {
                             paOff: passive ? !(o.amp && o.amp.on) : (!(o.pa_l && o.pa_l.on) && !(o.pa_r && o.pa_r.on)),
                             paOffLabel: passive ? 'Power amp off' : 'PA speakers off',
                           };
-                        })()}/>
+                        })()}/>}
+                  </StableSlot>
                 }
               />
             </div>
