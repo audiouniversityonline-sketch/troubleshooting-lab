@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=21"></script>
+<script src="content.js?v=22"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -986,9 +986,30 @@ function detectGainStagingMistakes(state, audio, level) {
   return mistakes;
 }
 
+// Speaker-side patch pop. Plugging a line into a powered speaker — or
+// pulling one out — makes a contact transient that the speaker's own
+// amplifier plays at full level. It doesn't matter what's on the bus; what
+// matters is whether the box is live. Safe procedure: speaker off (or its
+// volume down) before its line moves. The channel-side twin of this rule is
+// wouldPopPhantom: connecting/disconnecting anything that lands on a console
+// channel (source cable, fan-out tail) pops when that CHANNEL's path to a
+// live speaker is open.
+function speakerLiveForPatch(s, spk) {
+  const o = s.outputs || {};
+  const box = o[spk];
+  if (!box) return false;
+  if (spk === 'pa_l' || spk === 'pa_r') {
+    const topo = s.topology || {};
+    const powered = topo.paRig === 'amp+passive' ? !!(o.amp && o.amp.on) : !!box.on;
+    return powered && !box.mute && box.volume > 0.05;
+  }
+  return !!(box.on && !box.mute && box.volume > 0.05);
+}
+
 window.wouldPopPhantom = wouldPopPhantom;
 window.wouldBlastOnAmpOn = wouldBlastOnAmpOn;
 window.wouldPopOnMixerOn = wouldPopOnMixerOn;
+window.speakerLiveForPatch = speakerLiveForPatch;
 
 // Feedback loop detector. Live-sound feedback is a closed loop: a mic picks up
 // a speaker it can hear, the desk sends that signal back out the speaker, the
@@ -2266,9 +2287,12 @@ function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, mainBusActive, 
   // Main R, out 3 = Aux 1 (wedge 1's mix), out 4 = Aux 2. Which SPEAKER hears
   // which signal is decided by the patch (state.outPatch) — these are jacks,
   // not destinations.
+  // MAIN L is white and MAIN R is red — the standard left/right color
+  // convention (same as home-stereo plugs), so the two main lines never
+  // read as near-identical golds while a student patches outputs.
   const outs = [
-    { key: 'mainL', label: 'L',  color: '#ffc93a', active: mainBusActive },
-    { key: 'mainR', label: 'R',  color: '#ffb547', active: mainBusActive },
+    { key: 'mainL', label: 'L',  color: '#e8e4d8', active: mainBusActive },
+    { key: 'mainR', label: 'R',  color: '#ff5a4a', active: mainBusActive },
     { key: 'aux1',  label: 'W1', color: '#b88dff', active: wedgeActive   },
     { key: 'aux2',  label: 'W2', color: '#6aa9ff', active: wedge2Active  },
   ];
@@ -2622,15 +2646,23 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onPatch={() => {
                 // Cycle this source through 0 (unplugged) → 1 → 2 → 3 → 4 → 0.
                 // Functional setState so a rapid double-click sees the latest
-                // state, and the plug-pop check uses the same `prev` we mutate.
+                // state, and the pop checks use the same `prev` we mutate.
                 setState(prev => {
                   const cur = prev.cables[k];
                   const next = (cur + 1) % 5;
                   const result = { ...prev, cables: { ...prev.cables, [k]: next } };
-                  // Plug-pop: if we just plugged into a port (next > 0) and
-                  // the receiving channel is live, transient blows the rig.
+                  const fanOut = prev.fanOut || [1, 2, 3, 4];
+                  // DISCONNECT side: pulling the cable out of its current
+                  // port is a contact transient too. Pops if the channel it
+                  // was feeding has an open path to a live speaker.
+                  if (cur > 0) {
+                    const oldCh = fanOut[cur - 1];
+                    if (oldCh >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(prev, oldCh - 1)) {
+                      result.phantomPop = { channel: oldCh - 1, at: Date.now(), cause: 'patch_live' };
+                    }
+                  }
+                  // CONNECT side: plugging into a port whose channel is live.
                   if (next > 0 && window.wouldPopOnPlug && window.wouldPopOnPlug(prev, k, next)) {
-                    const fanOut = prev.fanOut || [1, 2, 3, 4];
                     result.phantomPop = { channel: (fanOut[next - 1] || 1) - 1, at: Date.now(), cause: 'plug' };
                   }
                   return result;
@@ -2760,8 +2792,8 @@ function ChannelAnchors({ state, channelRefs, masterLRef, masterRRef, aux1Ref, a
   // OUTPUTS — four chips above the master section. Spacing has to leave room
   // for the chip widths so they don't overlap.
   const outputs = [
-    { ref: masterLRef, x: masterLeft - 54, label: 'MAIN L', dest: 'PA · L',  color: '#ffc93a' },
-    { ref: masterRRef, x: masterLeft - 18, label: 'MAIN R', dest: 'PA · R',  color: '#ffb547' },
+    { ref: masterLRef, x: masterLeft - 54, label: 'MAIN L', dest: 'PA · L',  color: '#e8e4d8' },
+    { ref: masterRRef, x: masterLeft - 18, label: 'MAIN R', dest: 'PA · R',  color: '#ff5a4a' },
     { ref: aux1Ref,    x: masterLeft + 18, label: 'AUX 1',  dest: 'WEDGE 1', color: '#b88dff' },
     { ref: aux2Ref,    x: masterLeft + 54, label: 'AUX 2',  dest: 'WEDGE 2', color: '#6aa9ff' },
   ];
@@ -2864,7 +2896,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
         targets.push({ key: `port-${port}`, x, y, payload: port });
       }
     } else if (drag.type === 'fanout') {
-      for (let ch = 1; ch <= state.channels.length; ch++) {
+      // Snake tails land on the four mic/line channels, not the 5/6 line-in
+      // strip (that one is hardwired to the FOH playback, no snake port).
+      for (let ch = 1; ch <= Math.min(4, state.channels.length); ch++) {
         const el = channelRefs.current[ch];
         if (!el) continue;
         const { x, y } = local(el);
@@ -2914,8 +2948,17 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
       setState(s => {
         const next = { ...s, cables: { ...s.cables, [srcKey]: target } };
         if (bumped) next.cables[bumped] = oldPort;
+        const fanOut = s.fanOut || [1, 2, 3, 4];
+        // DISCONNECT side: the channel this cable (and a bumped swap
+        // partner) just left. Same contact-transient rule as plugging in.
+        if (oldPort > 0) {
+          const oldCh = fanOut[oldPort - 1];
+          if (oldCh >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, oldCh - 1)) {
+            next.phantomPop = { channel: oldCh - 1, at: Date.now(), cause: 'patch_live' };
+          }
+        }
+        // CONNECT side: plugging into a live channel.
         if (target > 0 && window.wouldPopOnPlug && window.wouldPopOnPlug(s, srcKey, target)) {
-          const fanOut = s.fanOut || [1, 2, 3, 4];
           next.phantomPop = { channel: (fanOut[target - 1] || 1) - 1, at: Date.now(), cause: 'plug' };
         }
         return next;
@@ -2929,6 +2972,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
         const next = { ...s, fanOut: [...s.fanOut] };
         next.fanOut[port - 1] = target;
         if (bumpedPort > 0) next.fanOut[bumpedPort - 1] = oldCh;
+        // Contact transients land on every channel whose input just changed:
+        // the one the tail left (oldCh, 0 = was unplugged) and the one it
+        // landed on. Pop if either channel's path to a live speaker is open.
+        const hot = [oldCh, target].find(ch => ch >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, ch - 1));
+        if (hot) next.phantomPop = { channel: hot - 1, at: Date.now(), cause: 'patch_live' };
         return next;
       });
     } else if (drag.type === 'outpatch') {
@@ -2944,7 +2992,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
         const bumped = Object.keys(op).find(k => k !== spk && op[k] === target);
         op[spk] = target;
         if (bumped) op[bumped] = oldPort;
-        return { ...s, outPatch: op };
+        const next = { ...s, outPatch: op };
+        // Moving a line on a LIVE powered speaker pops through that speaker
+        // (its own amp plays the contact transient). Both the dragged
+        // speaker and a bumped swap partner count.
+        const hotSpk = [spk, bumped].filter(Boolean).find(k2 => window.speakerLiveForPatch && window.speakerLiveForPatch(s, k2));
+        if (hotSpk) next.phantomPop = { at: Date.now(), cause: 'speaker_patch' };
+        return next;
       });
     }
   };
@@ -3032,12 +3086,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
       // drop into the stage box's top face.
       //
       // If a source isn't patched (port = 0), the cable still gets RUN out
-      // toward the stage box and ends dangling near the panel — just like
-      // a real cable that someone laid out but didn't plug in. The dangling
-      // connector is a draggable handle; the student grabs it and drops it
-      // into the right port. We stagger each unplugged cable's dangle Y by
-      // a few pixels so multiple loose cables don't perfectly stack on top
-      // of each other.
+      // toward the stage box and ends dangling — like a real cable laid out
+      // but not plugged in. The dangling connector is a draggable handle.
+      // Loose input cables SPREAD OUT in the open space ABOVE the stage box,
+      // two staggered rows across its width, so each one is easy to pick out
+      // and grab (they used to stack in one vertical line).
       const stageCables = sourceKeys.map(k => {
         const src = sourceRefs.current[k];
         if (!src) return null;
@@ -3050,8 +3103,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
           unplugged = true;
           const idx = sourceKeys.indexOf(k);
           to = {
-            x: (sbRect.left - cb.left) / S - 16,
-            y: (sbRect.top  - cb.top) / S + 8 + idx * 6,
+            x: (sbRect.left - cb.left) / S + 14 + idx * 44,
+            y: (sbRect.top  - cb.top) / S - 24 - (idx % 2) * 18,
           };
         }
         return { src: k, from, to, port, unplugged };
@@ -3070,17 +3123,28 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
       if (fanOutOrigin) {
         for (let port = 1; port <= 4; port++) {
           const ch = state.fanOut ? state.fanOut[port - 1] : port;
-          const chEl = channelRefs.current[ch];
-          if (!chEl) continue;
-          const to = anchorPos(chEl, 'top');
+          const chEl = ch >= 1 ? channelRefs.current[ch] : null;
+          let to = chEl ? anchorPos(chEl, 'top') : null;
+          // Unplugged tail (fanOut entry 0): it hangs loose below the snake
+          // fan-out, staggered so each color is easy to pick out. The handle
+          // is draggable straight onto a channel chip. This is how the
+          // patching lesson starts: four coiled tails, none connected.
+          let unplugged = false;
+          if (!to) {
+            unplugged = true;
+            to = {
+              x: fanOutOrigin.x - 70 + (port - 1) * 38,
+              y: fanOutOrigin.y + 34 + ((port - 1) % 2) * 16,
+            };
+          }
           const srcKey = sourceKeys.find(k => state.cables[k] === port);
           // Tail color = the SNAKE CHANNEL's color (resistor code), not the
           // plugged source's. On a real multicore, the tail's color tells
           // you the channel number — that's the standard the patch lesson
           // teaches (1 brown, 2 red, 3 orange, 4 yellow).
           const color = (window.SNAKE_COLORS || [])[port - 1] || '#4a4a52';
-          const flowing = srcKey && audio.chanIn[ch - 1] > 0.05 && audio.chanInSource[ch - 1] === srcKey;
-          fanOutCables.push({ port, ch, from: fanOutOrigin, to, color, flowing, srcKey });
+          const flowing = !unplugged && srcKey && audio.chanIn[ch - 1] > 0.05 && audio.chanInSource[ch - 1] === srcKey;
+          fanOutCables.push({ port, ch, from: fanOutOrigin, to, color, flowing, srcKey, unplugged });
         }
       }
 
@@ -3099,8 +3163,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
       // dangle loose near the box's lower corner with a draggable end —
       // same treatment as unplugged source cables.
       const OUT_SPEAKERS = [
-        { spk: 'pa_l',   sref: paLRef,           color: '#ffc93a', rail: 24 },
-        { spk: 'pa_r',   sref: paRRef,           color: '#ffb547', rail: 16 },
+        { spk: 'pa_l',   sref: paLRef,           color: '#e8e4d8', rail: 24 },
+        { spk: 'pa_r',   sref: paRRef,           color: '#ff5a4a', rail: 16 },
         { spk: 'wedge',  sref: wedgeOnStageRef,  color: '#b88dff', rail: 0  },
         { spk: 'wedge2', sref: wedge2OnStageRef, color: '#6aa9ff', rail: 8  },
       ];
@@ -3113,9 +3177,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
         let unplugged = false;
         if (!from && sbRect) {
           unplugged = true;
+          // Loose speaker lines spread out BELOW the stage box, two
+          // staggered rows, each one easy to pick out and grab.
           from = {
-            x: (sbRect.right - cb.left) / S + 10,
-            y: (sbRect.bottom - cb.top) / S + 10 + idx * 7,
+            x: (sbRect.left - cb.left) / S + 14 + idx * 44,
+            y: (sbRect.bottom - cb.top) / S + 22 + (idx % 2) * 16,
           };
         }
         return (from && to) ? { spk, from, to, color, rail, unplugged, portId } : null;
@@ -3330,10 +3396,10 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
                 {showUnpluggedTag && (
                   <g pointerEvents="none">
                     <rect
-                      x={c.to.x - 56} y={c.to.y - 18}
+                      x={c.to.x - 26} y={c.to.y - 22}
                       width={52} height={12} rx={2}
                       fill="rgba(255,70,48,0.15)" stroke="var(--hot)" strokeWidth={0.8}/>
-                    <text x={c.to.x - 30} y={c.to.y - 9}
+                    <text x={c.to.x} y={c.to.y - 13}
                       textAnchor="middle" fill="var(--hot)"
                       fontFamily="Geist Mono" fontSize="7.5" fontWeight="700"
                       letterSpacing="0.6">UNPLUGGED</text>
@@ -3398,7 +3464,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
           const chanEnd = isDragged ? dragState.cursor : c.to;
           const midY = (c.from.y + chanEnd.y) / 2 - 6;
           const d = `M ${c.from.x} ${c.from.y} C ${c.from.x} ${midY}, ${chanEnd.x} ${midY}, ${chanEnd.x} ${chanEnd.y}`;
-          const opacity = someOtherDragged ? 0.18 : (c.srcKey ? 0.95 : 0.35);
+          const opacity = someOtherDragged ? 0.18 : (c.unplugged ? 0.6 : (c.srcKey ? 0.95 : 0.35));
           return (
             <g key={i} style={{ pointerEvents: 'none' }}>
               <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round"/>
@@ -3406,6 +3472,12 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
               <circle cx={c.from.x} cy={c.from.y} r="2" fill={c.color} stroke="#0a0a0c" strokeWidth="0.5" opacity={someOtherDragged ? 0.3 : 1}/>
               {!isDragged && (
                 <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={c.color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
+              )}
+              {/* Loose tail wears its channel number so "brown is 1" reads
+                  at a glance while the student patches the snake. */}
+              {c.unplugged && !isDragged && !someOtherDragged && (
+                <text x={chanEnd.x} y={chanEnd.y + 17} textAnchor="middle" fill={c.color}
+                  fontFamily="Geist Mono" fontSize="8.5" fontWeight="700">{c.port}</text>
               )}
               {c.flowing && !isDragged && (
                 <path d={d} stroke="#fff" strokeWidth="1.2" fill="none" opacity="0.7" strokeDasharray="3 6" strokeLinecap="round">
@@ -3445,8 +3517,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
             Each is a short hop from the chip above the master section down to
             the snake entry point. Four cables: Main L, Main R, Aux 1, Aux 2. */}
         {[
-          { p: paths.masterLToSnake, color: '#ffc93a', live: mainBusActive  },
-          { p: paths.masterRToSnake, color: '#ffb547', live: mainBusActive  },
+          { p: paths.masterLToSnake, color: '#e8e4d8', live: mainBusActive  },
+          { p: paths.masterRToSnake, color: '#ff5a4a', live: mainBusActive  },
           { p: paths.aux1ToSnake,    color: '#b88dff', live: wedgeActive    },
           { p: paths.aux2ToSnake,    color: '#6aa9ff', live: wedge2Active   },
         ].map(({ p, color, live }, i) => {
@@ -3491,9 +3563,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
               <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={c.color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
               {c.unplugged && !isDragged && !someOtherDragged && (
                 <g pointerEvents="none">
-                  <rect x={portEnd.x + 8} y={portEnd.y - 6} width={52} height={12} rx={2}
+                  <rect x={portEnd.x - 26} y={portEnd.y + 8} width={52} height={12} rx={2}
                     fill="rgba(255,70,48,0.15)" stroke="var(--hot)" strokeWidth={0.8}/>
-                  <text x={portEnd.x + 34} y={portEnd.y + 3} textAnchor="middle" fill="var(--hot)"
+                  <text x={portEnd.x} y={portEnd.y + 17} textAnchor="middle" fill="var(--hot)"
                     fontFamily="Geist Mono" fontSize="7.5" fontWeight="700" letterSpacing="0.6">UNPLUGGED</text>
                 </g>
               )}
@@ -5003,9 +5075,17 @@ function App() {
           }}>
             <div className="display" style={{ fontSize: 18, fontWeight: 800, letterSpacing: 0.5 }}>POP!</div>
             <div className="mono" style={{ fontSize: 10, letterSpacing: 1.2, opacity: 0.92, textTransform: 'uppercase' }}>
-              {state.phantomPop && state.phantomPop.cause === 'plug'
-                ? 'cable plugged into a live channel'
-                : '+48V engaged with the channel live'}
+              {(() => {
+                const cause = state.phantomPop && state.phantomPop.cause;
+                return cause === 'plug' ? 'cable plugged into a live channel'
+                  : cause === 'patch_live' ? 'patch changed on a live channel'
+                  : cause === 'speaker_patch' ? 'speaker line moved while live'
+                  : cause === 'amp_loud' ? 'amp switched on with the master up'
+                  : cause === 'mixer_pop' ? 'console switched on into live speakers'
+                  : cause === 'mixer_off_pop' ? 'console switched off into live speakers'
+                  : cause === 'phantom_cans' ? '+48V popped your headphones in PFL'
+                  : '+48V engaged with the channel live';
+              })()}
             </div>
           </div>
         </div>
@@ -5305,6 +5385,10 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
                 <div style={{ color: 'var(--ink)' }}>
                   {cause === 'plug' ? (
                     <>You plugged a cable into a <b style={{ color: 'var(--hot)' }}>live channel</b>. Plugging in makes a loud pop, and the channel was on, so the pop went through the PA. In a real venue that can damage speakers.</>
+                  ) : cause === 'patch_live' ? (
+                    <>You changed a patch on a <b style={{ color: 'var(--hot)' }}>live channel</b>. Connecting or disconnecting any cable makes a pop, and that channel's path to the speakers was open, so the pop played through the system. This applies to every patch point: the stage box, the snake, and the fan-out.</>
+                  ) : cause === 'speaker_patch' ? (
+                    <>You moved a speaker's line while the <b style={{ color: 'var(--hot)' }}>speaker was live</b>. Plugging or unplugging a powered speaker makes a pop, and the speaker's own amplifier plays it at full level.</>
                   ) : cause === 'amp_loud' ? (
                     <>You turned the <b style={{ color: 'var(--hot)' }}>amp on</b> with the master up. Sound hit the speakers at full level the moment they came on. In a real venue that's painfully loud and can damage the system.</>
                   ) : cause === 'mixer_pop' ? (
@@ -5320,6 +5404,10 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
                 <div style={{ color: 'var(--ink-2)' }}>
                   {cause === 'plug' ? (
                     <>The correct order: <b>mute the channel</b> (or pull its fader down) → plug the cable in → bring the channel back up.</>
+                  ) : cause === 'patch_live' ? (
+                    <>The correct order: <b>close the path first</b>. Mute the channel, or pull the master down when the change touches more than one channel → make the patch change → bring it back up.</>
+                  ) : cause === 'speaker_patch' ? (
+                    <>The correct order: <b>turn the speaker off</b> (or its volume all the way down) → move the line → bring the speaker back.</>
                   ) : cause === 'amp_loud' ? (
                     <>The correct order: <b>pull the master down</b> → turn the amp on → bring the master back up slowly.</>
                   ) : cause === 'mixer_pop' ? (

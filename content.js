@@ -115,7 +115,9 @@ window.LEVELS = [
     //      (PA L -> MAIN L, PA R -> MAIN R, wedges -> their W outs).
     //   3. SNAKE - the fan-out tails at FOH onto their numbered channels by
     //      the US color standard (resistor code: 1 brown, 2 red, 3 orange,
-    //      4 yellow). The tails start landed on the wrong channels.
+    //      4 yellow). The tails start COILED AND DISCONNECTED (fanOut 0s) —
+    //      this simulates a brand-new system setup, so nothing starts
+    //      crosspatched in the very first lesson.
     // Win = requirePatch (all three identity checks); no signal conditions.
     // The rig stays off the whole time. The next lesson begins "everything
     // is connected" — this is where that becomes true.
@@ -124,14 +126,15 @@ window.LEVELS = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'First job of the day: connect the system, with everything still powered off. Patch the inputs from the input list: Vocal Mic 1 to Input 1, Vocal Mic 2 to Input 2, Bass DI to Input 3, Keyboard DI to Input 4. Patch the outputs per the plan: PA L to MAIN L, PA R to MAIN R, and each wedge to its W output. Then fix the snake at the console: the tails follow the standard color code, 1 brown, 2 red, 3 orange, 4 yellow.',
-    hint: 'Drag a cable end and drop it on a port. Dropping on a taken port swaps the two cables. For the snake, match each tail color to its channel number: brown is 1, red is 2, orange is 3, yellow is 4. Patching with the power off is the professional habit: nothing can pop while the system is dead.',
+    symptom: 'First job of the day: connect the system, with everything still powered off. Patch the inputs from the input list: Vocal Mic 1 to Input 1, Vocal Mic 2 to Input 2, Bass DI to Input 3, Keyboard DI to Input 4. Patch the outputs per the plan: PA L to MAIN L, PA R to MAIN R, and each wedge to its W output. Then connect the snake at the console: each tail goes to its numbered channel, and the colors follow the standard code, 1 brown, 2 red, 3 orange, 4 yellow.',
+    hint: 'Drag a cable end and drop it on a port. The main output lines follow the usual left/right colors: MAIN L is the white line, MAIN R is the red one. For the snake, match each tail color to its channel number: brown is 1, red is 2, orange is 3, yellow is 4. Patching with the power off is the professional habit: nothing can pop while the system is dead.',
     sabotage: (s) => {
-      // Load-in state: no input or output cables connected, snake tails
-      // landed on the wrong channels, rig fully off, console zeroed
-      // (normalizeChannels covers the channels via involves []).
+      // Load-in state: nothing connected anywhere. Input cables loose above
+      // the stage box, speaker lines loose below it, snake tails coiled
+      // below the fan-out (fanOut 0 = unplugged). Rig fully off, console
+      // zeroed (normalizeChannels covers the channels via involves []).
       s.cables = { vocal: 0, vocal2: 0, guitar: 0, laptop: 0 };
-      s.fanOut = [2, 4, 1, 3];
+      s.fanOut = [0, 0, 0, 0];
       s.outPatch = { pa_l: null, pa_r: null, wedge: null, wedge2: null };
       s.master = { ...s.master, mute: true, fader: 0 };
       s.mixer = { on: false };
@@ -592,14 +595,16 @@ window.PRACTICE_FAULTS = [
   // Stage-box version trades two sources' input ports; snake version trades
   // two fan-out tails at FOH. Practice always requires the patch to match
   // the input list (PRACTICE.requirePatch), so these can't hide even when
-  // both swapped channels happen to stay audible.
-  { key: 'crosspatch-stage', par: 1, apply: (s, rng) => {
+  // both swapped channels happen to stay audible. Par 3 because changing a
+  // patch on a live channel POPS: the safe fix is master down (one move,
+  // covers both channels) -> swap -> master back up.
+  { key: 'crosspatch-stage', par: 3, apply: (s, rng) => {
     const i = Math.floor(rng() * 4);
     let j = Math.floor(rng() * 3); if (j >= i) j += 1;
     const a = BAND_SOURCES[i], b = BAND_SOURCES[j];
     const t = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = t;
   } },
-  { key: 'crosspatch-snake', par: 1, apply: (s, rng) => {
+  { key: 'crosspatch-snake', par: 3, apply: (s, rng) => {
     const i = Math.floor(rng() * 4);
     let j = Math.floor(rng() * 3); if (j >= i) j += 1;
     const t = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = t;
@@ -617,7 +622,7 @@ window.PRACTICE = {
   id: 'practice',
   title: 'Practice Mode',
   symptom: 'The band is mid-show and something is wrong with the sound. Find what is broken and fix it, without popping anything. The FAULTS selector in the top bar sets how many things are broken at once.',
-  hint: 'Walk the signal path one stage at a time: source, cable, gain, mute, fader, master, speaker. The meters tell you where the signal stops. Check the cheap things first (a mute button before a cable run), and mute the channel before you plug a cable in or switch +48V. If the patch row is unchecked, compare the console against the input list: Vocal 1 belongs on channel 1, Vocal 2 on 2, Bass on 3, Keys on 4. If a wedge is ringing, pull the glowing band down on its monitor EQ; the singer still needs her level.',
+  hint: 'Walk the signal path one stage at a time: source, cable, gain, mute, fader, master, speaker. The meters tell you where the signal stops. Check the cheap things first (a mute button before a cable run), and close the path before you change any cable or switch +48V: mute the channel, or pull the master down when the change touches two channels at once. If the patch row is unchecked, compare the console against the input list: Vocal 1 belongs on channel 1, Vocal 2 on 2, Bass on 3, Keys on 4. If a wedge is ringing, pull the glowing band down on its monitor EQ; the singer still needs her level.',
   conditions: PRACTICE_CONDITIONS,
   involves: [1, 2, 3, 4],
   // Every practice rep also requires the patch to match the input list —
