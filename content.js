@@ -75,29 +75,77 @@
 //
 // REFOCUSED 2026-06-10 PM (Kyle): the free Essentials are now setting up a
 // system and learning the standard input types, as a continuous on-site build.
-// The 9 lessons, in order:
-//   1 Power-On Sequence   - bring the rig up in the right order (active speakers)
-//   2 Set the Input Level - PFL the playback, set gain, faders to unity
-//   3 Test the System     - send to each output, set the room level
-//   4 Mic Inputs          - dynamic (no power) + condenser (+48V)
-//   5 DI Boxes            - passive (no power) + active (+48V)
-//   6 Monitor Mix         - send a wedge mix
-//   7 Feedback Awareness  - keep the monitor loop under control
-//   8 The Gig             - final exam: full line check from a cold start
+// The 10 lessons, in order:
+//   1 Patch the System    - connect everything per the input list (added
+//                           2026-06-11: inputs, outputs, snake by color code)
+//   2 Power-On Sequence   - bring the rig up in the right order (active speakers)
+//   3 Set the Input Level - PFL the playback, set gain, faders to unity
+//   4 Test the Wedges     - send to each wedge, verify one at a time
+//   5 Mic Inputs          - dynamic (no power) + condenser (+48V)
+//   6 DI Boxes            - passive (no power) + active (+48V)
+//   7 Monitor Mix         - send a wedge mix
+//   8 Feedback Awareness  - keep the monitor loop under control
+//   9 The Gig             - final exam: full line check from a cold start
 //                           (speakers verified with playback, then the band)
-//   9 Power-Down          - zero the console, then shut down in the right order
+//  10 Power-Down          - zero the console, then shut down in the right order
 // The early levels build on each other (each starts where the last ended).
 // Troubleshooting faults (cable, gain, fader, mute, pan, phantom, master,
-// speaker) live in the paid PRACTICE_FAULTS pool, where "something's broken,
-// fix it" is the point.
+// speaker, feedback, crosspatch) live in the paid PRACTICE_FAULTS pool, where
+// "something's broken, fix it" is the point.
 // Source types: Vocal Mic 1 = dynamic, Vocal Mic 2 = condenser (+48V); Bass DI
 // = passive, Keyboard DI = active (diActive, needs +48V like a condenser). The
 // 5/6 playback is a FOH line input on channel 5 (no snake port).
-// Ids renumbered for this arc on 2026-06-10, pre-launch. After launch the
-// append-only rule is absolute.
+// Extra contract field (2026-06-11):
+//   - requirePatch : win requires the physical patch to match the paperwork —
+//                sources on their listed stage-box ports, snake fan-out tails
+//                on their numbered channels, speaker cables on their planned
+//                out ports. Used by Patch the System and every practice rep.
+// Ids renumbered 2026-06-10 and again 2026-06-11 (Patch the System became
+// lesson 1), both pre-launch. After launch the append-only rule is absolute.
 window.LEVELS = [
   {
     id: 1,
+    title: 'Patch the System',
+    // THE FIRST LESSON (Kyle, 2026-06-11): before anything gets powered on,
+    // the system gets CONNECTED, per paperwork, the way a pro does it. Three
+    // drag-and-drop jobs, all with the power off (the safe time to patch):
+    //   1. INPUTS - each source's cable into its stage-box port per the
+    //      input list (Vocal 1 -> 1, Vocal 2 -> 2, Bass DI -> 3, Keys DI -> 4).
+    //   2. OUTPUTS - each speaker's cable into its out port per the plan
+    //      (PA L -> MAIN L, PA R -> MAIN R, wedges -> their W outs).
+    //   3. SNAKE - the fan-out tails at FOH onto their numbered channels by
+    //      the US color standard (resistor code: 1 brown, 2 red, 3 orange,
+    //      4 yellow). The tails start landed on the wrong channels.
+    // Win = requirePatch (all three identity checks); no signal conditions.
+    // The rig stays off the whole time. The next lesson begins "everything
+    // is connected" — this is where that becomes true.
+    task: true,
+    requirePatch: true,
+    involves: [],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    symptom: 'First job of the day: connect the system, with everything still powered off. Patch the inputs from the input list: Vocal Mic 1 to Input 1, Vocal Mic 2 to Input 2, Bass DI to Input 3, Keyboard DI to Input 4. Patch the outputs per the plan: PA L to MAIN L, PA R to MAIN R, and each wedge to its W output. Then fix the snake at the console: the tails follow the standard color code, 1 brown, 2 red, 3 orange, 4 yellow.',
+    hint: 'Drag a cable end and drop it on a port. Dropping on a taken port swaps the two cables. For the snake, match each tail color to its channel number: brown is 1, red is 2, orange is 3, yellow is 4. Patching with the power off is the professional habit: nothing can pop while the system is dead.',
+    sabotage: (s) => {
+      // Load-in state: no input or output cables connected, snake tails
+      // landed on the wrong channels, rig fully off, console zeroed
+      // (normalizeChannels covers the channels via involves []).
+      s.cables = { vocal: 0, vocal2: 0, guitar: 0, laptop: 0 };
+      s.fanOut = [2, 4, 1, 3];
+      s.outPatch = { pa_l: null, pa_r: null, wedge: null, wedge2: null };
+      s.master = { ...s.master, mute: true, fader: 0 };
+      s.mixer = { on: false };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: false, volume: 0 };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: false, volume: 0 };
+      s.outputs.wedge = { ...s.outputs.wedge, on: false, volume: 0 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
+      return s;
+    },
+    solution: 'Inputs per the list, outputs per the plan, and the snake tails matched to their colors. The system is connected and still safely off. Time to power on.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 2,
     title: 'Power-On Sequence',
     // Pure power-on lesson on an ACTIVE-speaker rig (powered PA speakers, no
     // separate power amp). The console starts zeroed and safe: faders down,
@@ -141,7 +189,7 @@ window.LEVELS = [
     defaultInspect: 'pa',
   },
   {
-    id: 2,
+    id: 3,
     title: 'Set the Input Level',
     // Step 1 of the real-show setup, picking up exactly where Power-On left
     // off: the rig is on but the console is fully zeroed (every channel muted,
@@ -178,7 +226,7 @@ window.LEVELS = [
     defaultInspect: 'pa',
   },
   {
-    id: 3,
+    id: 4,
     title: 'Test the Wedges',
     // The monitor wedges, on their own. The PA was already set in Set the Input
     // Level, so we don't re-check it here. This introduces the wedges and which
@@ -213,7 +261,7 @@ window.LEVELS = [
     defaultInspect: 'wedge',
   },
   {
-    id: 4,
+    id: 5,
     title: 'Mic Inputs',
     // First real inputs after the system is up: the two vocal mics. Teaches the
     // dynamic-vs-condenser difference. Vocal Mic 1 (ch1) is a DYNAMIC: no power
@@ -248,7 +296,7 @@ window.LEVELS = [
     defaultInspect: 'pa',
   },
   {
-    id: 5,
+    id: 6,
     title: 'DI Boxes',
     // The instrument inputs, and the active-vs-passive DI difference. Bass DI
     // (ch3, guitar source, diActive) is ACTIVE: electronics inside need +48V
@@ -284,7 +332,7 @@ window.LEVELS = [
     defaultInspect: 'pa',
   },
   {
-    id: 6,
+    id: 7,
     title: 'Monitor Mix',
     // A positive setup task, not a problem: build the singer her monitor mix.
     // The wedge volume is already up (set in Test the Wedges and kept), so this
@@ -309,7 +357,7 @@ window.LEVELS = [
     defaultInspect: 'wedge',
   },
   {
-    id: 7,
+    id: 8,
     title: 'Feedback Awareness',
     // Does NOT start ringing. The singer has a little of herself in the wedge
     // (aux 1 low) and asks for more. As the student turns AUX 1 up to give her
@@ -344,7 +392,7 @@ window.LEVELS = [
     defaultInspect: 'wedge',
   },
   {
-    id: 8,
+    id: 9,
     title: 'The Gig',
     // FINAL EXAM. Everything from Levels 1-7 performed start to finish from a
     // cold venue, with no new skills. This is a LINE CHECK, the objective
@@ -402,7 +450,7 @@ window.LEVELS = [
     defaultInspect: 'pa',
   },
   {
-    id: 9,
+    id: 10,
     title: 'Power-Down',
     // The bookend, in two beats. Beat 1: ZERO THE CONSOLE (requireZeroed) —
     // every strip back to default: gain, aux sends and fader down, muted, pan
@@ -503,6 +551,15 @@ const POWERED_IDX = [1, 2];
 // are free, so a one-knob fix is par 1; a safe replug or a safe +48V fix is
 // mute -> fix -> unmute, par 3 (plugging into a live channel, or switching
 // +48V on one, pops the system).
+//
+// `weight` (default 1) makes a fault appear more often. Feedback carries
+// weight 2 per Kyle (2026-06-11): mic feedback is the live-sound problem,
+// so it shows up in a bigger share of reps.
+//
+// `apply` may RETURN { conditions: [...] } to attach extra win conditions to
+// the rep — the feedback fault uses this to require the singer's monitor to
+// STAY UP, so pulling the send to zero isn't a fix; ringing the wedge out on
+// its EQ band is.
 window.PRACTICE_FAULTS = [
   { key: 'cable',        par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
   { key: 'gain',         par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].gain = 0; } },
@@ -514,6 +571,39 @@ window.PRACTICE_FAULTS = [
   { key: 'master-fader', par: 1, apply: (s)      => { s.master.fader = 0; } },
   { key: 'pa-volume',    par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].volume = 0; } },
   { key: 'pa-mute',      par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].mute = true; } },
+  // FEEDBACK — a singer's wedge pushed into ringing (hot send + hot wedge).
+  // The extra condition keeps her monitor level REQUIRED, so the fix is the
+  // Feedback Awareness skill: pull the glowing band down on that wedge's EQ.
+  // Numbers: chanIn 0.79 x send 1.0 x aux master 0.75 x vol 0.8 x 1.6 =
+  // 0.758 at the wedge -> rings (threshold 0.55). A full -12 dB band cut
+  // drops the loop to ~0.19 (clear) while the monitor level stays 0.758.
+  { key: 'feedback', par: 2, weight: 2, apply: (s, rng) => {
+    if (rng() < 0.5) {
+      s.channels[0].aux1 = 1.0;
+      s.outputs.wedge.volume = 0.8;
+      return { conditions: [{ source: 'vocal', dest: 'wedge', min: 0.5 }] };
+    }
+    s.channels[1].aux2 = 1.0;
+    s.outputs.wedge2.volume = 0.8;
+    return { conditions: [{ source: 'vocal2', dest: 'wedge2', min: 0.5 }] };
+  } },
+  // CROSSPATCH — two cables traded places. The console's channel labels and
+  // the patch row in the brief are the evidence; one drag (swap) fixes it.
+  // Stage-box version trades two sources' input ports; snake version trades
+  // two fan-out tails at FOH. Practice always requires the patch to match
+  // the input list (PRACTICE.requirePatch), so these can't hide even when
+  // both swapped channels happen to stay audible.
+  { key: 'crosspatch-stage', par: 1, apply: (s, rng) => {
+    const i = Math.floor(rng() * 4);
+    let j = Math.floor(rng() * 3); if (j >= i) j += 1;
+    const a = BAND_SOURCES[i], b = BAND_SOURCES[j];
+    const t = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = t;
+  } },
+  { key: 'crosspatch-snake', par: 1, apply: (s, rng) => {
+    const i = Math.floor(rng() * 4);
+    let j = Math.floor(rng() * 3); if (j >= i) j += 1;
+    const t = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = t;
+  } },
 ];
 
 // Win conditions: every band source audible on BOTH sides of the PA.
@@ -527,25 +617,37 @@ window.PRACTICE = {
   id: 'practice',
   title: 'Practice Mode',
   symptom: 'The band is mid-show and something is wrong with the sound. Find what is broken and fix it, without popping anything. The FAULTS selector in the top bar sets how many things are broken at once.',
-  hint: 'Walk the signal path one stage at a time: source, cable, gain, mute, fader, master, speaker. The meters tell you where the signal stops. Check the cheap things first (a mute button before a cable run), and mute the channel before you plug a cable in or switch +48V.',
+  hint: 'Walk the signal path one stage at a time: source, cable, gain, mute, fader, master, speaker. The meters tell you where the signal stops. Check the cheap things first (a mute button before a cable run), and mute the channel before you plug a cable in or switch +48V. If the patch row is unchecked, compare the console against the input list: Vocal 1 belongs on channel 1, Vocal 2 on 2, Bass on 3, Keys on 4. If a wedge is ringing, pull the glowing band down on its monitor EQ; the singer still needs her level.',
   conditions: PRACTICE_CONDITIONS,
   involves: [1, 2, 3, 4],
+  // Every practice rep also requires the patch to match the input list —
+  // that's how the crosspatch faults get caught even when the swapped
+  // channels happen to stay audible.
+  requirePatch: true,
   sabotage: (s, rng) => {
     bandUp(s);
     const r = rng || (() => 0);
     const n = Math.max(1, Math.min(3, window.PRACTICE_FAULT_COUNT || 1));
-    // Distinct fault TYPES per rep. Two faults can still land on the same
-    // channel — that just makes the diagnosis honest work.
-    const pool = window.PRACTICE_FAULTS.slice();
+    // Distinct fault TYPES per rep (weighted entries appear more often, but
+    // never twice). Two faults can still land on the same channel — that
+    // just makes the diagnosis honest work.
+    let pool = [];
+    for (const f of window.PRACTICE_FAULTS) {
+      const w = f.weight || 1;
+      for (let i = 0; i < w; i++) pool.push(f);
+    }
     let par = 0;
     const faults = [];
+    const extraConditions = [];
     for (let i = 0; i < n && pool.length > 0; i++) {
-      const f = pool.splice(Math.floor(r() * pool.length), 1)[0];
-      f.apply(s, r);
+      const f = pool[Math.floor(r() * pool.length)];
+      pool = pool.filter(x => x.key !== f.key);
+      const res = f.apply(s, r);
+      if (res && res.conditions) extraConditions.push(...res.conditions);
       par += f.par;
       faults.push(f.key);
     }
-    window.PRACTICE_LAST = { par, faults };
+    window.PRACTICE_LAST = { par, faults, extraConditions };
     return s;
   },
   // Never shown (the debrief replaces the answer key); kept for the contract.

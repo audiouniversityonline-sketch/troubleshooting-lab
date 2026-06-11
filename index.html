@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=20"></script>
+<script src="content.js?v=21"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -175,6 +175,23 @@ const DESTINATIONS = {
   wedge2: { label: 'Wedge 2',         short: 'WEDGE 2', stereo: false, description: 'Floor wedge for Vocal Mic 2.' },
 };
 
+// Snake channel colors — the US color-coding standard for multichannel
+// snakes follows the resistor color code: channel 1 brown, 2 red, 3 orange,
+// 4 yellow (then 5 green, 6 blue, 7 violet, 8 gray). The stage box input
+// ports and the fan-out tails at FOH carry these colors, because on a real
+// multicore the tail's color tells you the CHANNEL NUMBER, not what's
+// plugged in upstream. Verified against ProSoundWeb / industry practice.
+const SNAKE_COLORS = ['#a8703a', '#ff4630', '#ff8e2a', '#ffd23a'];
+
+// Output patch — which stage-box OUT port each speaker's cable is plugged
+// into. Ports are hardwired to their desk signal (mainL/mainR = the main
+// mix, aux1/aux2 = the monitor sends); the PATCH decides which physical
+// speaker hears which signal. null = that speaker's cable is unplugged.
+// Mis-patching is real and audible: a wedge plugged into MAIN L plays the
+// house mix, a PA box plugged into AUX 1 plays the monitor send.
+const DEFAULT_OUT_PATCH = { pa_l: 'mainL', pa_r: 'mainR', wedge: 'aux1', wedge2: 'aux2' };
+const OUT_PORT_LABELS = { mainL: 'MAIN L', mainR: 'MAIN R', aux1: 'OUT W1', aux2: 'OUT W2' };
+
 // Graphic EQ on the monitor sends — ISO mid-octave centre frequencies. A cut on
 // the band a wedge rings at (its ringBand) drops the feedback loop at that
 // frequency. Bands 0-1 are "low" (an HPF can help there); 2-4 are mid/high
@@ -243,8 +260,9 @@ function defaultState() {
     },
     cables: {
       vocal: 1, vocal2: 2, guitar: 3, laptop: 4,
-      out_pa_l: true, out_pa_r: true, out_wedge: true, out_wedge2: true,
     },
+    // Speaker cable → stage-box OUT port. See DEFAULT_OUT_PATCH above.
+    outPatch: { ...DEFAULT_OUT_PATCH },
     fanOut: [1, 2, 3, 4],
     sourceMute: { vocal: false, guitar: false, laptop: false, vocal2: false, playback: false },
     testing: 'vocal',
@@ -395,16 +413,6 @@ function computeAudio(s, envelope) {
   // amp gate decide. In powered (active) mode each speaker is its own power.
   const paLOn = passivePA ? true : o.pa_l.on;
   const paROn = passivePA ? true : o.pa_r.on;
-  // PA SPEAKER OUTPUT — main bus × speaker on/mute/volume × amp gate. This is
-  // what each speaker is actually producing; the on-speaker LED meter reads
-  // from this. Turning the PA down should NOT silence the master meter on
-  // the desk, only this value.
-  // The 1.3 multiplier sits below the previous 1.7 so a typical
-  // multi-channel mix at default settings doesn't park the speaker LED in
-  // the red — there's visible headroom before red, and cranking really hot
-  // (user pushes channel gain or speaker volume up) still drives clipping.
-  const paL = paLOn && !o.pa_l.mute && s.cables.out_pa_l ? mainBusL * o.pa_l.volume * 1.3 * paGate : 0;
-  const paR = paROn && !o.pa_r.mute && s.cables.out_pa_r ? mainBusR * o.pa_r.volume * 1.3 * paGate : 0;
 
   // Aux master gains — each aux send bus has a master level knob on the console
   // before it leaves the desk (in addition to per-channel aux send + destination volume).
@@ -425,7 +433,6 @@ function computeAudio(s, envelope) {
   // Aux send buses also stop leaving the desk when the mixer is off.
   // Aux buses power-sum too (same uncorrelated-sources math as the main mix).
   const wedgeMix = Math.sqrt(aux1.reduce((a, b) => a + b * b, 0)) * aux1MasterGain * (mixerOn ? 1 : 0);
-  const wedge = o.wedge.on && !o.wedge.mute && s.cables.out_wedge ? wedgeMix * o.wedge.volume * 1.6 : 0;
 
   const aux2 = s.channels.map((ch, i) => {
     if (ch.mute) return 0;
@@ -434,25 +441,60 @@ function computeAudio(s, envelope) {
   });
   const wedge2Mix = Math.sqrt(aux2.reduce((a, b) => a + b * b, 0)) * aux2MasterGain * (mixerOn ? 1 : 0);
   const w2 = o.wedge2 || { on: true, mute: false, volume: 0 };
-  const wedge2 = w2.on && !w2.mute && s.cables.out_wedge2 ? wedge2Mix * w2.volume * 1.6 : 0;
+
+  // OUTPUT PATCH. The stage box's four OUT ports are hardwired to their desk
+  // signals; each speaker hears whatever bus its cable is patched to. A
+  // wedge patched into MAIN L plays the house mix — mis-patching is real
+  // and audible, which is the point of the patching lessons.
+  const outPatch = s.outPatch || DEFAULT_OUT_PATCH;
+  const busSignal = { mainL: mainBusL, mainR: mainBusR, aux1: wedgeMix, aux2: wedge2Mix };
+  const sigAt = (spk) => outPatch[spk] ? (busSignal[outPatch[spk]] || 0) : 0;
+  // Per-speaker gain chains (on/mute/volume + amp gate for the PA boxes).
+  // The 1.3 PA multiplier sits below the previous 1.7 so a typical
+  // multi-channel mix at default settings doesn't park the speaker LED in
+  // the red; wedges run their own 1.6 amp gain.
+  const spkChain = {
+    pa_l: paLOn && !o.pa_l.mute ? o.pa_l.volume * 1.3 * paGate : 0,
+    pa_r: paROn && !o.pa_r.mute ? o.pa_r.volume * 1.3 * paGate : 0,
+    wedge: o.wedge.on && !o.wedge.mute ? o.wedge.volume * 1.6 : 0,
+    wedge2: w2.on && !w2.mute ? w2.volume * 1.6 : 0,
+  };
+  // SPEAKER OUTPUTS — patched bus × the speaker's own chain. This is what
+  // each box is actually producing; the on-speaker LED meter reads from
+  // this. Turning a speaker down does NOT silence the desk-side meters.
+  const paL = sigAt('pa_l') * spkChain.pa_l;
+  const paR = sigAt('pa_r') * spkChain.pa_r;
+  const wedge = sigAt('wedge') * spkChain.wedge;
+  const wedge2 = sigAt('wedge2') * spkChain.wedge2;
 
   const contributions = {};
+  const mixerGateNum = mixerOn ? 1 : 0;
   for (const srcKey of Object.keys(SOURCES)) {
-    let cL = 0, cR = 0, cW1 = 0, cW2 = 0;
+    let cL = 0, cR = 0, cA1 = 0, cA2 = 0;
     for (let i = 0; i < s.channels.length; i++) {
       if (chanIn[i].srcKey !== srcKey) continue;
       const ch = s.channels[i];
       const g = panGains(ch.pan);
       cL += post[i] * g.L;
       cR += post[i] * g.R;
-      cW1 += aux1[i];
-      cW2 += aux2[i];
+      cA1 += aux1[i];
+      cA2 += aux2[i];
     }
-    cL *= masterGate * paGate * (paLOn && !o.pa_l.mute && s.cables.out_pa_l ? o.pa_l.volume * 1.3 : 0);
-    cR *= masterGate * paGate * (paROn && !o.pa_r.mute && s.cables.out_pa_r ? o.pa_r.volume * 1.3 : 0);
-    cW1 *= aux1MasterGain * (o.wedge.on && !o.wedge.mute && s.cables.out_wedge ? o.wedge.volume * 1.6 : 0);
-    cW2 *= aux2MasterGain * (w2.on && !w2.mute && s.cables.out_wedge2 ? w2.volume * 1.6 : 0);
-    contributions[srcKey] = { pa_l: cL, pa_r: cR, wedge: cW1, wedge2: cW2 };
+    // This source's level on each desk bus (linear per source — power
+    // summing applies to the combined bus, not to one source's own level),
+    // then mapped through the output patch to each physical speaker.
+    const srcBus = {
+      mainL: cL * masterGate,
+      mainR: cR * masterGate,
+      aux1: cA1 * aux1MasterGain * mixerGateNum,
+      aux2: cA2 * aux2MasterGain * mixerGateNum,
+    };
+    contributions[srcKey] = {
+      pa_l: (outPatch.pa_l ? (srcBus[outPatch.pa_l] || 0) : 0) * spkChain.pa_l,
+      pa_r: (outPatch.pa_r ? (srcBus[outPatch.pa_r] || 0) : 0) * spkChain.pa_r,
+      wedge: (outPatch.wedge ? (srcBus[outPatch.wedge] || 0) : 0) * spkChain.wedge,
+      wedge2: (outPatch.wedge2 ? (srcBus[outPatch.wedge2] || 0) : 0) * spkChain.wedge2,
+    };
   }
 
   // PFL bus — the engineer's headphone bus. Sum of pre-fader signals of
@@ -494,10 +536,10 @@ function computeAudio(s, envelope) {
     // volume knob is set. The volume knob is the engineer's room-loudness
     // knob; the LED is "the console is sending me signal."
     speakerInput: {
-      pa_l: mainBusL * paGate * (s.cables.out_pa_l ? 1 : 0),
-      pa_r: mainBusR * paGate * (s.cables.out_pa_r ? 1 : 0),
-      wedge:  wedgeMix  * (s.cables.out_wedge  ? 1 : 0),
-      wedge2: wedge2Mix * (s.cables.out_wedge2 ? 1 : 0),
+      pa_l: sigAt('pa_l') * paGate,
+      pa_r: sigAt('pa_r') * paGate,
+      wedge:  sigAt('wedge'),
+      wedge2: sigAt('wedge2'),
     },
     paGate,
     contributions,
@@ -547,16 +589,17 @@ function traceTo(s, srcKey, dest) {
   // longer add a "Solo" stage to the signal-flow trace. The PFL state is
   // a cans-side concern, not a mix-side fault.
 
+  const op = s.outPatch || DEFAULT_OUT_PATCH;
   if (dest === 'wedge') {
     add('Aux 1', channel ? channel.aux1 > 0.05 : false, channel ? (channel.aux1 <= 0.05 ? 'aux 1 at 0' : `${Math.round(channel.aux1 * 100)}%`) : '—');
-    add('Wedge Out', s.cables.out_wedge && s.outputs.wedge.on && !s.outputs.wedge.mute,
-      !s.cables.out_wedge ? 'wedge cable unplugged' : !s.outputs.wedge.on ? 'wedge off' : s.outputs.wedge.mute ? 'wedge muted' : 'powered');
+    add('Wedge Out', op.wedge === 'aux1' && s.outputs.wedge.on && !s.outputs.wedge.mute,
+      !op.wedge ? 'cable unplugged' : op.wedge !== 'aux1' ? 'patched to ' + OUT_PORT_LABELS[op.wedge] : !s.outputs.wedge.on ? 'wedge off' : s.outputs.wedge.mute ? 'wedge muted' : 'powered');
     add('Wedge Vol', s.outputs.wedge.volume > 0.05, s.outputs.wedge.volume <= 0.05 ? 'volume down' : `${Math.round(s.outputs.wedge.volume * 100)}%`);
   } else if (dest === 'wedge2') {
     add('Aux 2', channel ? channel.aux2 > 0.05 : false, channel ? (channel.aux2 <= 0.05 ? 'aux 2 at 0' : `${Math.round(channel.aux2 * 100)}%`) : '—');
     const w2 = s.outputs.wedge2 || { on: true, mute: false, volume: 0 };
-    add('Wedge Out', s.cables.out_wedge2 && w2.on && !w2.mute,
-      !s.cables.out_wedge2 ? 'wedge cable unplugged' : !w2.on ? 'wedge off' : w2.mute ? 'wedge muted' : 'powered');
+    add('Wedge Out', op.wedge2 === 'aux2' && w2.on && !w2.mute,
+      !op.wedge2 ? 'cable unplugged' : op.wedge2 !== 'aux2' ? 'patched to ' + OUT_PORT_LABELS[op.wedge2] : !w2.on ? 'wedge off' : w2.mute ? 'wedge muted' : 'powered');
     add('Wedge Vol', w2.volume > 0.05, w2.volume <= 0.05 ? 'volume down' : `${Math.round(w2.volume * 100)}%`);
   } else if (dest === 'pa') {
     add('Fader', channel ? channel.fader > 0.05 : false, channel ? (channel.fader <= 0.001 ? 'at -∞' : faderDb(channel.fader)) : '—');
@@ -571,8 +614,8 @@ function traceTo(s, srcKey, dest) {
     if (topo.paRig === 'amp+passive') {
       add('Amp', s.outputs.amp && s.outputs.amp.on, s.outputs.amp && s.outputs.amp.on ? 'powered' : 'amp off');
     }
-    const paLOk = s.cables.out_pa_l && s.outputs.pa_l.on && !s.outputs.pa_l.mute;
-    const paROk = s.cables.out_pa_r && s.outputs.pa_r.on && !s.outputs.pa_r.mute;
+    const paLOk = op.pa_l === 'mainL' && s.outputs.pa_l.on && !s.outputs.pa_l.mute;
+    const paROk = op.pa_r === 'mainR' && s.outputs.pa_r.on && !s.outputs.pa_r.mute;
     add('PA Out', paLOk || paROk, paLOk && paROk ? 'L + R live' : paLOk ? 'L only' : paROk ? 'R only' : 'PA silent');
     add('PA Vol', (paLOk && s.outputs.pa_l.volume > 0.05) || (paROk && s.outputs.pa_r.volume > 0.05),
       `L ${Math.round(s.outputs.pa_l.volume * 100)}% · R ${Math.round(s.outputs.pa_r.volume * 100)}%`);
@@ -740,13 +783,14 @@ function wouldPopPhantom(s, channelIdx) {
   const channelOpen = !ch.mute && ch.fader > 0.05;
   const masterOpen  = !s.master.mute && s.master.fader > 0.05;
   const o = s.outputs || {};
-  const paLLive = o.pa_l && o.pa_l.on && !o.pa_l.mute && o.pa_l.volume > 0.05 && s.cables.out_pa_l;
-  const paRLive = o.pa_r && o.pa_r.on && !o.pa_r.mute && o.pa_r.volume > 0.05 && s.cables.out_pa_r;
+  const op = s.outPatch || DEFAULT_OUT_PATCH;
+  const paLLive = o.pa_l && o.pa_l.on && !o.pa_l.mute && o.pa_l.volume > 0.05 && op.pa_l;
+  const paRLive = o.pa_r && o.pa_r.on && !o.pa_r.mute && o.pa_r.volume > 0.05 && op.pa_r;
   // Wedge can also pop if the channel's aux send is up — same DC transient
   // hits the aux bus.
   const auxOpen = ch.aux1 > 0.05 || ch.aux2 > 0.05;
-  const wedgeLive  = auxOpen && o.wedge  && o.wedge.on  && !o.wedge.mute  && o.wedge.volume  > 0.05 && s.cables.out_wedge;
-  const wedge2Live = auxOpen && o.wedge2 && o.wedge2.on && !o.wedge2.mute && o.wedge2.volume > 0.05 && s.cables.out_wedge2;
+  const wedgeLive  = auxOpen && o.wedge  && o.wedge.on  && !o.wedge.mute  && o.wedge.volume  > 0.05 && op.wedge;
+  const wedge2Live = auxOpen && o.wedge2 && o.wedge2.on && !o.wedge2.mute && o.wedge2.volume > 0.05 && op.wedge2;
   const speakerLive = paLLive || paRLive || wedgeLive || wedge2Live;
   return channelOpen && (masterOpen ? speakerLive : (wedgeLive || wedge2Live));
 }
@@ -783,18 +827,23 @@ function wouldBlastOnAmpOn(s) {
 function wouldPopOnMixerOn(s) {
   if (!s || !s.outputs) return false;
   const o = s.outputs;
-  const c = s.cables || {};
+  const op = s.outPatch || DEFAULT_OUT_PATCH;
   const topo = s.topology || {};
   // Is a power amp / powered output stage the desk feeds already live?
+  // "Feeds" = the speaker's cable is patched into ANY of the desk's out
+  // ports (a wedge on the wrong port still gets the transient).
   const mainLive = topo.paRig === 'amp+passive'
-    ? !!(o.amp && o.amp.on && (c.out_pa_l || c.out_pa_r))
-    : !!((o.pa_l && o.pa_l.on && c.out_pa_l) || (o.pa_r && o.pa_r.on && c.out_pa_r));
-  const wedgeLive = !!((o.wedge && o.wedge.on && c.out_wedge) || (o.wedge2 && o.wedge2.on && c.out_wedge2));
+    ? !!(o.amp && o.amp.on && (op.pa_l || op.pa_r))
+    : !!((o.pa_l && o.pa_l.on && op.pa_l) || (o.pa_r && o.pa_r.on && op.pa_r));
+  const wedgeLive = !!((o.wedge && o.wedge.on && op.wedge) || (o.wedge2 && o.wedge2.on && op.wedge2));
   return mainLive || wedgeLive;
 }
 
 window.SOURCES = SOURCES;
 window.DESTINATIONS = DESTINATIONS;
+window.SNAKE_COLORS = SNAKE_COLORS;
+window.DEFAULT_OUT_PATCH = DEFAULT_OUT_PATCH;
+window.OUT_PORT_LABELS = OUT_PORT_LABELS;
 window.defaultState = defaultState;
 window.computeAudio = computeAudio;
 window.traceTo = traceTo;
@@ -2213,14 +2262,15 @@ function StreamInterface({ on, volume, level, onToggleOn, onVolume, isInspected,
 
 function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, mainBusActive, wedgeActive, wedge2Active }) {
   const ports = [1, 2, 3, 4];
-  // Output port assignment: out 1 = Main L, out 2 = Main R, out 3 = Wedge 1,
-  // out 4 = Wedge 2 — matching the user-requested convention (mains on the
-  // first two outs, auxes/wedges on 3-4).
+  // Output ports are hardwired to their desk signal: out 1 = Main L, out 2 =
+  // Main R, out 3 = Aux 1 (wedge 1's mix), out 4 = Aux 2. Which SPEAKER hears
+  // which signal is decided by the patch (state.outPatch) — these are jacks,
+  // not destinations.
   const outs = [
-    { key: 'paL',    label: 'L',  color: '#ffc93a', active: mainBusActive },
-    { key: 'paR',    label: 'R',  color: '#ffb547', active: mainBusActive },
-    { key: 'wedge',  label: 'W1', color: '#b88dff', active: wedgeActive   },
-    { key: 'wedge2', label: 'W2', color: '#6aa9ff', active: wedge2Active  },
+    { key: 'mainL', label: 'L',  color: '#ffc93a', active: mainBusActive },
+    { key: 'mainR', label: 'R',  color: '#ffb547', active: mainBusActive },
+    { key: 'aux1',  label: 'W1', color: '#b88dff', active: wedgeActive   },
+    { key: 'aux2',  label: 'W2', color: '#6aa9ff', active: wedge2Active  },
   ];
   return (
     <div className="ui-no-select" style={{
@@ -2241,19 +2291,24 @@ function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, mainBusActive, 
           {ports.map(p => {
             const active = activePorts.find(a => a.port === p);
             const flowing = active && active.flowing;
+            // Port ring + number wear the SNAKE CHANNEL color (resistor code:
+            // 1 brown, 2 red, 3 orange, 4 yellow) — the port IS snake channel
+            // p, whatever happens to be plugged into it. The inner dot lights
+            // with the plugged source's color.
+            const chColor = (window.SNAKE_COLORS || [])[p - 1] || '#38383e';
             return (
               <div key={p} ref={el => portRefs.current[p] = el}
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
                 <div style={{
                   width: 12, height: 12, borderRadius: '50%',
                   background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)',
-                  border: '1.5px solid ' + (active ? active.color : '#38383e'),
+                  border: '1.5px solid ' + chColor,
                   display: 'grid', placeItems: 'center',
                   boxShadow: flowing ? `0 0 4px ${active.color}` : 'inset 0 0 2px #000',
                 }}>
                   <div style={{ width: 3, height: 3, borderRadius: '50%', background: active ? active.color : '#222' }}/>
                 </div>
-                <div className="mono" style={{ fontSize: 5, color: active ? active.color : 'var(--ink-3)', fontWeight: 700, lineHeight: 1.1 }}>{p}</div>
+                <div className="mono" style={{ fontSize: 5, color: chColor, fontWeight: 700, lineHeight: 1.1 }}>{p}</div>
               </div>
             );
           })}
@@ -2683,7 +2738,6 @@ function ChannelAnchors({ state, channelRefs, masterLRef, masterRRef, aux1Ref, a
     const left = padding + i * (stripWidth + gap) + stripWidth / 2;
     const srcKey = window.sourceFor ? window.sourceFor(state, i) : null;
     const src = srcKey ? window.SOURCES[srcKey] : null;
-    const color = src ? src.color : '#4a4a52';
     // Which snake input port's tail terminates at this channel? Invert the
     // fan-out map: port p → channel fanOut[p-1]. Find the port that maps to
     // channel i+1. With a default fan-out it's i+1; with a crossed fan-out
@@ -2691,6 +2745,12 @@ function ChannelAnchors({ state, channelRefs, masterLRef, masterRRef, aux1Ref, a
     // teaching moment.
     const portIdx = fanOut.findIndex(ch => ch === i + 1);
     const inputPort = portIdx >= 0 ? portIdx + 1 : null;
+    // Chip wears the SNAKE CHANNEL color of the tail landing here (resistor
+    // code), so a correctly patched desk reads brown 1, red 2, orange 3,
+    // yellow 4 left to right. The FOH line input keeps its source color.
+    const color = srcKey === 'playback'
+      ? (src ? src.color : '#4a4a52')
+      : (inputPort != null ? ((window.SNAKE_COLORS || [])[inputPort - 1] || '#4a4a52') : '#4a4a52');
     // Playback is a FOH line input plugged into the desk, not a snake port, so
     // it's labelled LINE IN rather than getting a (nonexistent) INPUT number.
     const label = srcKey === 'playback' ? 'LINE IN' : (inputPort != null ? `INPUT ${inputPort}` : 'INPUT —');
@@ -2742,9 +2802,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
   const fanOutRef = useR2(null);
   const snakeOutRef = useR2(null);
   const [paths, setPaths] = useS2({
-    stageCables: [], snake: null, fanOutCables: [],
+    stageCables: [], snake: null, fanOutCables: [], outCables: [],
     masterLToSnake: null, masterRToSnake: null, aux1ToSnake: null, aux2ToSnake: null,
-    paLOut: null, paROut: null, wedgeOut: null, wedge2Out: null,
     backRailY: 0, frontRailY: 0, snakeMidX: 0,
   });
 
@@ -2811,6 +2870,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
         const { x, y } = local(el);
         targets.push({ key: `ch-${ch}`, x, y, payload: ch });
       }
+    } else if (drag.type === 'outpatch') {
+      for (const portId of ['mainL', 'mainR', 'aux1', 'aux2']) {
+        const el = outRefs.current[portId];
+        if (!el) continue;
+        const { x, y } = local(el);
+        targets.push({ key: `out-${portId}`, x, y, payload: portId });
+      }
     }
     return targets;
   };
@@ -2864,6 +2930,21 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
         next.fanOut[port - 1] = target;
         if (bumpedPort > 0) next.fanOut[bumpedPort - 1] = oldCh;
         return next;
+      });
+    } else if (drag.type === 'outpatch') {
+      // drag.id = the speaker whose cable is in hand; target = an OUT port.
+      // Swap semantics like the other patches: if another speaker already
+      // occupies that port, it takes this cable's old port (which may be
+      // null — that speaker ends up unplugged, exactly like trading XLRs).
+      const spk = drag.id;
+      setState(s => {
+        const op = { ...(s.outPatch || window.DEFAULT_OUT_PATCH) };
+        if (op[spk] === target) return s;
+        const oldPort = op[spk] || null;
+        const bumped = Object.keys(op).find(k => k !== spk && op[k] === target);
+        op[spk] = target;
+        if (bumped) op[bumped] = oldPort;
+        return { ...s, outPatch: op };
       });
     }
   };
@@ -2993,7 +3074,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
           if (!chEl) continue;
           const to = anchorPos(chEl, 'top');
           const srcKey = sourceKeys.find(k => state.cables[k] === port);
-          const color = srcKey ? window.SOURCES[srcKey].color : '#4a4a52';
+          // Tail color = the SNAKE CHANNEL's color (resistor code), not the
+          // plugged source's. On a real multicore, the tail's color tells
+          // you the channel number — that's the standard the patch lesson
+          // teaches (1 brown, 2 red, 3 orange, 4 yellow).
+          const color = (window.SNAKE_COLORS || [])[port - 1] || '#4a4a52';
           const flowing = srcKey && audio.chanIn[ch - 1] > 0.05 && audio.chanInSource[ch - 1] === srcKey;
           fanOutCables.push({ port, ch, from: fanOutOrigin, to, color, flowing, srcKey });
         }
@@ -3008,15 +3093,33 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
       const aux1ToSnake    = (aux1Ref.current    && fanOutOrigin) ? { from: anchorPos(aux1Ref.current,    'top'), to: fanOutOrigin } : null;
       const aux2ToSnake    = (aux2Ref.current    && fanOutOrigin) ? { from: anchorPos(aux2Ref.current,    'top'), to: fanOutOrigin } : null;
 
-      // Stage-box outputs → PA + wedges. Each output cable leaves its port
-      // at the stage box's bottom edge, runs along the front rail of the
-      // stage, then climbs UP into the destination's BOTTOM edge — so the
-      // cable looks like it's plugging into the back of each speaker/wedge
-      // from underneath, the way a real floor-run cable would.
-      const paLOut    = (outRefs.current.paL    && paLRef.current)            ? { from: portBottomAnchor(outRefs.current.paL),    to: anchorPos(paLRef.current,          'bottom') } : null;
-      const paROut    = (outRefs.current.paR    && paRRef.current)            ? { from: portBottomAnchor(outRefs.current.paR),    to: anchorPos(paRRef.current,          'bottom') } : null;
-      const wedgeOut  = (outRefs.current.wedge  && wedgeOnStageRef.current)   ? { from: portBottomAnchor(outRefs.current.wedge),  to: anchorPos(wedgeOnStageRef.current,  'bottom') } : null;
-      const wedge2Out = (outRefs.current.wedge2 && wedge2OnStageRef.current)  ? { from: portBottomAnchor(outRefs.current.wedge2), to: anchorPos(wedge2OnStageRef.current, 'bottom') } : null;
+      // Speaker cables → stage-box OUT ports. Each speaker's cable runs from
+      // whatever out port it's PATCHED to (state.outPatch) along the front
+      // rail and climbs into the speaker's bottom edge. Unplugged cables
+      // dangle loose near the box's lower corner with a draggable end —
+      // same treatment as unplugged source cables.
+      const OUT_SPEAKERS = [
+        { spk: 'pa_l',   sref: paLRef,           color: '#ffc93a', rail: 24 },
+        { spk: 'pa_r',   sref: paRRef,           color: '#ffb547', rail: 16 },
+        { spk: 'wedge',  sref: wedgeOnStageRef,  color: '#b88dff', rail: 0  },
+        { spk: 'wedge2', sref: wedge2OnStageRef, color: '#6aa9ff', rail: 8  },
+      ];
+      const patch = state.outPatch || window.DEFAULT_OUT_PATCH;
+      const outCables = OUT_SPEAKERS.map(({ spk, sref, color, rail }, idx) => {
+        if (!sref.current) return null;
+        const to = anchorPos(sref.current, 'bottom');
+        const portId = patch[spk];
+        let from = (portId && outRefs.current[portId]) ? portBottomAnchor(outRefs.current[portId]) : null;
+        let unplugged = false;
+        if (!from && sbRect) {
+          unplugged = true;
+          from = {
+            x: (sbRect.right - cb.left) / S + 10,
+            y: (sbRect.bottom - cb.top) / S + 10 + idx * 7,
+          };
+        }
+        return (from && to) ? { spk, from, to, color, rail, unplugged, portId } : null;
+      }).filter(Boolean);
 
       // Two horizontal rails:
       //   backRailY  — for source cables. Sits ABOVE every source card so the
@@ -3030,14 +3133,15 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
         .map(c => c.from?.y)
         .filter(y => y != null);
       const backRailY  = sourceTops.length ? Math.min(...sourceTops) - 14 : 0;
-      const frontRailY = paLOut ? paLOut.to.y + 14 : 0;
+      const paCable = outCables.find(c => c.spk === 'pa_l');
+      const frontRailY = paCable ? paCable.to.y + 14 : 0;
       // X coordinate of the gap between the left column (stage + brief) and
       // the right column (console). The snake bundle pivots vertically in
       // this gap so it doesn't cut diagonally across the console panel.
       const stageZoneRect = stageZoneRef.current ? stageZoneRef.current.getBoundingClientRect() : null;
       const snakeMidX = stageZoneRect ? (stageZoneRect.right - cb.left) / S + 6 : 0;
 
-      setPaths({ stageCables, snake, fanOutCables, masterLToSnake, masterRToSnake, aux1ToSnake, aux2ToSnake, paLOut, paROut, wedgeOut, wedge2Out, backRailY, frontRailY, snakeMidX });
+      setPaths({ stageCables, snake, fanOutCables, outCables, masterLToSnake, masterRToSnake, aux1ToSnake, aux2ToSnake, backRailY, frontRailY, snakeMidX });
     }
     compute();
     const t = setTimeout(compute, 60);
@@ -3051,14 +3155,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
   const mainBusActive = ((audio.mainBus?.L || 0) + (audio.mainBus?.R || 0)) > 0.05;
   const wedgeActive   = (audio.auxBus?.wedge  || 0) > 0.05;
   const wedge2Active  = (audio.auxBus?.wedge2 || 0) > 0.05;
-  // PER-CABLE liveness at the speaker side — bus must be live AND the
-  // physical patch cable to that speaker must be plugged in. (Per-cable plug
-  // disconnect happens via state.cables.out_* — disconnected cables don't
-  // carry signal and shouldn't pulse.)
-  const paLCableActive    = mainBusActive  && !!state.cables.out_pa_l;
-  const paRCableActive    = mainBusActive  && !!state.cables.out_pa_r;
-  const wedgeCableActive  = wedgeActive    && !!state.cables.out_wedge;
-  const wedge2CableActive = wedge2Active   && !!state.cables.out_wedge2;
+  // PER-CABLE liveness at the speaker side — the bus the cable is PATCHED to
+  // must be live. An unplugged cable carries nothing.
+  const portBusActive = (portId) =>
+    portId === 'mainL' || portId === 'mainR' ? mainBusActive
+    : portId === 'aux1' ? wedgeActive
+    : portId === 'aux2' ? wedge2Active
+    : false;
   const topo = state.topology || {};
 
   return (
@@ -3366,33 +3469,61 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
           );
         })}
 
-        {/* Stage-box outputs → destinations along the FRONT RAIL.
-            Rail order from TOP to BOTTOM: Wedge 1, Wedge 2, PA R, PA L. The
-            two main PA cables sit on the bottom-most rails (PA L at the very
-            floor, PA R just above it) and the wedge cables ride above them
-            — easier to follow because the main PA cables are visually
-            anchored at the bottom. */}
-        {[
-          { p: paths.wedgeOut,  color: '#b88dff', live: wedgeCableActive,  rail:  0 },
-          { p: paths.wedge2Out, color: '#6aa9ff', live: wedge2CableActive, rail:  8 },
-          { p: paths.paROut,    color: '#ffb547', live: paRCableActive,    rail: 16 },
-          { p: paths.paLOut,    color: '#ffc93a', live: paLCableActive,    rail: 24 },
-        ].map(({ p, color, live, rail }, i) => {
-          if (!p) return null;
-          const railY = paths.frontRailY + rail;
-          const d = window._routedCable(p.from, p.to, railY);
-          const f = p.from, t = p.to;
+        {/* Speaker cables → their PATCHED stage-box out ports, along the
+            FRONT RAIL. Rail order from TOP to BOTTOM: Wedge 1, Wedge 2,
+            PA R, PA L (mains anchored at the floor). The PORT end of every
+            cable is a drag handle: drop it on a different out port to
+            repatch (swap semantics). Unplugged cables dangle near the box. */}
+        {(paths.outCables || []).map(c => {
+          const isDragged = dragState && dragState.type === 'outpatch' && dragState.id === c.spk;
+          const someOtherDragged = dragState && !isDragged;
+          const portEnd = isDragged ? dragState.cursor : c.from;
+          const railY = paths.frontRailY + c.rail;
+          const d = isDragged
+            ? window._cableCurve(portEnd, c.to)
+            : window._routedCable(c.from, c.to, railY);
+          const live = !c.unplugged && !isDragged && portBusActive(c.portId);
+          const opacity = someOtherDragged ? 0.18 : (c.unplugged ? 0.5 : 0.92);
           return (
-            <g key={'stage-out-' + i}>
-              <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity="0.4" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d={d} stroke={color} strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.92"/>
-              <circle cx={f.x} cy={f.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8"/>
-              <circle cx={t.x} cy={t.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8"/>
+            <g key={'stage-out-' + c.spk} style={{ pointerEvents: 'none' }}>
+              <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round" strokeLinejoin="round"/>
+              <path d={d} stroke={c.color} strokeWidth={isDragged ? 4 : 3} fill="none" strokeLinecap="round" strokeLinejoin="round" opacity={opacity}/>
+              <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={c.color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
+              {c.unplugged && !isDragged && !someOtherDragged && (
+                <g pointerEvents="none">
+                  <rect x={portEnd.x + 8} y={portEnd.y - 6} width={52} height={12} rx={2}
+                    fill="rgba(255,70,48,0.15)" stroke="var(--hot)" strokeWidth={0.8}/>
+                  <text x={portEnd.x + 34} y={portEnd.y + 3} textAnchor="middle" fill="var(--hot)"
+                    fontFamily="Geist Mono" fontSize="7.5" fontWeight="700" letterSpacing="0.6">UNPLUGGED</text>
+                </g>
+              )}
               {live && (
                 <path d={d} stroke="#fff" strokeWidth="1.2" fill="none" strokeDasharray="3 6" strokeLinecap="round" strokeLinejoin="round" opacity="0.65">
                   <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.6s" repeatCount="indefinite"/>
                 </path>
               )}
+              {!someOtherDragged && (
+                <g style={{ pointerEvents: 'auto' }}>
+                  <circle className="cable-hit" cx={portEnd.x} cy={portEnd.y} r="11" fill="transparent"
+                    onPointerDown={(e) => startDrag(e, { type: 'outpatch', id: c.spk })}/>
+                  <circle className="cable-handle" cx={portEnd.x} cy={portEnd.y} r={isDragged ? 6 : 5}
+                    fill={c.color} stroke="#0a0a0c" strokeWidth="1.2" pointerEvents="none"/>
+                  <circle cx={portEnd.x} cy={portEnd.y} r="2" fill="#0a0a0c" pointerEvents="none"/>
+                </g>
+              )}
+            </g>
+          );
+        })}
+
+        {/* Drop-target highlights for an OUT-PATCH drag — the four out ports glow. */}
+        {dragState && dragState.type === 'outpatch' && getDropTargets(dragState).map(t => {
+          const isSnapped = dragState.valid === t.payload;
+          return (
+            <g key={`drop-${t.key}`} style={{ pointerEvents: 'none' }}>
+              <circle cx={t.x} cy={t.y} r={isSnapped ? 18 : 14}
+                fill="rgba(74,222,128,0.18)"
+                stroke="var(--green)" strokeWidth={isSnapped ? 2.5 : 1.5}
+                style={{ filter: isSnapped ? 'drop-shadow(0 0 8px rgba(74,222,128,0.6))' : 'none' }}/>
             </g>
           );
         })}
@@ -3951,7 +4082,12 @@ function App() {
   const stableRef = uR(null);
   uE(() => {
     if (solved) return;
-    const flowOk = window.checkWin(state, level.conditions || []);
+    // Practice reps can attach extra conditions to the fault they rolled
+    // (e.g. the feedback fault requires the singer's monitor to stay UP, so
+    // killing the send isn't a fix — the EQ ring-out is).
+    const effConditions = (level.conditions || []).concat(
+      (level.isPractice && practiceInfoRef.current && practiceInfoRef.current.extraConditions) || []);
+    const flowOk = window.checkWin(state, effConditions);
     // Block the win if the user popped the speakers getting here. The lesson
     // is the procedure, not the end state. Reset clears phantomPop.
     const blocked = !!state.phantomPop;
@@ -4053,7 +4189,19 @@ function App() {
       }
       return fadersOk && inputOk;
     })();
-    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk;
+    // Patch gate (the patch lesson + every practice rep): sources on their
+    // listed ports, snake tails on their numbered channels, speaker cables
+    // on their planned out ports. A pro's patch matches the paperwork.
+    const patchOk = !level.requirePatch || (() => {
+      const c = state.cables || {};
+      const cablesOk = c.vocal === 1 && c.vocal2 === 2 && c.guitar === 3 && c.laptop === 4;
+      const fo = state.fanOut || [1, 2, 3, 4];
+      const fanOutOk = fo.length === 4 && fo[0] === 1 && fo[1] === 2 && fo[2] === 3 && fo[3] === 4;
+      const op = state.outPatch || window.DEFAULT_OUT_PATCH;
+      const outOk = op.pa_l === 'mainL' && op.pa_r === 'mainR' && op.wedge === 'aux1' && op.wedge2 === 'aux2';
+      return cablesOk && fanOutOk && outOk;
+    })();
+    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk;
     if (won && !blocked) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
@@ -4487,6 +4635,8 @@ function App() {
       const nm = state.mixer ? state.mixer.on !== false : true;
       if (pm !== nm) return 'mixer.on';
       if (JSON.stringify(prev.cables) !== JSON.stringify(state.cables)) return 'cables';
+      if (JSON.stringify(prev.fanOut) !== JSON.stringify(state.fanOut)) return 'fanout';
+      if (JSON.stringify(prev.outPatch || null) !== JSON.stringify(state.outPatch || null)) return 'outpatch';
       return null;
     })();
     if (!key) return;
@@ -4603,6 +4753,31 @@ function App() {
     ];
   }
 
+  // Patch checklist for the brief. The patch lesson gets the three jobs as
+  // separate rows; practice reps get one combined row (the patch is usually
+  // fine there — the row exists so a crosspatch fault has a visible miss).
+  let patchStatus = null;
+  if (level.requirePatch) {
+    const c = state.cables || {};
+    const cablesOk = c.vocal === 1 && c.vocal2 === 2 && c.guitar === 3 && c.laptop === 4;
+    const fo = state.fanOut || [];
+    const fanOutOk = [1, 2, 3, 4].every((v, i) => fo[i] === v);
+    const op = state.outPatch || window.DEFAULT_OUT_PATCH;
+    const outOk = op.pa_l === 'mainL' && op.pa_r === 'mainR' && op.wedge === 'aux1' && op.wedge2 === 'aux2';
+    patchStatus = level.isPractice
+      ? [{ label: 'Patched per the input list', pass: cablesOk && fanOutOk && outOk }]
+      : [
+          { label: 'Inputs patched per the list', pass: cablesOk },
+          { label: 'Outputs patched per the plan', pass: outOk },
+          { label: 'Snake tails match the color code', pass: fanOutOk },
+        ];
+  }
+
+  // Practice extra conditions (attached by the rolled fault) merge into the
+  // displayed objective list, same as they merge into the win check.
+  const effConditions = (level.conditions || []).concat(
+    (level.isPractice && practiceInfoRef.current && practiceInfoRef.current.extraConditions) || []);
+
   // Unity-fader (+ optional input-gain) status for the gain-structure brief.
   let gainStatus = null;
   if (level.gainStructure) {
@@ -4710,10 +4885,10 @@ function App() {
                           rep: level.isPractice ? reps : null,
                         } : null}
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
-                    : <BriefCard level={level} conditions={level.conditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
+                    : <BriefCard level={level} conditions={effConditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
                         hintRevealed={hintRevealed} onRevealHint={() => { hintsUsedRef.current += 1; setHintRevealed(true); }}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
-                        verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus}
+                        verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus} patchStatus={patchStatus}
                         powerStatus={(() => {
                           const o = state.outputs;
                           const passive = (state.topology && state.topology.paRig) === 'amp+passive';
@@ -4968,7 +5143,7 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, hintRevealed, onRevealHint }) {
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, patchStatus, hintRevealed, onRevealHint }) {
   // Essentials show their hint up front (they're lessons). Challenges keep it
   // behind a button (they're tests) — asking is fine and gets counted into
   // the debrief, never punished. A level can override with hintAuto.
@@ -5005,6 +5180,9 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   }
   if (level.requirePflEach && pflEachStatus) {
     for (const p of pflEachStatus) extras.push({ label: p.label, pass: !!p.pass, color: 'var(--amber)' });
+  }
+  if (level.requirePatch && patchStatus) {
+    for (const p of patchStatus) extras.push({ label: p.label, pass: !!p.pass, color: 'var(--cool)' });
   }
   if (level.requirePowerOn && powerStatus) {
     extras.push({ label: 'Console powered on', pass: !!powerStatus.console, color: 'var(--cool)' });
