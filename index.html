@@ -3541,6 +3541,105 @@ function mulberry32(a) {
   };
 }
 
+// Progress save codes — insurance with no backend. Browser storage inside a
+// Circle iframe can be partitioned or cleared, which would silently wipe a
+// member's completion map. The code is just the completed map as base64 JSON:
+// copy it somewhere safe, paste it to restore. encode returns null only if
+// something is deeply wrong; decode returns null for anything that doesn't
+// parse back to a {id: true} map, so garbage input can't corrupt progress.
+function encodeProgressCode(completed) {
+  try { return btoa(JSON.stringify({ v: 1, completed: completed || {} })); } catch (e) { return null; }
+}
+function decodeProgressCode(code) {
+  try {
+    const data = JSON.parse(atob((code || '').trim()));
+    if (!data || typeof data.completed !== 'object' || data.completed === null || Array.isArray(data.completed)) return null;
+    const clean = {};
+    for (const k of Object.keys(data.completed)) { if (data.completed[k]) clean[k] = true; }
+    return clean;
+  } catch (e) { return null; }
+}
+
+// The save-code modal. Three jobs, in order of how often they're needed:
+// copy your code (backup), paste a code (restore), start over (reset, with a
+// click-again confirm so one stray click can't wipe a member's history).
+function ProgressModal({ open, onClose, completed, onRestore, onResetProgress }) {
+  const [paste, setPaste] = uS('');
+  const [msg, setMsg] = uS(null);
+  const [confirmReset, setConfirmReset] = uS(false);
+  uE(() => { if (open) { setPaste(''); setMsg(null); setConfirmReset(false); } }, [open]);
+  if (!open) return null;
+  const code = encodeProgressCode(completed) || '';
+  const doneCount = Object.keys(completed || {}).length;
+  const copy = () => {
+    try {
+      navigator.clipboard.writeText(code);
+      setMsg({ ok: true, text: 'Copied. Keep it somewhere safe — a note, or an email to yourself.' });
+    } catch (e) {
+      setMsg({ ok: false, text: 'Copy failed. Select the code and copy it by hand.' });
+    }
+  };
+  const restore = () => {
+    const clean = decodeProgressCode(paste);
+    if (!clean) { setMsg({ ok: false, text: 'That code doesn\'t look right. Paste the whole code, exactly as it was copied.' }); return; }
+    onRestore(clean);
+    setMsg({ ok: true, text: 'Progress restored: ' + Object.keys(clean).length + ' scenario' + (Object.keys(clean).length === 1 ? '' : 's') + ' marked complete.' });
+  };
+  const inputStyle = {
+    width: '100%', boxSizing: 'border-box', padding: '7px 9px', fontSize: 10,
+    background: '#0a0a0c', color: 'var(--ink)', border: '1px solid #38383e',
+    borderRadius: 4, fontFamily: 'monospace',
+  };
+  const smallBtn = (color) => ({
+    padding: '6px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+    color, background: 'transparent', border: '1px solid ' + color,
+    borderRadius: 4, cursor: 'pointer',
+  });
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: 460, maxWidth: '90vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
+        border: '1px solid #38383e', borderRadius: 8, padding: '16px 18px',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>Your progress</div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>{doneCount} complete</div>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+          Progress saves in this browser automatically. A save code is your backup: copy it somewhere safe, and if this browser ever forgets (a cleared cache, a new computer), paste it back here.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>YOUR SAVE CODE</div>
+          <textarea readOnly value={code} rows={2} style={{ ...inputStyle, resize: 'none' }} onFocus={(e) => e.target.select()}/>
+          <button onClick={copy} className="mono ui-no-select" style={{ ...smallBtn('var(--cool)'), alignSelf: 'flex-start' }}>COPY CODE</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--amber)', letterSpacing: 1.4, fontWeight: 700 }}>RESTORE FROM A CODE</div>
+          <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={2} placeholder="Paste a save code here" style={{ ...inputStyle, resize: 'none' }}/>
+          <button onClick={restore} disabled={!paste.trim()} className="mono ui-no-select" style={{ ...smallBtn('var(--amber)'), alignSelf: 'flex-start', opacity: paste.trim() ? 1 : 0.4 }}>RESTORE</button>
+        </div>
+        {msg && (
+          <div style={{ fontSize: 11, lineHeight: 1.4, color: msg.ok ? 'var(--green)' : 'var(--hot)' }}>{msg.text}</div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #2a2a2e', paddingTop: 10 }}>
+          <button onClick={() => {
+            if (!confirmReset) { setConfirmReset(true); return; }
+            onResetProgress(); setConfirmReset(false);
+            setMsg({ ok: true, text: 'Progress reset. Every scenario is unfinished again.' });
+          }} className="mono ui-no-select" style={smallBtn(confirmReset ? 'var(--hot)' : 'var(--ink-3)')}>
+            {confirmReset ? 'CLICK AGAIN TO CONFIRM' : 'RESET PROGRESS'}
+          </button>
+          <button onClick={onClose} className="mono ui-no-select" style={smallBtn('var(--ink-2)')}>CLOSE</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Locks the brief/solved sidebar slot to its measured height at level load.
 // Without this, warning text swapping in and out (feedback, clipping, pop
 // messages) changes the BriefCard's height, which changes the canvas height,
@@ -3582,6 +3681,8 @@ function App() {
   // Free tier: clicking a locked challenge in the picker shows this pitch
   // overlay instead of loading the scenario.
   const [pitchFor, setPitchFor] = uS(null);
+  // Progress save-code modal (copy your code / paste to restore / reset).
+  const [saveModalOpen, setSaveModalOpen] = uS(false);
   // Challenge presentation state. hintRevealed gates the hint zone behind a
   // button on challenges (Essentials keep their always-visible hints);
   // using the hint is counted into the debrief, not punished.
@@ -4308,6 +4409,7 @@ function App() {
         onRestart={restart} onPrev={prev} onNext={next} onPick={loadLevel}
         completed={completed}
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
+        onOpenProgress={() => setSaveModalOpen(true)}
       />
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
@@ -4316,6 +4418,11 @@ function App() {
         ringWedge={feedback ? feedback.ringWedge : null}
         ringBand={feedback ? feedback.ringBand : null}
       />
+
+      <ProgressModal open={saveModalOpen} onClose={() => setSaveModalOpen(false)}
+        completed={completed}
+        onRestore={(m) => setCompleted(m)}
+        onResetProgress={() => setCompleted({})}/>
 
       {/* Member pitch — shown on the free tier when a locked challenge is
           clicked. Short and honest; the locked list itself does the selling. */}
@@ -4496,7 +4603,7 @@ function App() {
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress }) {
   const [picker, setPicker] = uS(false);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
   // column width, so this is the reliable "use my whole screen" path: it puts
@@ -4592,6 +4699,9 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             borderColor: eqOpen ? '#c79a1f' : (eqRinging ? 'var(--hot)' : '#38383e'),
             boxShadow: eqRinging && !eqOpen ? '0 0 8px rgba(255,70,48,0.4)' : 'none', fontWeight: 700,
           }}>🎛 MONITOR EQ</button>
+        )}
+        {onOpenProgress && (
+          <button onClick={onOpenProgress} className="mono ui-no-select" title="Back up or restore your progress" style={{ ...navBtn, padding: '6px 12px' }}>💾 PROGRESS</button>
         )}
         <button onClick={toggleFullscreen} className="mono ui-no-select" title="Fill the screen" style={{ ...navBtn, padding: '6px 12px' }}>{isFs ? '⤢ EXIT' : '⤢ FULL SCREEN'}</button>
         <button onClick={onRestart} className="mono ui-no-select" style={{ ...navBtn, padding: '6px 14px' }}>↻ RESET</button>
