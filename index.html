@@ -169,11 +169,11 @@ const DESTINATIONS = {
   wedge2: { label: 'Wedge 2',         short: 'WEDGE 2', stereo: false, description: 'Floor wedge for Vocal Mic 2.' },
 };
 
-// Graphic EQ on the monitor sends — the band frequencies, low to high. A cut on
+// Graphic EQ on the monitor sends — ISO mid-octave centre frequencies. A cut on
 // the band a wedge rings at (its ringBand) drops the feedback loop at that
 // frequency. Bands 0-1 are "low" (an HPF can help there); 2-4 are mid/high
 // (only the EQ rings those out). EQ_CUT_DB = the cut at a band's full setting.
-const EQ_BANDS = ['125', '400', '1k', '2.5k', '6.3k'];
+const EQ_BANDS = ['250', '500', '1k', '2k', '4k'];
 const EQ_CUT_DB = 12;
 // Linear relief multiplier from a band's cut fraction (0 flat .. 1 full cut).
 function eqBandRelief(cutFrac) {
@@ -1931,41 +1931,79 @@ function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePowe
   );
 }
 
-// One band of the monitor EQ. value = cut fraction (0 flat .. 1 full cut). The
-// visible bar is the pass level (1 - cut), so pulling it down cuts that band —
-// like a graphic-EQ slider. When this band is the one ringing, it glows red.
-function EqBand({ value, onChange, label, ringing, accent }) {
+// One band of the monitor graphic EQ. value = cut fraction (0 flat .. 1 full
+// cut). The handle sits at the cut depth: top = flat (0 dB), bottom = full cut
+// (-EQ_CUT_DB). Drag down to cut that band. When this band is the one ringing,
+// it glows red so the engineer can ring it out.
+function EqBand({ value, onChange, label, ringing, accent, height = 96, width = 22 }) {
   const ref = React.useRef(null);
   const startRef = React.useRef(null);
   const fitScale = React.useContext(window.FitScaleContext) || 1;
-  const H = 24;
-  const onDown = (e) => { e.preventDefault(); e.stopPropagation(); try { ref.current.setPointerCapture(e.pointerId); } catch(_){} startRef.current = { y: e.clientY, v: value || 0 }; };
-  const onMove = (e) => { if (!startRef.current) return; const dy = (e.clientY - startRef.current.y) / (fitScale || 1); let v = startRef.current.v + dy / H; v = Math.max(0, Math.min(1, v)); onChange(v); };
+  const cut = Math.max(0, Math.min(1, value || 0));
+  const onDown = (e) => { e.preventDefault(); e.stopPropagation(); try { ref.current.setPointerCapture(e.pointerId); } catch(_){} startRef.current = { y: e.clientY, v: cut }; };
+  const onMove = (e) => { if (!startRef.current) return; const dy = (e.clientY - startRef.current.y) / (fitScale || 1); let v = startRef.current.v + dy / height; v = Math.max(0, Math.min(1, v)); onChange(v); };
   const onUp = (e) => { startRef.current = null; try { ref.current.releasePointerCapture(e.pointerId); } catch(_){} };
-  const pass = 1 - (value || 0);
+  const handleY = cut * (height - 8);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
       <div ref={ref} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} className="ui-no-select"
-        style={{ width: 8, height: H, background: '#0a0a0c', border: '1px solid ' + (ringing ? 'var(--hot)' : '#2a2a2e'), borderRadius: 2, position: 'relative', cursor: 'ns-resize',
-          boxShadow: ringing ? '0 0 7px rgba(255,70,48,0.7)' : 'none', animation: ringing ? 'pulse 0.9s ease-in-out infinite' : 'none' }}>
-        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: pass * (H - 2), background: ringing ? 'var(--hot)' : accent, opacity: 0.85, borderRadius: '0 0 1px 1px' }}/>
+        style={{ width, height, position: 'relative', cursor: 'ns-resize' }}>
+        {/* track */}
+        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 3, transform: 'translateX(-50%)', background: '#0a0a0c', border: '1px solid ' + (ringing ? 'var(--hot)' : '#2a2a2e'), borderRadius: 2, boxShadow: ringing ? '0 0 8px rgba(255,70,48,0.7)' : 'none' }}/>
+        {/* 0 dB centre tick at top, cut shown below the handle */}
+        <div style={{ position: 'absolute', left: 0, right: 0, top: handleY + 7, bottom: 0, background: 'rgba(255,70,48,0.10)', borderRadius: 2, opacity: cut > 0.02 ? 1 : 0 }}/>
+        {/* handle */}
+        <div style={{ position: 'absolute', left: '50%', top: handleY, transform: 'translateX(-50%)', width: width, height: 8, borderRadius: 2,
+          background: ringing ? 'var(--hot)' : accent, border: '1px solid ' + (ringing ? '#b8341f' : '#0a0a0c'),
+          boxShadow: ringing ? '0 0 8px rgba(255,70,48,0.8)' : '0 1px 2px rgba(0,0,0,0.5)', animation: ringing ? 'pulse 0.9s ease-in-out infinite' : 'none' }}/>
       </div>
-      <div className="mono" style={{ fontSize: 5, lineHeight: 1, color: ringing ? 'var(--hot)' : 'var(--ink-3)' }}>{label}</div>
+      <div className="mono" style={{ fontSize: 8, lineHeight: 1, fontWeight: 700, color: ringing ? 'var(--hot)' : 'var(--ink-2)' }}>{label}</div>
     </div>
   );
 }
 
-function EqStrip({ eq, onChange, ringBand, accent }) {
+function EqStrip({ eq, onChange, ringBand, accent, height, width }) {
   return (
-    <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', padding: '1px 2px', background: '#141417', border: '1px solid #2a2a2e', borderRadius: 3 }} title="Monitor EQ — pull a band down to cut that frequency">
+    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
       {EQ_BANDS.map((lbl, i) => (
-        <EqBand key={i} value={eq ? eq[i] : 0} onChange={(v) => onChange(i, v)} label={lbl} ringing={ringBand === i} accent={accent}/>
+        <EqBand key={i} value={eq ? eq[i] : 0} onChange={(v) => onChange(i, v)} label={lbl} ringing={ringBand === i} accent={accent} height={height} width={width}/>
       ))}
     </div>
   );
 }
 
-function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, label = 'STAGE WEDGE', accent = 'var(--aux)', eq, onEqChange, ringBand }) {
+// Exposable "Monitor EQ" panel — the graphic EQs for the two aux/monitor sends,
+// the way they'd sit at FOH (outboard rack, or a screen on a digital desk). It
+// auto-opens when a wedge starts ringing and can be toggled by hand otherwise.
+function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge, ringBand }) {
+  if (!open) return null;
+  const col = (key, w, label, accent) => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#141418', border: '1px solid ' + (ringWedge === key ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6, boxShadow: ringWedge === key ? '0 0 0 1px rgba(255,70,48,0.4)' : 'none' }}>
+      <div className="mono" style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: ringWedge === key ? 'var(--hot)' : accent }}>{label}{ringWedge === key ? ' · RINGING' : ''}</div>
+      <EqStrip eq={w.eq} onChange={(band, v) => onBandChange(key, band, v)} ringBand={ringWedge === key ? ringBand : null} accent={accent} height={104} width={20}/>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, background: 'rgba(0,0,0,0.45)' }}>
+      <div onClick={(e) => e.stopPropagation()} className="ui-no-select" style={{ background: 'linear-gradient(180deg,#1c1c20 0%, #141417 100%)', border: '1px solid #38383e', borderRadius: 10, padding: '14px 16px', boxShadow: '0 16px 48px rgba(0,0,0,0.6)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 24 }}>
+          <div>
+            <div className="display" style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.5 }}>Monitor EQ</div>
+            <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>graphic EQ on the aux sends · pull a band down to cut that frequency</div>
+          </div>
+          <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
+        </div>
+        <div style={{ display: 'flex', gap: 14 }}>
+          {col('wedge', wedge, 'WEDGE 1', 'var(--aux)')}
+          {col('wedge2', wedge2, 'WEDGE 2', 'var(--cool)')}
+        </div>
+      </div>
+    </div>
+  );
+}
+window.MonitorEqPanel = MonitorEqPanel;
+
+function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, label = 'STAGE WEDGE', accent = 'var(--aux)', ringing }) {
   const animate = on && !mute && level > 0.05;
   const intensity = Math.min(1, level);
   // Resolve the accent var to an rgba glow color so we can reuse the variable
@@ -1975,7 +2013,7 @@ function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume,
   const glowBorder = accent === 'var(--cool)' ? 'rgba(106,169,255,0.4)' : 'rgba(184,141,255,0.4)';
   // Off state mirrors PASpeaker: dim cabinet, red border accent, big OFF
   // badge over the cone, and a proper labeled power button.
-  const borderColor = isInspected ? accent : (on ? '#0a0a0c' : '#5a2018');
+  const borderColor = ringing ? 'var(--hot)' : (isInspected ? accent : (on ? '#0a0a0c' : '#5a2018'));
   return (
     <div className="ui-no-select" style={{
       background: on
@@ -1985,7 +2023,7 @@ function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume,
       borderRadius: 5,
       padding: '4px 6px 5px',
       display: 'flex', alignItems: 'center', gap: 6,
-      boxShadow: isInspected ? `0 0 0 1px ${glowBorder}` : (on ? 'none' : 'inset 0 0 0 1px rgba(90,32,24,0.4)'),
+      boxShadow: ringing ? '0 0 10px rgba(255,70,48,0.6)' : (isInspected ? `0 0 0 1px ${glowBorder}` : (on ? 'none' : 'inset 0 0 0 1px rgba(90,32,24,0.4)')),
     }}>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <svg width="48" height="34" viewBox="0 0 60 42" style={{
@@ -2023,12 +2061,6 @@ function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume,
           <window.Knob value={volume} onChange={onVolume} size={20} color={accent}/>
           <window.ButtonPad active={mute} onClick={(e) => { e.stopPropagation(); onToggleMute(); }} label="M" color="var(--hot)" width={14} height={14} fontSize={8}/>
         </div>
-        {eq && onEqChange && (
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, opacity: on ? 1 : 0.5 }}>
-            <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, writingMode: 'vertical-rl', transform: 'rotate(180deg)', lineHeight: 1 }}>EQ</div>
-            <EqStrip eq={eq} onChange={onEqChange} ringBand={ringBand} accent={accent}/>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -2355,15 +2387,10 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // hears the speaker they're setting. Bundled into one setState with the
   // volume change. paInsp/wedgeInsp map the output to its listening dest.
   const setOutInspect = (key, patch, dest) => setState(prev => ({ ...prev, outputs: { ...prev.outputs, [key]: { ...prev.outputs[key], ...patch } }, inspect: dest }));
-  // Monitor-EQ band change: cut one band on a wedge, and follow your ears to
-  // that wedge so you hear the ring-out happen.
-  const setWedgeEq = (key, band, v) => setState(prev => {
-    const w = prev.outputs[key]; const eq = (w.eq || [0, 0, 0, 0, 0]).slice(); eq[band] = v;
-    return { ...prev, outputs: { ...prev.outputs, [key]: { ...w, eq } }, inspect: key };
-  });
-  // Which wedge band is ringing right now (for the EQ highlight).
+  // Which wedge is ringing right now, so it gets a red glow on stage (the
+  // graphic EQ itself lives in the Monitor EQ panel).
   const fb = window.detectFeedback ? window.detectFeedback(state, audio) : null;
-  const ringBandFor = (key) => (fb && fb.ringWedge === key) ? fb.ringBand : null;
+  const ringingWedge = fb ? fb.ringWedge : null;
 
   // Single stage area — no more flank columns. Performers sit upstage
   // (bass DI, keys DI) and mid-stage (vocal 1, vocal 2). The downstage
@@ -2416,7 +2443,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onTogglePower={() => setOut('wedge', { on: !state.outputs.wedge.on })}
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
               onVolume={(v) => setOutInspect('wedge', { volume: v }, 'wedge')}
-              eq={state.outputs.wedge.eq} onEqChange={(band, v) => setWedgeEq('wedge', band, v)} ringBand={ringBandFor('wedge')}
+              ringing={ringingWedge === 'wedge'}
               isInspected={state.inspect === 'wedge'}
               onSelect={() => setState({ ...state, inspect: 'wedge' })}/>
           </div>
@@ -2428,7 +2455,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onTogglePower={() => setOut('wedge2', { on: !state.outputs.wedge2.on })}
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
               onVolume={(v) => setOutInspect('wedge2', { volume: v }, 'wedge2')}
-              eq={state.outputs.wedge2.eq} onEqChange={(band, v) => setWedgeEq('wedge2', band, v)} ringBand={ringBandFor('wedge2')}
+              ringing={ringingWedge === 'wedge2'}
               isInspected={state.inspect === 'wedge2'}
               onSelect={() => setState({ ...state, inspect: 'wedge2' })}/>
           </div>
@@ -3449,6 +3476,12 @@ function App() {
   });
   const [solved, setSolved] = uS(false);
   const [audioOn, setAudioOn] = uS(false);
+  const [eqPanelOpen, setEqPanelOpen] = uS(false);
+  // Cut one band on a wedge's monitor EQ, following the ears to that wedge.
+  const setMonitorEqBand = (key, band, v) => setState(prev => {
+    const w = prev.outputs[key]; const eq = (w.eq || [0, 0, 0, 0, 0]).slice(); eq[band] = v;
+    return { ...prev, outputs: { ...prev.outputs, [key]: { ...w, eq } }, inspect: key };
+  });
   const [completed, setCompleted] = uS(loadProgress);
   // Persist completion whenever it changes, so progress survives refreshes and
   // the monthly content drops members come back for.
@@ -3508,6 +3541,10 @@ function App() {
   // Push the risk amount into a ref so the audio animation loop can read
   // it without taking a dependency on state. 0 when no loop is hot.
   feedbackRiskRef.current = feedback ? feedback.riskAmount : 0;
+  // Auto-open the Monitor EQ panel the moment a wedge starts ringing, so the
+  // engineer is taken right to the ring-out (the band is glowing). Only on the
+  // no-feedback -> feedback transition, so closing it by hand mid-ring sticks.
+  uE(() => { if (feedback) setEqPanelOpen(true); }, [!!feedback]);
 
   const stableRef = uR(null);
   uE(() => {
@@ -4011,6 +4048,14 @@ function App() {
         solved={solved} audioOn={audioOn} setAudioOn={setAudioOn}
         onRestart={restart} onPrev={prev} onNext={next} onPick={loadLevel}
         completed={completed}
+        eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
+      />
+      <window.MonitorEqPanel
+        open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
+        wedge={state.outputs.wedge} wedge2={state.outputs.wedge2}
+        onBandChange={setMonitorEqBand}
+        ringWedge={feedback ? feedback.ringWedge : null}
+        ringBand={feedback ? feedback.ringBand : null}
       />
 
       {/* Scale-to-fit viewport. The scroll container is now the measurement
@@ -4150,7 +4195,7 @@ function App() {
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging }) {
   const [picker, setPicker] = uS(false);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
   // column width, so this is the reliable "use my whole screen" path: it puts
@@ -4220,6 +4265,15 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           borderColor: audioOn ? '#2c9d52' : '#38383e',
           fontWeight: 700, padding: '6px 12px',
         }}>{audioOn ? '🔊 SOUND ON' : '🔇 SOUND OFF'}</button>
+        {onToggleEq && (
+          <button onClick={onToggleEq} className="mono ui-no-select" title="Graphic EQ on the monitor sends" style={{
+            ...navBtn, padding: '6px 12px',
+            background: eqOpen ? 'linear-gradient(180deg, var(--accent), #c79a1f)' : (eqRinging ? 'rgba(255,70,48,0.18)' : '#1a1a1d'),
+            color: eqOpen ? '#0a0a0c' : (eqRinging ? 'var(--hot)' : 'var(--ink-2)'),
+            borderColor: eqOpen ? '#c79a1f' : (eqRinging ? 'var(--hot)' : '#38383e'),
+            boxShadow: eqRinging && !eqOpen ? '0 0 8px rgba(255,70,48,0.4)' : 'none', fontWeight: 700,
+          }}>🎛 MONITOR EQ</button>
+        )}
         <button onClick={toggleFullscreen} className="mono ui-no-select" title="Fill the screen" style={{ ...navBtn, padding: '6px 12px' }}>{isFs ? '⤢ EXIT' : '⤢ FULL SCREEN'}</button>
         <button onClick={onRestart} className="mono ui-no-select" style={{ ...navBtn, padding: '6px 14px' }}>↻ RESET</button>
       </div>
