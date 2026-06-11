@@ -73,13 +73,19 @@
     35%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
     100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
   }
+  /* Gentle glow on the SOUND button until audio is turned on for the first
+     time — the lab makes sound, and nothing else says so. */
+  @keyframes soundNudge {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
+    50%      { box-shadow: 0 0 12px 2px rgba(74,222,128,0.55); }
+  }
 </style>
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=19"></script>
+<script src="content.js?v=20"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -190,7 +196,6 @@ const DEFAULT_CHANNEL = {
   gain: 0.0,
   phantom: false,
   highpass: false,
-  lowCut: false,
   pan: 0.5,
   aux1: 0.0,
   aux2: 0.0,
@@ -604,10 +609,11 @@ function checkWin(s, conditions) {
   return true;
 }
 
-// LEVELS and CHALLENGE_BANK now live in content.js (loaded as a plain
-// <script> before this block, setting window.LEVELS / window.CHALLENGE_BANK).
-// Split out so new scenarios drip in by editing one small data file, not this
-// app shell. Append-only: never renumber existing ids (progress is saved by id).
+// LEVELS and the Practice Mode fault pool live in content.js (loaded as a
+// plain <script> before this block, setting window.LEVELS / window.PRACTICE /
+// window.PRACTICE_FAULTS). Split out so new faults and scenarios drip in by
+// editing one small data file, not this app shell. Append-only: never
+// renumber existing ids (progress is saved by id).
 
 // Clip detection across the signal chain. "In the red" on any meter means
 // the engineer is over-driving that stage — distortion in real life, which
@@ -1029,7 +1035,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 const FitScaleContext = React.createContext(1);
 window.FitScaleContext = FitScaleContext;
 
-function Knob({ value, onChange, min = 0, max = 1, size = 44, label, sublabel, color = 'var(--accent)', track = 'var(--line)', detentAt = null, format = null, disabled = false }) {
+function Knob({ value, onChange, min = 0, max = 1, size = 44, label, sublabel, color = 'var(--accent)', track = 'var(--line)', detentAt = null, format = null, disabled = false, tip = null }) {
   const ref = useRef(null);
   const startRef = useRef(null);
   const fitScale = React.useContext(FitScaleContext);
@@ -1086,7 +1092,7 @@ function Knob({ value, onChange, min = 0, max = 1, size = 44, label, sublabel, c
   const largeArc = endA - startA > Math.PI ? 1 : 0;
 
   return (
-    <div className="ui-no-select" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, opacity: disabled ? 0.4 : 1 }}>
+    <div className="ui-no-select" title={tip || undefined} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, opacity: disabled ? 0.4 : 1 }}>
       {label && <div className="mono" style={{ fontSize: 8.5, letterSpacing: 0.6, color: 'var(--ink-2)', textTransform: 'uppercase' }}>{label}</div>}
       <svg
         ref={ref}
@@ -1269,10 +1275,11 @@ function MiniMeter({ level, width = 44, segments = 10 }) {
   );
 }
 
-function ButtonPad({ active, onClick, label, color = 'var(--hot)', width = 28, height = 18, fontSize = 8.5, sub }) {
+function ButtonPad({ active, onClick, label, color = 'var(--hot)', width = 28, height = 18, fontSize = 8.5, sub, tip = null }) {
   return (
     <button
       onClick={onClick}
+      title={tip || undefined}
       className="button-pad ui-no-select mono"
       style={{
         width, height,
@@ -1407,15 +1414,20 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 2px' }}>
         <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', fontWeight: 600 }}>CH</div>
-        <div className="display" style={{ fontSize: 15, color: 'var(--ink)', fontWeight: 800, lineHeight: 1 }}>{idx + 1}</div>
+        {/* The stereo line channel reads as one strip with two inputs: 5/6. */}
+        <div className="display" style={{ fontSize: ch.stereo ? 13 : 15, color: 'var(--ink)', fontWeight: 800, lineHeight: 1 }}>{ch.stereo ? `${idx + 1}/${idx + 2}` : idx + 1}</div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <BP active={ch.phantom} onClick={togglePhantom} label="+48V" color="var(--hot)" width={32} height={13} fontSize={7} />
+        <BP active={ch.phantom} onClick={togglePhantom} label="+48V" color="var(--hot)" width={32} height={13} fontSize={7}
+          tip={(!ch.mute && ch.fader > 0.05)
+            ? 'Phantom power (+48V). This channel is LIVE: mute it before switching +48V, or the pop goes to the speakers.'
+            : 'Phantom power (+48V) for condenser mics and active DIs. Switch it while the channel is muted.'} />
         <L on={powered && ch.phantom} color="var(--hot)" size={5}/>
       </div>
 
-      <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={40} color="var(--accent)" />
+      <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={40} color="var(--accent)"
+        tip="Input gain. Sets how hot the source hits the preamp. Set it first, checking in PFL." />
 
       <div style={{ width: '94%' }}>
         <PFLBar level={pflLevel} hot={ch.solo}/>
@@ -1425,23 +1437,30 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       </div>
 
       <div style={{ display: 'flex', gap: 3, marginTop: 1 }}>
-        <BP active={ch.highpass} onClick={() => set({ highpass: !ch.highpass })} label="HPF" color="var(--cool)" width={24} height={12} fontSize={7}/>
-        <BP active={ch.lowCut} onClick={() => set({ lowCut: !ch.lowCut })} label="Ø" color="var(--cool)" width={18} height={12} fontSize={8.5}/>
+        <BP active={ch.highpass} onClick={() => set({ highpass: !ch.highpass })} label="HPF" color="var(--cool)" width={32} height={12} fontSize={7}
+          tip="High-pass filter. Cuts the low rumble below the useful range of this source."/>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-        <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={30} color="var(--aux)" />
-        <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={30} color="var(--cool)" />
+        <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={30} color="var(--aux)"
+          tip="How much of this channel goes to Wedge 1 (the monitor mix). Doesn't change the PA." />
+        <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={30} color="var(--cool)"
+          tip="How much of this channel goes to Wedge 2. Doesn't change the PA." />
       </div>
 
-      <K value={ch.pan} onChange={(v) => set({ pan: v })} label="PAN" size={32} color="var(--ink)" detentAt={0.5} />
+      <K value={ch.pan} onChange={(v) => set({ pan: v })} label={ch.stereo ? 'BAL' : 'PAN'} size={32} color="var(--ink)" detentAt={0.5}
+        tip={ch.stereo
+          ? 'Balance for the stereo channel: favors the left or right side of the PA. Double-click to center.'
+          : 'Pan. Places this channel between the left and right PA speakers. Double-click to center.'} />
 
       <div style={{ display: 'flex', gap: 3 }}>
-        <BP active={ch.mute} onClick={() => set({ mute: !ch.mute })} label="MUTE" color="var(--hot)" width={28} height={14} fontSize={7}/>
+        <BP active={ch.mute} onClick={() => set({ mute: !ch.mute })} label="MUTE" color="var(--hot)" width={28} height={14} fontSize={7}
+          tip="Silences this channel everywhere after the preamp: PA and wedges."/>
         {/* PFL = Pre-Fader Listen. Monitor-only — routes this channel to
             the engineer's headphone bus. Does NOT mute the rest of the
             mix; the audience keeps hearing everything. */}
-        <BP active={ch.solo} onClick={() => set({ solo: !ch.solo })} label="PFL" color="var(--amber)" width={24} height={14} fontSize={7}/>
+        <BP active={ch.solo} onClick={() => set({ solo: !ch.solo })} label="PFL" color="var(--amber)" width={24} height={14} fontSize={7}
+          tip="Pre-fade listen. Hear just this channel in your headphones. The room keeps hearing the full mix."/>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
@@ -1608,7 +1627,7 @@ function Console({ state, setState, audio, faultChannelIdx }) {
               boxShadow: mixerOn ? '0 0 6px var(--accent)' : 'inset 0 0 0 1px rgba(90,32,24,0.6)',
               transition: 'background 0.15s, box-shadow 0.15s',
             }}/>
-            <div className="display" style={{ fontSize: 10, color: mixerOn ? 'var(--ink-2)' : '#5a2018', letterSpacing: 1.5, fontWeight: 700, textTransform: 'uppercase' }}>AU · MX-4</div>
+            <div className="display" style={{ fontSize: 10, color: mixerOn ? 'var(--ink-2)' : '#5a2018', letterSpacing: 1.5, fontWeight: 700, textTransform: 'uppercase' }}>AU · MX-6</div>
             <PowerButton on={mixerOn} width={32} height={13}
               onClick={() => {
                 setState(prev => {
@@ -2605,7 +2624,7 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
       <ZoneHeader
         label="Console (FOH)"
         sublabel="engineer station · the mix desk"
-        badge="MX-4"
+        badge="MX-6"
         badgeColor="var(--accent)"
       />
       <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -3417,6 +3436,22 @@ function saveProgress(completed) {
   try { window.localStorage.setItem(PROGRESS_KEY, JSON.stringify({ v: 1, completed })); } catch (e) {}
 }
 
+// Practice Mode rep counter — how many practice reps this student has
+// finished, ever. Stored separately from the completed map (it's a count,
+// not a per-id flag) but carried inside the same save code.
+const REPS_KEY = 'audiou-troubleshooting-lab-practice-reps-v1';
+function loadReps() {
+  try {
+    const n = parseInt(window.localStorage.getItem(REPS_KEY) || '0', 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch (e) { return 0; }
+}
+
+// First-run flags. The tour shows once per browser; the Essentials
+// completion card shows once when the ninth lesson is finished.
+const TOUR_KEY = 'audiou-troubleshooting-lab-tour-v1';
+const CTA_KEY = 'audiou-troubleshooting-lab-essentials-cta-v1';
+
 // Safely set an AudioParam target with cancel + anchor + ramp.
 // Fixes the "crash when turning sound on" bug from the chat transcript:
 // linearRampToValueAtTime needs a starting anchor on some browsers, and any
@@ -3452,7 +3487,7 @@ const deriveInvolves = window.deriveInvolves;
 function normalizeChannels(channels, involves) {
   return channels.map((ch, idx) => {
     if (involves.includes(idx + 1)) return ch;
-    return { ...ch, mute: true, fader: 0, gain: 0, pan: 0.5, phantom: false, aux1: 0, aux2: 0, solo: false, highpass: false, lowCut: false };
+    return { ...ch, mute: true, fader: 0, gain: 0, pan: 0.5, phantom: false, aux1: 0, aux2: 0, solo: false, highpass: false };
   });
 }
 
@@ -3507,10 +3542,10 @@ function MobileNotice() {
 // ── Tiers and the combined scenario list ────────────────────────────────
 // One app, two Circle pages. The member page embeds this same URL with
 // ?tier=member on the iframe src; the free page embeds it bare. The free
-// page still SHOWS the challenges in the picker — locked, doing quiet sales
-// work — and clicking one shows a short member pitch instead of the
+// page still SHOWS Practice Mode in the picker — locked, doing quiet sales
+// work — and clicking it shows a short member pitch instead of the
 // scenario. A query parameter is obscurity, not security; accepted by
-// design (the paid value is the monthly drops, coaching, and community).
+// design (the paid value is the endless reps, coaching, and community).
 const TIER = (() => {
   try {
     return new URLSearchParams(window.location.search).get('tier') === 'member' ? 'member' : 'free';
@@ -3518,12 +3553,13 @@ const TIER = (() => {
 })();
 
 // The picker runs off one combined list: the free Essentials in order, then
-// the challenge bank. Challenges carry isChallenge, which switches the whole
-// presentation: hint behind a button, solution hidden after the solve
-// (debrief instead), randomized fault placement via the seeded rng.
+// Practice Mode. isChallenge switches the test presentation (hint behind a
+// button, debrief instead of an answer key, seeded random faults);
+// isPractice adds the endless-rep behavior (FAULTS difficulty selector,
+// rep counter, "next rep" instead of "next level").
 const SCENARIOS = [
   ...window.LEVELS,
-  ...((window.CHALLENGE_BANK || []).map(c => ({ ...c, isChallenge: true }))),
+  ...(window.PRACTICE ? [{ ...window.PRACTICE, isChallenge: true, isPractice: true }] : []),
 ];
 const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
 
@@ -3547,8 +3583,8 @@ function mulberry32(a) {
 // copy it somewhere safe, paste it to restore. encode returns null only if
 // something is deeply wrong; decode returns null for anything that doesn't
 // parse back to a {id: true} map, so garbage input can't corrupt progress.
-function encodeProgressCode(completed) {
-  try { return btoa(JSON.stringify({ v: 1, completed: completed || {} })); } catch (e) { return null; }
+function encodeProgressCode(completed, reps) {
+  try { return btoa(JSON.stringify({ v: 1, completed: completed || {}, reps: reps || 0 })); } catch (e) { return null; }
 }
 function decodeProgressCode(code) {
   try {
@@ -3556,20 +3592,22 @@ function decodeProgressCode(code) {
     if (!data || typeof data.completed !== 'object' || data.completed === null || Array.isArray(data.completed)) return null;
     const clean = {};
     for (const k of Object.keys(data.completed)) { if (data.completed[k]) clean[k] = true; }
-    return clean;
+    // Older codes have no reps field — null means "leave the count alone".
+    const reps = (Number.isFinite(data.reps) && data.reps >= 0) ? Math.floor(data.reps) : null;
+    return { completed: clean, reps };
   } catch (e) { return null; }
 }
 
 // The save-code modal. Three jobs, in order of how often they're needed:
 // copy your code (backup), paste a code (restore), start over (reset, with a
 // click-again confirm so one stray click can't wipe a member's history).
-function ProgressModal({ open, onClose, completed, onRestore, onResetProgress }) {
+function ProgressModal({ open, onClose, completed, reps, onRestore, onResetProgress }) {
   const [paste, setPaste] = uS('');
   const [msg, setMsg] = uS(null);
   const [confirmReset, setConfirmReset] = uS(false);
   uE(() => { if (open) { setPaste(''); setMsg(null); setConfirmReset(false); } }, [open]);
   if (!open) return null;
-  const code = encodeProgressCode(completed) || '';
+  const code = encodeProgressCode(completed, reps) || '';
   const doneCount = Object.keys(completed || {}).length;
   const copy = () => {
     try {
@@ -3580,10 +3618,11 @@ function ProgressModal({ open, onClose, completed, onRestore, onResetProgress })
     }
   };
   const restore = () => {
-    const clean = decodeProgressCode(paste);
-    if (!clean) { setMsg({ ok: false, text: 'That code doesn\'t look right. Paste the whole code, exactly as it was copied.' }); return; }
-    onRestore(clean);
-    setMsg({ ok: true, text: 'Progress restored: ' + Object.keys(clean).length + ' scenario' + (Object.keys(clean).length === 1 ? '' : 's') + ' marked complete.' });
+    const decoded = decodeProgressCode(paste);
+    if (!decoded) { setMsg({ ok: false, text: 'That code doesn\'t look right. Paste the whole code, exactly as it was copied.' }); return; }
+    onRestore(decoded);
+    const n = Object.keys(decoded.completed).length;
+    setMsg({ ok: true, text: 'Progress restored: ' + n + ' scenario' + (n === 1 ? '' : 's') + ' marked complete' + (decoded.reps != null && decoded.reps > 0 ? ', ' + decoded.reps + ' practice reps' : '') + '.' });
   };
   const inputStyle = {
     width: '100%', boxSizing: 'border-box', padding: '7px 9px', fontSize: 10,
@@ -3664,6 +3703,102 @@ function StableSlot({ levelKey, children }) {
   );
 }
 
+// First-run tour. One card, four things to know, shown once per browser.
+// Deliberately not a multi-step walkthrough: the lab teaches itself, this
+// just orients a first-timer and says out loud that the lab makes sound.
+function TourOverlay({ open, onClose }) {
+  if (!open) return null;
+  const row = (icon, title, body) => (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <div style={{ fontSize: 16, lineHeight: 1.2, width: 22, textAlign: 'center', flexShrink: 0 }}>{icon}</div>
+      <div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>{title}</div>
+        <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>{body}</div>
+      </div>
+    </div>
+  );
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(0,0,0,0.78)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        width: 500, maxWidth: '92vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
+        border: '1px solid var(--accent)', borderRadius: 10, padding: '20px 22px',
+        boxShadow: '0 0 0 1px rgba(255,201,58,0.15), 0 16px 48px rgba(0,0,0,0.8)',
+        display: 'flex', flexDirection: 'column', gap: 14,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <img src={window.AU_LOGO} alt="Audio University" style={{ height: 40, width: 40, display: 'block' }}/>
+          <div>
+            <div className="display" style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.1 }}>Welcome to the lab</div>
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 2 }}>Four things before you start</div>
+          </div>
+        </div>
+        {row('🎤', 'THE STAGE', 'The top half is the stage: the band\'s sources, the speakers, and every cable. Click a speaker to listen to it. Grab a cable end to repatch it.')}
+        {row('🎛', 'THE CONSOLE', 'The right side is the mixing console. Every knob, fader and button works like the real thing, and mistakes have real consequences, just like a gig. Hover any control for a quick description.')}
+        {row('🔊', 'TURN ON SOUND', 'This lab makes sound. Hit the SOUND button in the top bar so you can hear what you\'re doing. The bar at the bottom shows which speaker your ears are on.')}
+        {row('📋', 'THE WORK ORDER', 'The card next to the stage tells you the task or the symptom, tracks your objectives, and offers a hint. Green checks mean you\'re done.')}
+        <button onClick={onClose} className="mono ui-no-select" style={{
+          alignSelf: 'flex-start', padding: '9px 18px', fontSize: 11, fontWeight: 800, letterSpacing: 1,
+          background: 'linear-gradient(180deg, var(--accent), #c79a1f)', color: '#0a0a0c',
+          border: '1px solid #c79a1f', borderRadius: 5, cursor: 'pointer',
+        }}>LET'S GO →</button>
+      </div>
+    </div>
+  );
+}
+
+// Essentials completion card. Shows once, when the ninth lesson is done.
+// The free tier gets the membership pointer; members get sent straight to
+// Practice Mode. No URL on purpose — the page this app is embedded in
+// carries the join link.
+function CompletionCta({ open, onClose, tier, onGoPractice }) {
+  if (!open) return null;
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 92, background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: 470, maxWidth: '92vw', background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
+        border: '1px solid var(--green)', borderRadius: 10, padding: '20px 22px',
+        boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 16px 48px rgba(0,0,0,0.8)',
+        display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>🎓 THE ESSENTIALS · COMPLETE</div>
+        <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You can run a system now.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+          Power-on to power-down, you did the whole job: set input levels, tested every speaker, brought in mics and DIs, built a monitor mix, handled feedback, and shut it all down safely.
+        </div>
+        {tier === 'member' ? (
+          <>
+            <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
+              Practice Mode is open. The band is up, something is broken, and every rep hides a new fault. That's where this turns into a skill.
+            </div>
+            <button onClick={onGoPractice} className="mono ui-no-select" style={{
+              alignSelf: 'flex-start', padding: '9px 18px', fontSize: 11, fontWeight: 800, letterSpacing: 1,
+              background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+              border: '1px solid #2c9d52', borderRadius: 5, cursor: 'pointer',
+            }}>GO TO PRACTICE MODE →</button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
+              Members keep going in Practice Mode: the band is up, something is broken, and every rep hides a new fault in a new place, for as long as you want to train. It's part of the Audio University membership.
+            </div>
+            <button onClick={onClose} className="mono ui-no-select" style={{
+              alignSelf: 'flex-start', padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
+              background: '#1a1a1d', color: 'var(--ink-2)', border: '1px solid #38383e',
+              borderRadius: 5, cursor: 'pointer',
+            }}>KEEP PLAYING</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [levelIdx, setLevelIdx] = uS(0);
   const [state, setState] = uS(() => {
@@ -3677,6 +3812,11 @@ function App() {
   });
   const [solved, setSolved] = uS(false);
   const [audioOn, setAudioOn] = uS(false);
+  // Latch: has sound ever been on this session? Drives the SOUND button's
+  // first-run glow — it pulses until the first enable, then stays quiet
+  // even if the user mutes again.
+  const everSoundRef = uR(false);
+  uE(() => { if (audioOn) everSoundRef.current = true; }, [audioOn]);
   const [eqPanelOpen, setEqPanelOpen] = uS(false);
   // Free tier: clicking a locked challenge in the picker shows this pitch
   // overlay instead of loading the scenario.
@@ -3702,9 +3842,40 @@ function App() {
     return { ...prev, outputs: { ...prev.outputs, [key]: { ...w, eq } }, inspect: key };
   });
   const [completed, setCompleted] = uS(loadProgress);
-  // Persist completion whenever it changes, so progress survives refreshes and
-  // the monthly content drops members come back for.
+  // Persist completion whenever it changes, so progress survives refreshes.
   uE(() => { saveProgress(completed); }, [completed]);
+
+  // Practice Mode state. reps counts finished practice reps (persisted and
+  // carried in the save code); practiceFaults is the FAULTS difficulty
+  // selector (1-3 faults per rep, ref-mirrored so loadLevel never reads a
+  // stale value); practiceInfoRef holds the par + fault list of the current
+  // rep, written by the practice sabotage at load time, read by the debrief.
+  const [reps, setReps] = uS(loadReps);
+  uE(() => { try { window.localStorage.setItem(REPS_KEY, String(reps)); } catch (e) {} }, [reps]);
+  const [practiceFaults, setPracticeFaultsState] = uS(1);
+  const practiceFaultsRef = uR(1);
+  const practiceInfoRef = uR(null);
+
+  // First-run tour: shows once per browser, before anything else.
+  const [tourOpen, setTourOpen] = uS(() => {
+    try { return !window.localStorage.getItem(TOUR_KEY); } catch (e) { return false; }
+  });
+  const dismissTour = () => {
+    try { window.localStorage.setItem(TOUR_KEY, '1'); } catch (e) {}
+    setTourOpen(false);
+  };
+
+  // Essentials completion card: fires once, the first time every free
+  // lesson is complete.
+  const [ctaOpen, setCtaOpen] = uS(false);
+  uE(() => {
+    try {
+      if (window.localStorage.getItem(CTA_KEY)) return;
+      if (!window.LEVELS.every(l => completed[l.id])) return;
+      window.localStorage.setItem(CTA_KEY, '1');
+      setCtaOpen(true);
+    } catch (e) {}
+  }, [completed]);
 
   const level = SCENARIOS[levelIdx];
 
@@ -3840,7 +4011,7 @@ function App() {
         c.mute && c.fader <= ZTOL && c.gain <= ZTOL &&
         c.aux1 <= ZTOL && c.aux2 <= ZTOL &&
         Math.abs(c.pan - 0.5) <= ZTOL &&
-        !c.highpass && !c.lowCut && !c.phantom
+        !c.highpass && !c.phantom
       ) && state.master.mute && state.master.fader <= ZTOL
     );
     // Verify-each lesson (Test the System): latch each speaker the moment
@@ -3888,6 +4059,9 @@ function App() {
         stableRef.current = setTimeout(() => {
           setSolved(true);
           setCompleted(c => ({ ...c, [level.id]: true }));
+          // A finished practice rep counts, every time — that's the metric
+          // the debrief celebrates.
+          if (level.isPractice) setReps(r => r + 1);
         }, 900);
       }
     } else if (stableRef.current) {
@@ -3904,6 +4078,8 @@ function App() {
   uE(() => {
     if (!state.phantomPop) return;
     setPopFlash(true);
+    // The audible "ow" to go with the visual one. Only when sound is on.
+    if (audioOn) playPopSfx();
     const t = setTimeout(() => setPopFlash(false), 900);
     return () => clearTimeout(t);
   }, [state.phantomPop && state.phantomPop.at]);
@@ -3911,6 +4087,43 @@ function App() {
   const ctxRef = uR(null);
   const masterGainRef = uR(null);
   const chainsRef = uR({});
+
+  // Pop sound effect — fires on every pop event (phantom into a live
+  // channel, plug into a live channel, console power transient into live
+  // speakers, amp blast). A low thump plus a click of filtered noise, the
+  // shape of a real connector/DC transient. Plays straight to the device
+  // output rather than through the mix chains: a pop is an event in the
+  // room, not a signal on a bus, and it should be heard no matter which
+  // destination the engineer is monitoring.
+  const playPopSfx = () => {
+    const ctx = ctxRef.current;
+    if (!ctx || ctx.state !== 'running') return;
+    try {
+      const t0 = ctx.currentTime;
+      // Low thump: sine dropping 140 → 45 Hz with a fast decay.
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(140, t0);
+      osc.frequency.exponentialRampToValueAtTime(45, t0 + 0.18);
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0.5, t0);
+      og.gain.exponentialRampToValueAtTime(0.001, t0 + 0.28);
+      osc.connect(og); og.connect(ctx.destination);
+      osc.start(t0); osc.stop(t0 + 0.3);
+      // Contact click: a few milliseconds of decaying noise through a
+      // highpass, the "snap" on top of the thump.
+      const len = Math.floor(ctx.sampleRate * 0.04);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
+      const ng = ctx.createGain(); ng.gain.value = 0.3;
+      src.connect(hp); hp.connect(ng); ng.connect(ctx.destination);
+      src.start(t0);
+    } catch (e) {}
+  };
 
   uE(() => {
     let raf = 0;
@@ -4217,7 +4430,12 @@ function App() {
     base.channels = normalizeChannels(base.channels, deriveInvolves(lv));
     const seed = reuseSeed != null ? reuseSeed : ((Math.random() * 0xffffffff) >>> 0);
     seedRef.current = seed;
+    // Practice Mode reads the FAULTS selector through this global (content.js
+    // can't see React state), and reports the rep's par + fault keys back
+    // through PRACTICE_LAST for the debrief.
+    window.PRACTICE_FAULT_COUNT = practiceFaultsRef.current;
     const sab = lv.sabotage(base, mulberry32(seed));
+    if (lv.isPractice) practiceInfoRef.current = window.PRACTICE_LAST || null;
     sab.inspect = lv.defaultInspect || 'pa';
     setState(sab);
     setLevelIdx(i);
@@ -4251,7 +4469,7 @@ function App() {
       for (let i = 0; i < state.channels.length; i++) {
         const a = prev.channels[i], b = state.channels[i];
         if (a === b) continue;
-        for (const f of ['gain', 'fader', 'pan', 'aux1', 'aux2', 'mute', 'solo', 'phantom', 'highpass', 'lowCut']) {
+        for (const f of ['gain', 'fader', 'pan', 'aux1', 'aux2', 'mute', 'solo', 'phantom', 'highpass']) {
           if (a[f] !== b[f]) return 'ch' + i + '.' + f;
         }
       }
@@ -4297,6 +4515,12 @@ function App() {
   const restart = () => loadLevel(levelIdx, seedRef.current);
   // Practice Again rolls a new seed — same scenario, fresh fault placement.
   const practiceAgain = () => loadLevel(levelIdx);
+  // FAULTS difficulty change re-rolls the current rep at the new count.
+  const setPracticeFaults = (n) => {
+    practiceFaultsRef.current = n;
+    setPracticeFaultsState(n);
+    if (SCENARIOS[levelIdx] && SCENARIOS[levelIdx].isPractice) loadLevel(levelIdx);
+  };
   // Next into a locked challenge is allowed on purpose: loadLevel shows the
   // member pitch instead of the scenario (the picker does the same).
   const next = () => { if (levelIdx + 1 < SCENARIOS.length) loadLevel(levelIdx + 1); };
@@ -4373,7 +4597,7 @@ function App() {
       { label: 'Every fader down',      pass: chs.every(c => c.fader <= Z) },
       { label: 'Every channel muted',   pass: chs.every(c => c.mute) },
       { label: 'Every pan centered',    pass: chs.every(c => Math.abs(c.pan - 0.5) <= Z) },
-      { label: 'HPF and polarity off',  pass: chs.every(c => !c.highpass && !c.lowCut) },
+      { label: 'Every HPF off',         pass: chs.every(c => !c.highpass) },
       { label: '+48V off everywhere',   pass: chs.every(c => !c.phantom) },
       { label: 'Master down and muted', pass: state.master.mute && state.master.fader <= Z },
     ];
@@ -4410,7 +4634,13 @@ function App() {
         completed={completed}
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
         onOpenProgress={() => setSaveModalOpen(true)}
+        nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
+        practiceFaults={practiceFaults} onSetPracticeFaults={setPracticeFaults}
       />
+
+      <TourOverlay open={tourOpen} onClose={dismissTour}/>
+      <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
+        onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
         wedge={state.outputs.wedge} wedge2={state.outputs.wedge2}
@@ -4420,12 +4650,12 @@ function App() {
       />
 
       <ProgressModal open={saveModalOpen} onClose={() => setSaveModalOpen(false)}
-        completed={completed}
-        onRestore={(m) => setCompleted(m)}
-        onResetProgress={() => setCompleted({})}/>
+        completed={completed} reps={reps}
+        onRestore={(d) => { setCompleted(d.completed); if (d.reps != null) setReps(d.reps); }}
+        onResetProgress={() => { setCompleted({}); setReps(0); }}/>
 
-      {/* Member pitch — shown on the free tier when a locked challenge is
-          clicked. Short and honest; the locked list itself does the selling. */}
+      {/* Member pitch — shown on the free tier when locked Practice Mode is
+          clicked. Short and honest; the locked entry does the selling. */}
       {pitchFor && (
         <div onClick={() => setPitchFor(null)} style={{
           position: 'fixed', inset: 0, zIndex: 90,
@@ -4438,13 +4668,13 @@ function App() {
             boxShadow: '0 0 0 1px rgba(255,201,58,0.15), 0 12px 40px rgba(0,0,0,0.7)',
             display: 'flex', flexDirection: 'column', gap: 10,
           }}>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700 }}>🔒 MEMBER CHALLENGE</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700 }}>🔒 MEMBERS ONLY</div>
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-              The free lessons taught you to set up and run the system. Challenges train you to troubleshoot it: you get the symptom, there's no hint unless you ask for one, and the fault lands somewhere new on every attempt. New challenges drop every month.
+              The free lessons taught you to set up and run the system. Practice Mode trains you to troubleshoot it: the band is playing, something is broken, and every rep hides a new fault in a new place. Turn the difficulty up and it stacks two or three faults at once. Play as long as you want. There's always a next rep.
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
-              Challenges are part of the Audio University membership.
+              Practice Mode is part of the Audio University membership.
             </div>
             <button onClick={() => setPitchFor(null)} className="mono ui-no-select" style={{
               alignSelf: 'flex-start', padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
@@ -4472,7 +4702,13 @@ function App() {
                   {solved
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < SCENARIOS.length && !isLocked(SCENARIOS[levelIdx + 1])}
                         onPracticeAgain={level.isChallenge ? practiceAgain : null}
-                        debrief={level.isChallenge ? { moves: movesRef.current, par: level.par, hints: hintsUsedRef.current } : null}
+                        debrief={level.isChallenge ? {
+                          moves: movesRef.current,
+                          par: level.isPractice ? (practiceInfoRef.current ? practiceInfoRef.current.par : null) : level.par,
+                          hints: hintsUsedRef.current,
+                          faults: level.isPractice ? (practiceInfoRef.current && practiceInfoRef.current.faults ? practiceInfoRef.current.faults.length : practiceFaults) : null,
+                          rep: level.isPractice ? reps : null,
+                        } : null}
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={level.conditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
                         hintRevealed={hintRevealed} onRevealHint={() => { hintsUsedRef.current += 1; setHintRevealed(true); }}
@@ -4603,7 +4839,7 @@ function App() {
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, nudgeSound, practiceFaults, onSetPracticeFaults }) {
   const [picker, setPicker] = uS(false);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
   // column width, so this is the reliable "use my whole screen" path: it puts
@@ -4644,8 +4880,8 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         <button onClick={onPrev} disabled={levelIdx === 0} className="mono ui-no-select" style={navBtn}>←</button>
         <div onClick={() => setPicker(p => !p)} style={{ position: 'relative', cursor: 'pointer', minWidth: 320, textAlign: 'center' }} className="ui-no-select">
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5 }}>
-            {level.isChallenge
-              ? `CHALLENGE ${String(levelIdx - window.LEVELS.length + 1).padStart(2, '0')} / ${String(totalLevels - window.LEVELS.length).padStart(2, '0')}`
+            {level.isPractice
+              ? 'PRACTICE MODE · MEMBERS'
               : `LEVEL ${String(levelIdx + 1).padStart(2, '0')} / ${String(window.LEVELS.length).padStart(2, '0')}`}
           </div>
           <div className="display" style={{ fontSize: 16, fontWeight: 700, color: solved ? 'var(--green)' : 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -4662,7 +4898,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                   <React.Fragment key={l.id}>
                     {isFirstChallenge && (
                       <div className="mono" style={{ padding: '8px 10px 3px', fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left', borderTop: '1px solid #2a2a2e', marginTop: 4 }}>
-                        CHALLENGES · MEMBERS{TIER !== 'member' ? ' · 🔒' : ''}
+                        PRACTICE MODE · MEMBERS{TIER !== 'member' ? ' · 🔒' : ''}
                       </div>
                     )}
                     <div onClick={(e) => { e.stopPropagation(); onPick(i); setPicker(false); }} className="ui-no-select"
@@ -4670,9 +4906,9 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                       onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
                       onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
                       <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', width: 24 }}>
-                        {l.isChallenge ? 'C' + String(i - window.LEVELS.length + 1).padStart(2, '0') : String(i + 1).padStart(2, '0')}
+                        {l.isPractice ? '∞' : String(i + 1).padStart(2, '0')}
                       </div>
-                      <div style={{ flex: 1, fontSize: 12, textAlign: 'left' }}>{l.title}</div>
+                      <div style={{ flex: 1, fontSize: 12, textAlign: 'left' }}>{l.isPractice ? l.title + ' · endless reps' : l.title}</div>
                       {locked ? <div style={{ fontSize: 11 }}>🔒</div> : (completed[l.id] && <div style={{ color: 'var(--green)', fontSize: 12 }}>✓</div>)}
                     </div>
                   </React.Fragment>
@@ -4684,12 +4920,28 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         <button onClick={onNext} disabled={levelIdx + 1 >= totalLevels} className="mono ui-no-select" style={navBtn}>→</button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* FAULTS difficulty — Practice Mode only. How many faults each rep
+            hides; changing it re-rolls the rep at the new count. */}
+        {level.isPractice && onSetPracticeFaults && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }}>
+            <div className="mono" title="How many faults each practice rep hides" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>FAULTS</div>
+            {[1, 2, 3].map(n => (
+              <button key={n} onClick={() => onSetPracticeFaults(n)} className="mono ui-no-select" style={{
+                ...navBtn, padding: '6px 10px', fontWeight: 800,
+                background: practiceFaults === n ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d',
+                color: practiceFaults === n ? '#0a0a0c' : 'var(--ink-2)',
+                borderColor: practiceFaults === n ? '#2c5d9e' : '#38383e',
+              }}>{n}</button>
+            ))}
+          </div>
+        )}
         <button onClick={() => setAudioOn(!audioOn)} className="mono ui-no-select" style={{
           ...navBtn,
           background: audioOn ? 'linear-gradient(180deg, var(--green), #2c9d52)' : '#1a1a1d',
           color: audioOn ? '#0a0a0c' : 'var(--ink-2)',
-          borderColor: audioOn ? '#2c9d52' : '#38383e',
+          borderColor: audioOn ? '#2c9d52' : (nudgeSound ? 'var(--green)' : '#38383e'),
           fontWeight: 700, padding: '6px 12px',
+          animation: nudgeSound ? 'soundNudge 1.6s ease-in-out infinite' : 'none',
         }}>{audioOn ? '🔊 SOUND ON' : '🔇 SOUND OFF'}</button>
         {onToggleEq && (
           <button onClick={onToggleEq} className="mono ui-no-select" title="Graphic EQ on the monitor sends" style={{
@@ -4844,7 +5096,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
             );
           })()}
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-            WORK ORDER · {String(level.id).padStart(2, '0')}
+            {level.isPractice ? 'PRACTICE REP' : 'WORK ORDER · ' + String(level.id).padStart(2, '0')}
           </div>
         </div>
         <div className="display" style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.1, color: 'var(--ink)', letterSpacing: -0.01 }}>
@@ -5079,10 +5331,13 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <div className="mono" style={{ fontSize: 8, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>◎ DEBRIEF</div>
           <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-            You solved it in <b style={{ color: 'var(--ink)' }}>{debrief.moves} move{debrief.moves === 1 ? '' : 's'}</b>{debrief.par != null && <>. A systematic signal-path check finds this in about <b style={{ color: 'var(--ink)' }}>{debrief.par}</b></>}.
+            {debrief.faults != null
+              ? <>You fixed <b style={{ color: 'var(--ink)' }}>{debrief.faults} fault{debrief.faults === 1 ? '' : 's'}</b> in <b style={{ color: 'var(--ink)' }}>{debrief.moves} move{debrief.moves === 1 ? '' : 's'}</b></>
+              : <>You solved it in <b style={{ color: 'var(--ink)' }}>{debrief.moves} move{debrief.moves === 1 ? '' : 's'}</b></>}{debrief.par != null && <>. A systematic signal-path check does it in about <b style={{ color: 'var(--ink)' }}>{debrief.par}</b></>}.
           </div>
           <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
             Hints: {debrief.hints > 0 ? <b style={{ color: 'var(--amber)' }}>{debrief.hints} used</b> : <b style={{ color: 'var(--green)' }}>none</b>}.
+            {debrief.rep != null && <> That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} rep{debrief.rep === 1 ? '' : 's'}</b> finished.</>}
           </div>
           <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
             The method: walk the signal path from source to speaker, and check the cheap things first.
@@ -5103,19 +5358,19 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           ))}
         </div>
       )}
-      {onPracticeAgain && (
+      {level.isPractice ? (
+        /* Practice never ends — the primary action is always the next rep. */
         <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
           width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
-          background: '#0a0a0c', color: 'var(--cool)', border: '1px solid var(--cool)',
-          borderRadius: 3, cursor: 'pointer',
-        }}>↻ PRACTICE AGAIN · NEW FAULT</button>
-      )}
-      {hasNext ? (
+          background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+          border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
+        }}>NEXT REP · NEW FAULT →</button>
+      ) : hasNext ? (
         <button onClick={onNext} className="mono ui-no-select" style={{
           width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
           background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
           border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-        }}>{level.isChallenge ? 'NEXT CHALLENGE →' : 'NEXT LEVEL →'}</button>
+        }}>NEXT LEVEL →</button>
       ) : (
         <div className="mono" style={{ width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1, background: '#0a0a0c', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, textAlign: 'center' }}>🎓 ALL LEVELS COMPLETE</div>
       )}

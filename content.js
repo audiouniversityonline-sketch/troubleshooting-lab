@@ -7,8 +7,9 @@
    the app's babel blocks, so keep it plain JS (arrow functions
    are fine; no JSX).
 
-     window.LEVELS         - the free Essentials tier, in order.
-     window.CHALLENGE_BANK - paid-tier scenarios (dormant stubs).
+     window.LEVELS          - the free Essentials tier, in order.
+     window.PRACTICE        - the paid Practice Mode scenario (endless reps).
+     window.PRACTICE_FAULTS - the fault pool Practice Mode draws from.
 
    Rules that keep monthly drops from disturbing student progress:
      - Every entry has a STABLE id. Progress is saved by id.
@@ -41,9 +42,9 @@
 //                last.
 //   - requireZeroed : zero-the-console check. Passes when every channel is
 //                back to its default state (gain, aux1/aux2 and fader down,
-//                muted, pan centered, HPF + polarity (lowCut field) off,
-//                +48V off) and the master is down AND muted. Pair with
-//                requirePowerOff for the full end-of-night routine.
+//                muted, pan centered, HPF and +48V off) and the master is
+//                down AND muted. Pair with requirePowerOff for the full
+//                end-of-night routine.
 //   - verifyEach : [{source, dest, min, label}] — verify outputs one at a
 //                time. Each destination LATCHES checked the moment its source
 //                reaches it (>= min) and stays checked, so the win does NOT
@@ -86,8 +87,9 @@
 //                           (speakers verified with playback, then the band)
 //   9 Power-Down          - zero the console, then shut down in the right order
 // The early levels build on each other (each starts where the last ended).
-// Troubleshooting faults (Patch, Gain, PFL, Signal Path, Mute, Pan) live in the
-// paid CHALLENGE_BANK, where "something's broken, fix it" is the point.
+// Troubleshooting faults (cable, gain, fader, mute, pan, phantom, master,
+// speaker) live in the paid PRACTICE_FAULTS pool, where "something's broken,
+// fix it" is the point.
 // Source types: Vocal Mic 1 = dynamic, Vocal Mic 2 = condenser (+48V); Bass DI
 // = passive, Keyboard DI = active (diActive, needs +48V like a condenser). The
 // 5/6 playback is a FOH line input on channel 5 (no snake port).
@@ -404,31 +406,30 @@ window.LEVELS = [
     title: 'Power-Down',
     // The bookend, in two beats. Beat 1: ZERO THE CONSOLE (requireZeroed) —
     // every strip back to default: gain, aux sends and fader down, muted, pan
-    // centered, HPF + polarity (Ø) off, +48V off, master down AND muted. The
-    // next engineer powers on into a predictable desk. Beat 2: POWER OFF in
-    // reverse order (requirePowerOff): speakers off FIRST, console off LAST.
-    // Turning the console off while a powered speaker is still live plays the
-    // console's power-off transient through it (cause 'mixer_off_pop' — same
-    // physics as the Level 1 pop, opposite direction). Start state is the end
-    // of the night: the band's inputs still live at modest show levels (main
-    // bus is clean), with the kind of leftovers a real show leaves behind —
-    // pans pushed off center on the DIs, HPF still in on the vocal, polarity
-    // flipped on the condenser, +48V on the powered inputs.
+    // centered, HPF off, +48V off, master down AND muted. The next engineer
+    // powers on into a predictable desk. Beat 2: POWER OFF in reverse order
+    // (requirePowerOff): speakers off FIRST, console off LAST. Turning the
+    // console off while a powered speaker is still live plays the console's
+    // power-off transient through it (cause 'mixer_off_pop' — same physics
+    // as the Level 1 pop, opposite direction). Start state is the end of the
+    // night: the band's inputs still live at modest show levels (main bus is
+    // clean), with the kind of leftovers a real show leaves behind — pans
+    // pushed off center on the DIs, HPF still in on the vocal, +48V on the
+    // powered inputs.
     task: true,
     requirePowerOff: true,
     requireZeroed: true,
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The show is over and the band has gone home. Zero out the console, then shut the system down: gains, aux sends and faders all the way down, every channel muted, pans centered, HPF, polarity and +48V switches off, master down and muted. Then the wedges and PA speakers off, and the console off last.',
-    hint: 'Work down each strip: gain down, aux sends down, HPF and polarity off, +48V off, pan back to center, fader down, mute on. Then the master: all the way down and muted. Power-off is power-on in reverse: the speakers go off first and the console goes off last. A console makes a pop when it switches off, and any powered speaker still on will play that pop.',
+    symptom: 'The show is over and the band has gone home. Zero out the console, then shut the system down: gains, aux sends and faders all the way down, every channel muted, pans centered, HPF and +48V switches off, master down and muted. Then the wedges and PA speakers off, and the console off last.',
+    hint: 'Work down each strip: gain down, aux sends down, HPF off, +48V off, pan back to center, fader down, mute on. Then the master: all the way down and muted. Power-off is power-on in reverse: the speakers go off first and the console goes off last. A console makes a pop when it switches off, and any powered speaker still on will play that pop.',
     sabotage: (s) => {
       // End-of-night state: live mix at modest levels (clean), with realistic
       // show leftovers for the zero-out: off-center pans on the DIs, HPF in
-      // on the vocal, polarity (lowCut field) flipped on the condenser,
-      // phantom on the condenser + active DI.
+      // on the vocal, phantom on the condenser + active DI.
       s.channels[0].mute = false; s.channels[0].fader = 0.55; s.channels[0].gain = 0.3; s.channels[0].phantom = false; s.channels[0].aux1 = 0.45; s.channels[0].aux2 = 0; s.channels[0].highpass = true;
-      s.channels[1].mute = false; s.channels[1].fader = 0.55; s.channels[1].gain = 0.3; s.channels[1].phantom = true;  s.channels[1].aux1 = 0;    s.channels[1].aux2 = 0; s.channels[1].lowCut = true;
+      s.channels[1].mute = false; s.channels[1].fader = 0.55; s.channels[1].gain = 0.3; s.channels[1].phantom = true;  s.channels[1].aux1 = 0;    s.channels[1].aux2 = 0;
       s.channels[2].mute = false; s.channels[2].fader = 0.4;  s.channels[2].gain = 0.3; s.channels[2].phantom = true;  s.channels[2].aux1 = 0;    s.channels[2].aux2 = 0; s.channels[2].pan = 0.3;
       s.channels[3].mute = false; s.channels[3].fader = 0.4;  s.channels[3].gain = 0.3; s.channels[3].phantom = false; s.channels[3].aux1 = 0;    s.channels[3].aux2 = 0; s.channels[3].pan = 0.7;
       s.channels[4].mute = true;  s.channels[4].fader = 0;    s.channels[4].gain = 0;   s.channels[4].aux1 = 0;        s.channels[4].aux2 = 0;
@@ -445,28 +446,36 @@ window.LEVELS = [
   },
 ];
 
-// CHALLENGE_BANK — paid-tier launch inventory. LIVE as of 2026-06-11: the
-// app appends these to the picker after the Essentials. On the free tier
-// they show locked (clicking one shows the member pitch); with ?tier=member
-// on the URL they're playable.
+// PRACTICE MODE — the paid tier. One endless scenario instead of a fixed
+// challenge list: every rep starts with the band up and playing, then breaks
+// 1-3 things (the FAULTS selector in the top bar) drawn at random from the
+// fault pool below. The student finds and fixes them. The fault placement is
+// seeded per rep, so Reset replays the same rep and the next rep is always
+// new. Locked on the free tier; ?tier=member unlocks it.
 //
-// Challenge presentation (handled by the app, not by fields here):
-//   - The hint hides behind a "Need a hint?" button (hintAuto defaults false
-//     for challenges). Using it gets counted into the debrief.
-//   - The solution is never shown. The solve shows a DEBRIEF instead: moves
-//     taken vs `par` (the systematic-path move count), hints used.
-//   - sabotage receives (s, rng) — a seeded random generator. Place the
-//     fault with rng so a replay is a new rep, not a memory test. Reset
-//     replays the same seed; Practice Again rolls a new one.
+// This is the sustainability model: a new training rep costs zero authoring
+// time. Growing the product = adding entries to PRACTICE_FAULTS (data-only,
+// edit this file and deploy) or new fault physics (quarterly engine work —
+// hum + ground lift, cable crackle, and friends land here as new pool
+// entries when their engine support exists).
+//
+// Presentation (handled by the app, not by fields here):
+//   - Symptom only; the hint hides behind a "Need a hint?" button.
+//   - The solve shows a DEBRIEF (moves vs par, hints, rep count), never an
+//     answer key.
+//   - The app sets window.PRACTICE_FAULT_COUNT from the FAULTS selector
+//     before calling sabotage, and reads window.PRACTICE_LAST (par + fault
+//     keys for the debrief) after.
 //
 // The shared start state is bandUp(): the four band inputs live at healthy
 // show levels, playback muted, master at unity, PA + wedges up. Conditions
-// cover ALL FOUR sources, so the win is generic no matter which channel the
-// rng breaks — finding WHICH channel is the diagnosis being trained.
+// cover every source on BOTH sides of the PA, so the win is generic no
+// matter what the rng broke — and a hard-panned or one-sided fault can't
+// slip through.
 //
 // Numbers (power-summed engine): gain 0.4 -> chanIn 0.79, fader 0.6 ->
-// post 0.474 -> per-source PA contribution 0.277 (conditions min 0.2 with
-// margin); main bus 0.711, well under the 1.22 clip threshold.
+// post 0.474 -> per-source, per-side PA contribution 0.277 (conditions
+// min 0.2 with margin); main bus 0.711, well under the 1.22 clip threshold.
 function bandUp(s) {
   for (let i = 0; i < 4; i++) {
     s.channels[i].mute = false;
@@ -484,151 +493,62 @@ function bandUp(s) {
   return s;
 }
 const BAND_SOURCES = ['vocal', 'vocal2', 'guitar', 'laptop'];
-const BAND_CONDITIONS = [
-  { source: 'vocal',  dest: 'pa', min: 0.2 },
-  { source: 'vocal2', dest: 'pa', min: 0.2 },
-  { source: 'guitar', dest: 'pa', min: 0.2 },
-  { source: 'laptop', dest: 'pa', min: 0.2 },
+// 0-based indexes of the band channels that need +48V: ch2 condenser, ch3
+// active DI. The phantom fault can only land where phantom matters.
+const POWERED_IDX = [1, 2];
+
+// The fault pool. Each entry is ONE thing that can go wrong, applied on top
+// of the bandUp() start state. `apply` places the fault with the seeded rng.
+// `par` is the move count of the systematic fix — inspecting and listening
+// are free, so a one-knob fix is par 1; a safe replug or a safe +48V fix is
+// mute -> fix -> unmute, par 3 (plugging into a live channel, or switching
+// +48V on one, pops the system).
+window.PRACTICE_FAULTS = [
+  { key: 'cable',        par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
+  { key: 'gain',         par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].gain = 0; } },
+  { key: 'fader',        par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].fader = 0; } },
+  { key: 'mute',         par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].mute = true; } },
+  { key: 'pan',          par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].pan = rng() < 0.5 ? 0 : 1; } },
+  { key: 'phantom',      par: 3, apply: (s, rng) => { s.channels[POWERED_IDX[Math.floor(rng() * 2)]].phantom = false; } },
+  { key: 'master-mute',  par: 1, apply: (s)      => { s.master.mute = true; } },
+  { key: 'master-fader', par: 1, apply: (s)      => { s.master.fader = 0; } },
+  { key: 'pa-volume',    par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].volume = 0; } },
+  { key: 'pa-mute',      par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].mute = true; } },
 ];
-window.CHALLENGE_BANK = [
-  {
-    id: 'C-patch-cable',
-    title: 'Patch & Cable Check',
-    par: 3,
-    symptom: 'One of the band\'s channels is silent. The rest are working.',
-    hint: 'Check the cables before you touch any knobs. Each source card shows which channel its cable is plugged into. Mute the channel before you plug the cable back in: plugging into a live channel pops the PA.',
-    conditions: BAND_CONDITIONS,
-    sabotage: (s, rng) => {
-      bandUp(s);
-      const src = BAND_SOURCES[Math.floor((rng ? rng() : 0) * 4)];
-      s.cables[src] = 0;
-      return s;
-    },
-    solution: 'Find the unplugged cable and plug it back in, with the channel muted while you do it.',
-    defaultInspect: 'pa',
+
+// Win conditions: every band source audible on BOTH sides of the PA.
+const PRACTICE_CONDITIONS = [];
+for (const src of BAND_SOURCES) {
+  PRACTICE_CONDITIONS.push({ source: src, dest: 'pa_l', min: 0.2 });
+  PRACTICE_CONDITIONS.push({ source: src, dest: 'pa_r', min: 0.2 });
+}
+
+window.PRACTICE = {
+  id: 'practice',
+  title: 'Practice Mode',
+  symptom: 'The band is mid-show and something is wrong with the sound. Find what is broken and fix it, without popping anything. The FAULTS selector in the top bar sets how many things are broken at once.',
+  hint: 'Walk the signal path one stage at a time: source, cable, gain, mute, fader, master, speaker. The meters tell you where the signal stops. Check the cheap things first (a mute button before a cable run), and mute the channel before you plug a cable in or switch +48V.',
+  conditions: PRACTICE_CONDITIONS,
+  involves: [1, 2, 3, 4],
+  sabotage: (s, rng) => {
+    bandUp(s);
+    const r = rng || (() => 0);
+    const n = Math.max(1, Math.min(3, window.PRACTICE_FAULT_COUNT || 1));
+    // Distinct fault TYPES per rep. Two faults can still land on the same
+    // channel — that just makes the diagnosis honest work.
+    const pool = window.PRACTICE_FAULTS.slice();
+    let par = 0;
+    const faults = [];
+    for (let i = 0; i < n && pool.length > 0; i++) {
+      const f = pool.splice(Math.floor(r() * pool.length), 1)[0];
+      f.apply(s, r);
+      par += f.par;
+      faults.push(f.key);
+    }
+    window.PRACTICE_LAST = { par, faults };
+    return s;
   },
-  {
-    id: 'C-gain-staging',
-    title: 'Gain Staging',
-    par: 2,
-    symptom: 'One channel is barely registering on its meter, even though its fader is up. The audience can barely hear it.',
-    hint: 'Volume starts at the GAIN knob, not the fader. Find the channel with the low meter and turn its GAIN up until the meter sits in the healthy zone. Leave the fader where it is.',
-    conditions: BAND_CONDITIONS,
-    sabotage: (s, rng) => {
-      bandUp(s);
-      const i = Math.floor((rng ? rng() : 0) * 4);
-      s.channels[i].gain = 0;
-      return s;
-    },
-    solution: 'Turn up GAIN on the quiet channel until its meter sits in the healthy zone.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 'C-check-pfl',
-    title: 'Check in PFL',
-    task: true,
-    par: 4,
-    symptom: 'A channel got re-patched during the break and is still down. Before you bring it back up for the audience, use PFL to confirm in your headphones that it has signal.',
-    hint: 'Find the channel whose fader is down. Press its PFL and check the meter in your headphones. Release PFL, unmute it, and bring the fader back up.',
-    conditions: BAND_CONDITIONS,
-    requirePflCheck: true,
-    sabotage: (s, rng) => {
-      bandUp(s);
-      const i = Math.floor((rng ? rng() : 0) * 4);
-      s.channels[i].fader = 0;
-      s.channels[i].mute = true;
-      return s;
-    },
-    solution: 'PFL the down channel to confirm signal, release it, and bring the channel back up.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 'C-signal-path',
-    title: 'Signal Path',
-    par: 3,
-    symptom: 'Nothing is coming out of the PA. The band is playing.',
-    hint: 'Follow the signal from the source to the speaker, one stage at a time: gain, fader, master. Turn up each stage that\'s down along the way.',
-    conditions: BAND_CONDITIONS,
-    sabotage: (s, rng) => {
-      bandUp(s);
-      const i = Math.floor((rng ? rng() : 0) * 4);
-      s.channels[i].gain = 0;
-      s.channels[i].fader = 0;
-      s.master.fader = 0;
-      return s;
-    },
-    solution: 'One channel\'s gain and fader were down, and so was the master. Bring each stage back up.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 'C-pan-vocal',
-    title: 'Hard Panned',
-    par: 2,
-    symptom: 'One of the band is loud on one side of the room and missing on the other side.',
-    hint: 'Listen to each side of the PA, or look down the row of pan knobs. Find the channel panned hard to one side and bring it back to center.',
-    conditions: [
-      { source: 'vocal',  dest: 'pa_l', min: 0.2 }, { source: 'vocal',  dest: 'pa_r', min: 0.2 },
-      { source: 'vocal2', dest: 'pa_l', min: 0.2 }, { source: 'vocal2', dest: 'pa_r', min: 0.2 },
-      { source: 'guitar', dest: 'pa_l', min: 0.2 }, { source: 'guitar', dest: 'pa_r', min: 0.2 },
-      { source: 'laptop', dest: 'pa_l', min: 0.2 }, { source: 'laptop', dest: 'pa_r', min: 0.2 },
-    ],
-    sabotage: (s, rng) => {
-      bandUp(s);
-      const i = Math.floor((rng ? rng() : 0) * 4);
-      s.channels[i].pan = (rng ? rng() : 0) < 0.5 ? 0 : 1;
-      return s;
-    },
-    solution: 'Center the pan on the hard-panned channel.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 'C-mute-check',
-    title: 'Mute Check',
-    par: 2,
-    symptom: 'The meters are moving, but the room is silent.',
-    hint: 'Check the mute buttons before anything else. Look down the channel mutes, then check the master.',
-    conditions: BAND_CONDITIONS,
-    sabotage: (s, rng) => {
-      bandUp(s);
-      const i = Math.floor((rng ? rng() : 0) * 4);
-      s.channels[i].mute = true;
-      s.master.mute = true;
-      return s;
-    },
-    solution: 'Unmute the muted channel and the master.',
-    defaultInspect: 'pa',
-  },
-  // {
-  //   id: 'C-master-mute', title: 'Master Mute', ...
-  // },
-  // {
-  //   id: 'C-speakers-off', title: 'Speakers Off (Powered)', ...
-  // },
-  // {
-  //   id: 'C-second-monitor', title: 'Second Monitor', ...
-  // },
-  // {
-  //   id: 'C-silent-preshow', title: 'Silent Pre-Show', ...
-  // },
-  // {
-  //   id: 'C-multiple-faults', title: 'Multiple Faults', ...
-  // },
-  // {
-  //   id: 'C-wrong-channel', title: 'Wrong Channel', ...
-  // },
-  // {
-  //   id: 'C-foh-master', title: 'From the Booth (FOH)', ...
-  // },
-  // {
-  //   id: 'C-both-wedges', title: 'Both Wedges Live', ...
-  // },
-  // {
-  //   id: 'C-crossed-stage-box', title: 'Crossed at the Stage Box', ...
-  // },
-  // {
-  //   id: 'C-crossed-fan-out', title: 'Crossed at the Fan-Out', ...
-  // },
-  // {
-  //   id: 'C-soft-vocal', title: 'Soft Vocal (source-limited)', ...
-  // },
-];
+  // Never shown (the debrief replaces the answer key); kept for the contract.
+  solution: 'Walk the signal path and fix what is broken.',
+  defaultInspect: 'pa',
+};
