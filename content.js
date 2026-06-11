@@ -96,10 +96,11 @@
 // = passive, Keyboard DI = active (diActive, needs +48V like a condenser). The
 // 5/6 playback is a FOH line input on channel 5 (no snake port).
 // Extra contract field (2026-06-11):
-//   - requirePatch : win requires the physical patch to match the paperwork —
-//                sources on their listed stage-box ports, snake fan-out tails
-//                on their numbered channels, speaker cables on their planned
-//                out ports. Used by Patch the System and every practice rep.
+//   - requirePatch : win requires the physical patch to match the paperwork
+//                (the I/O LIST): sources on snake inputs 1-4, input tails on
+//                their console channels, console outputs into snake returns
+//                5-8 (outFan), and speaker lines on their numbered out ports
+//                (outPatch). Used by Patch the System and every practice rep.
 // Ids renumbered 2026-06-10 and again 2026-06-11 (Patch the System became
 // lesson 1), both pre-launch. After launch the append-only rule is absolute.
 window.LEVELS = [
@@ -107,34 +108,38 @@ window.LEVELS = [
     id: 1,
     title: 'Patch the System',
     // THE FIRST LESSON (Kyle, 2026-06-11): before anything gets powered on,
-    // the system gets CONNECTED, per paperwork, the way a pro does it. Three
-    // drag-and-drop jobs, all with the power off (the safe time to patch):
-    //   1. INPUTS - each source's cable into its stage-box port per the
-    //      input list (Vocal 1 -> 1, Vocal 2 -> 2, Bass DI -> 3, Keys DI -> 4).
-    //   2. OUTPUTS - each speaker's cable into its out port per the plan
-    //      (PA L -> MAIN L, PA R -> MAIN R, wedges -> their W outs).
-    //   3. SNAKE - the fan-out tails at FOH onto their numbered channels by
-    //      the US color standard (resistor code: 1 brown, 2 red, 3 orange,
-    //      4 yellow). The tails start COILED AND DISCONNECTED (fanOut 0s) —
-    //      this simulates a brand-new system setup, so nothing starts
-    //      crosspatched in the very first lesson.
-    // Win = requirePatch (all three identity checks); no signal conditions.
-    // The rig stays off the whole time. The next lesson begins "everything
-    // is connected" — this is where that becomes true.
+    // the system gets CONNECTED, per paperwork (the I/O LIST in the top
+    // bar), the way a pro does it. One 8-channel snake: inputs ride
+    // channels 1-4, outputs (returns) ride 5-8, colors per the standard
+    // code (1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet,
+    // 8 gray). Four drag-and-drop jobs, all with the power off:
+    //   1. INPUTS - each source's cable into its numbered stage-box port.
+    //   2. INPUT TAILS - the FOH fan-out tails 1-4 onto their console
+    //      channels, matched by color.
+    //   3. RETURN TAILS - the console outputs into snake 5-8 at FOH
+    //      (MAIN L -> 5, MAIN R -> 6, AUX 1 -> 7, AUX 2 -> 8).
+    //   4. SPEAKER LINES - each speaker's line into its numbered out port
+    //      at the stage box (PA L <- 5, PA R <- 6, W1 <- 7, W2 <- 8).
+    // EVERYTHING starts disconnected (a brand-new system is unconnected,
+    // never crosspatched). Win = requirePatch (four identity checks); no
+    // signal conditions. The rig stays off the whole time. The next lesson
+    // begins "everything is connected" — this is where that becomes true.
     task: true,
     requirePatch: true,
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'First job of the day: connect the system, with everything still powered off. Patch the inputs from the input list: Vocal Mic 1 to Input 1, Vocal Mic 2 to Input 2, Bass DI to Input 3, Keyboard DI to Input 4. Patch the outputs per the plan: PA L to MAIN L, PA R to MAIN R, and each wedge to its W output. Then connect the snake at the console: each tail goes to its numbered channel, and the colors follow the standard code, 1 brown, 2 red, 3 orange, 4 yellow.',
-    hint: 'Drag a cable end and drop it on a port. The main output lines follow the usual left/right colors: MAIN L is the white line, MAIN R is the red one. For the snake, match each tail color to its channel number: brown is 1, red is 2, orange is 3, yellow is 4. Patching with the power off is the professional habit: nothing can pop while the system is dead.',
+    symptom: 'First job of the day: connect the whole system from the paperwork, with everything still powered off. Open the I/O LIST in the top bar for the plan. Inputs ride snake channels 1 to 4: plug each source into its numbered input at the stage box, and land each tail on its console channel at FOH. Outputs ride the same snake on channels 5 to 8: connect the console outputs to tails 5 to 8, and run each speaker line to its numbered out port.',
+    hint: 'Drag a cable end and drop it on a port or an output chip. Dropping on a taken spot swaps the two cables. The colors follow the standard 8-channel snake code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray. Patching with the power off is the professional habit: nothing can pop while the system is dead.',
     sabotage: (s) => {
       // Load-in state: nothing connected anywhere. Input cables loose above
-      // the stage box, speaker lines loose below it, snake tails coiled
-      // below the fan-out (fanOut 0 = unplugged). Rig fully off, console
-      // zeroed (normalizeChannels covers the channels via involves []).
+      // the stage box, speaker lines loose below it, input tails coiled
+      // below the fan-out (fanOut 0 = unplugged), return tails coiled next
+      // to them (outFan nulls). Rig fully off, console zeroed
+      // (normalizeChannels covers the channels via involves []).
       s.cables = { vocal: 0, vocal2: 0, guitar: 0, laptop: 0 };
       s.fanOut = [0, 0, 0, 0];
+      s.outFan = { 5: null, 6: null, 7: null, 8: null };
       s.outPatch = { pa_l: null, pa_r: null, wedge: null, wedge2: null };
       s.master = { ...s.master, mute: true, fader: 0 };
       s.mixer = { on: false };
@@ -144,7 +149,7 @@ window.LEVELS = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
       return s;
     },
-    solution: 'Inputs per the list, outputs per the plan, and the snake tails matched to their colors. The system is connected and still safely off. Time to power on.',
+    solution: 'Everything connected per the I/O list: inputs on snake 1 to 4, outputs on 5 to 8, every color matched. The system is connected and still safely off. Time to power on.',
     defaultInspect: 'pa',
   },
   {
