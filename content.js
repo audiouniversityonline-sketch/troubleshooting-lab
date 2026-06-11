@@ -59,6 +59,13 @@
 //                master-only unity check (The Gig: playback ends turned down,
 //                so no single channel is pinned).
 //   - conditions, sabotage, defaultInspect, topology, involves: engine fields
+//   - sabotage(s, rng) : rng is a seeded PRNG the app passes on every load.
+//                Challenges place their fault with it (randomized reps);
+//                Essentials ignore it and stay deterministic.
+//   - par      : challenges only. The move count of a systematic check,
+//                shown against the student's own move count in the debrief.
+//   - hintAuto : presentation override. Defaults: Essentials show the hint
+//                up front, challenges keep it behind a "Need a hint?" button.
 //
 // Prose rule (Kyle, 2026-06-10): write simple and clear, not "in character."
 // Don't reach for engineer slang or scene-setting to sound like the niche.
@@ -438,91 +445,157 @@ window.LEVELS = [
   },
 ];
 
-// CHALLENGE_BANK — paid-tier launch inventory.
+// CHALLENGE_BANK — paid-tier launch inventory. LIVE as of 2026-06-11: the
+// app appends these to the picker after the Essentials. On the free tier
+// they show locked (clicking one shows the member pitch); with ?tier=member
+// on the URL they're playable.
 //
-// Cut from the free tutorial set: harder presentations of the consolidated
-// concepts (Master Mute, Powered Speakers, Second Monitor, Pre-Show,
-// FOH Master, Both Wedges, Soft Vocal) plus the always-paid combos (Multiple
-// Faults, Crossed at Stage Box, Crossed at Fan-Out). Currently dormant —
-// they're preserved here so Phase D can wire them into challenge mode without
-// re-authoring each config.
+// Challenge presentation (handled by the app, not by fields here):
+//   - The hint hides behind a "Need a hint?" button (hintAuto defaults false
+//     for challenges). Using it gets counted into the debrief.
+//   - The solution is never shown. The solve shows a DEBRIEF instead: moves
+//     taken vs `par` (the systematic-path move count), hints used.
+//   - sabotage receives (s, rng) — a seeded random generator. Place the
+//     fault with rng so a replay is a new rep, not a memory test. Reset
+//     replays the same seed; Practice Again rolls a new one.
 //
-// Voice has NOT been swept on these yet; that happens when they become
-// challenges (the room/meters split changes what the prose looks like).
+// The shared start state is bandUp(): the four band inputs live at healthy
+// show levels, playback muted, master at unity, PA + wedges up. Conditions
+// cover ALL FOUR sources, so the win is generic no matter which channel the
+// rng breaks — finding WHICH channel is the diagnosis being trained.
+//
+// Numbers (power-summed engine): gain 0.4 -> chanIn 0.79, fader 0.6 ->
+// post 0.474 -> per-source PA contribution 0.277 (conditions min 0.2 with
+// margin); main bus 0.711, well under the 1.22 clip threshold.
+function bandUp(s) {
+  for (let i = 0; i < 4; i++) {
+    s.channels[i].mute = false;
+    s.channels[i].fader = 0.6;
+    s.channels[i].gain = 0.4;
+    // Condenser (ch2) and active DI (ch3) need +48V to pass signal.
+    s.channels[i].phantom = (i === 1 || i === 2);
+  }
+  s.channels[4].mute = true; s.channels[4].fader = 0; s.channels[4].gain = 0;
+  s.master.mute = false; s.master.fader = 0.75;
+  s.outputs.pa_l.on = true; s.outputs.pa_l.mute = false; s.outputs.pa_l.volume = 0.6;
+  s.outputs.pa_r.on = true; s.outputs.pa_r.mute = false; s.outputs.pa_r.volume = 0.6;
+  s.outputs.wedge.on = true; s.outputs.wedge.mute = false; s.outputs.wedge.volume = 0.6;
+  s.outputs.wedge2.on = true; s.outputs.wedge2.mute = false; s.outputs.wedge2.volume = 0.6;
+  return s;
+}
+const BAND_SOURCES = ['vocal', 'vocal2', 'guitar', 'laptop'];
+const BAND_CONDITIONS = [
+  { source: 'vocal',  dest: 'pa', min: 0.2 },
+  { source: 'vocal2', dest: 'pa', min: 0.2 },
+  { source: 'guitar', dest: 'pa', min: 0.2 },
+  { source: 'laptop', dest: 'pa', min: 0.2 },
+];
 window.CHALLENGE_BANK = [
-  // Moved out of the Essentials 2026-06-10 PM when the free tier refocused on
-  // setup + standard input types (per Kyle). These are troubleshooting faults
-  // that belong in the paid Challenges, where "something's broken, fix it" is
-  // the point. Preserved verbatim; dormant until challenge mode ships.
   {
     id: 'C-patch-cable',
     title: 'Patch & Cable Check',
-    symptom: 'The vocal mic channel is silent. The other channels are working.',
-    hint: 'Check the cables before you touch any knobs. Each source card shows which channel its cable is plugged into.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.cables.vocal = 0; return s; },
-    solution: 'Plug the vocal mic back into channel 1.',
+    par: 3,
+    symptom: 'One of the band\'s channels is silent. The rest are working.',
+    hint: 'Check the cables before you touch any knobs. Each source card shows which channel its cable is plugged into. Mute the channel before you plug the cable back in: plugging into a live channel pops the PA.',
+    conditions: BAND_CONDITIONS,
+    sabotage: (s, rng) => {
+      bandUp(s);
+      const src = BAND_SOURCES[Math.floor((rng ? rng() : 0) * 4)];
+      s.cables[src] = 0;
+      return s;
+    },
+    solution: 'Find the unplugged cable and plug it back in, with the channel muted while you do it.',
     defaultInspect: 'pa',
   },
   {
     id: 'C-gain-staging',
     title: 'Gain Staging',
-    symptom: 'The vocal mic is barely registering on the channel meter, even though the fader is up.',
-    hint: 'Volume starts at the GAIN knob, not the fader. Turn up GAIN until the channel meter sits in the healthy zone. Leave the fader where it is.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].gain = 0; s.channels[0].fader = 0.75; return s; },
-    solution: 'Turn up GAIN on the vocal channel until the meter sits in the healthy zone.',
+    par: 2,
+    symptom: 'One channel is barely registering on its meter, even though its fader is up. The audience can barely hear it.',
+    hint: 'Volume starts at the GAIN knob, not the fader. Find the channel with the low meter and turn its GAIN up until the meter sits in the healthy zone. Leave the fader where it is.',
+    conditions: BAND_CONDITIONS,
+    sabotage: (s, rng) => {
+      bandUp(s);
+      const i = Math.floor((rng ? rng() : 0) * 4);
+      s.channels[i].gain = 0;
+      return s;
+    },
+    solution: 'Turn up GAIN on the quiet channel until its meter sits in the healthy zone.',
     defaultInspect: 'pa',
   },
   {
     id: 'C-check-pfl',
     title: 'Check in PFL',
     task: true,
-    symptom: 'A new vocal channel is plugged in. Before you bring it up for the audience, use PFL to check in your headphones that the channel is getting signal.',
-    hint: 'Press PFL on the vocal channel. You are now listening through the headphones. If you see and hear signal, release PFL and bring the fader up.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    par: 4,
+    symptom: 'A channel got re-patched during the break and is still down. Before you bring it back up for the audience, use PFL to confirm in your headphones that it has signal.',
+    hint: 'Find the channel whose fader is down. Press its PFL and check the meter in your headphones. Release PFL, unmute it, and bring the fader back up.',
+    conditions: BAND_CONDITIONS,
     requirePflCheck: true,
-    sabotage: (s) => { s.channels[0].fader = 0; return s; },
-    solution: 'Press PFL to check the channel in your headphones, release it, then bring the fader up.',
+    sabotage: (s, rng) => {
+      bandUp(s);
+      const i = Math.floor((rng ? rng() : 0) * 4);
+      s.channels[i].fader = 0;
+      s.channels[i].mute = true;
+      return s;
+    },
+    solution: 'PFL the down channel to confirm signal, release it, and bring the channel back up.',
     defaultInspect: 'pa',
   },
   {
     id: 'C-signal-path',
     title: 'Signal Path',
-    symptom: 'Nothing is coming out of the PA. Every level on the console is turned all the way down.',
-    hint: 'Follow the signal from the mic to the speaker and turn up each stage along the way.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].fader = 0; s.channels[0].gain = 0; s.master.fader = 0; return s; },
-    solution: 'Turn up the channel gain, the channel fader, and the master fader.',
+    par: 3,
+    symptom: 'Nothing is coming out of the PA. The band is playing.',
+    hint: 'Follow the signal from the source to the speaker, one stage at a time: gain, fader, master. Turn up each stage that\'s down along the way.',
+    conditions: BAND_CONDITIONS,
+    sabotage: (s, rng) => {
+      bandUp(s);
+      const i = Math.floor((rng ? rng() : 0) * 4);
+      s.channels[i].gain = 0;
+      s.channels[i].fader = 0;
+      s.master.fader = 0;
+      return s;
+    },
+    solution: 'One channel\'s gain and fader were down, and so was the master. Bring each stage back up.',
     defaultInspect: 'pa',
   },
   {
     id: 'C-pan-vocal',
-    title: 'Pan the Vocal',
-    // Cut from the Essentials 2026-06-10 when Test the System took its slot.
-    // Dormant until challenge mode ships; prose not yet reworked for the
-    // challenge presentation (symptom-only, hidden solution).
-    symptom: 'Vocal is loud on the left side of the room, missing on the right.',
-    hint: 'Find PAN on the vocal channel and set it back to center.',
+    title: 'Hard Panned',
+    par: 2,
+    symptom: 'One of the band is loud on one side of the room and missing on the other side.',
+    hint: 'Listen to each side of the PA, or look down the row of pan knobs. Find the channel panned hard to one side and bring it back to center.',
     conditions: [
-      { source: 'vocal', dest: 'pa_l', min: 0.25 },
-      { source: 'vocal', dest: 'pa_r', min: 0.25 },
+      { source: 'vocal',  dest: 'pa_l', min: 0.2 }, { source: 'vocal',  dest: 'pa_r', min: 0.2 },
+      { source: 'vocal2', dest: 'pa_l', min: 0.2 }, { source: 'vocal2', dest: 'pa_r', min: 0.2 },
+      { source: 'guitar', dest: 'pa_l', min: 0.2 }, { source: 'guitar', dest: 'pa_r', min: 0.2 },
+      { source: 'laptop', dest: 'pa_l', min: 0.2 }, { source: 'laptop', dest: 'pa_r', min: 0.2 },
     ],
-    sabotage: (s) => { s.channels[0].pan = 0; return s; },
-    solution: 'Pan the vocal to center.',
+    sabotage: (s, rng) => {
+      bandUp(s);
+      const i = Math.floor((rng ? rng() : 0) * 4);
+      s.channels[i].pan = (rng ? rng() : 0) < 0.5 ? 0 : 1;
+      return s;
+    },
+    solution: 'Center the pan on the hard-panned channel.',
     defaultInspect: 'pa',
   },
   {
     id: 'C-mute-check',
     title: 'Mute Check',
-    // Moved out of the Essentials 2026-06-10 when System Gain Structure took a
-    // slot and Kyle chose to hold the free tier at 10. Dormant until challenge
-    // mode ships. Two beats: a channel mute and a master mute, both engaged.
-    symptom: 'The vocal channel meter is moving, but the room is silent.',
-    hint: 'Check the mute buttons first. Look at the channel mutes, then the master.',
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
-    sabotage: (s) => { s.channels[0].mute = true; s.master.mute = true; return s; },
-    solution: 'Unmute the vocal channel and the master.',
+    par: 2,
+    symptom: 'The meters are moving, but the room is silent.',
+    hint: 'Check the mute buttons before anything else. Look down the channel mutes, then check the master.',
+    conditions: BAND_CONDITIONS,
+    sabotage: (s, rng) => {
+      bandUp(s);
+      const i = Math.floor((rng ? rng() : 0) * 4);
+      s.channels[i].mute = true;
+      s.master.mute = true;
+      return s;
+    },
+    solution: 'Unmute the muted channel and the master.',
     defaultInspect: 'pa',
   },
   // {

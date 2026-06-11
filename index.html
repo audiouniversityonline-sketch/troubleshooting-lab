@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=18"></script>
+<script src="content.js?v=19"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -3504,6 +3504,43 @@ function MobileNotice() {
   );
 }
 
+// ── Tiers and the combined scenario list ────────────────────────────────
+// One app, two Circle pages. The member page embeds this same URL with
+// ?tier=member on the iframe src; the free page embeds it bare. The free
+// page still SHOWS the challenges in the picker — locked, doing quiet sales
+// work — and clicking one shows a short member pitch instead of the
+// scenario. A query parameter is obscurity, not security; accepted by
+// design (the paid value is the monthly drops, coaching, and community).
+const TIER = (() => {
+  try {
+    return new URLSearchParams(window.location.search).get('tier') === 'member' ? 'member' : 'free';
+  } catch (e) { return 'free'; }
+})();
+
+// The picker runs off one combined list: the free Essentials in order, then
+// the challenge bank. Challenges carry isChallenge, which switches the whole
+// presentation: hint behind a button, solution hidden after the solve
+// (debrief instead), randomized fault placement via the seeded rng.
+const SCENARIOS = [
+  ...window.LEVELS,
+  ...((window.CHALLENGE_BANK || []).map(c => ({ ...c, isChallenge: true }))),
+];
+const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
+
+// Small fast seeded PRNG (mulberry32). Challenge sabotages take (s, rng) and
+// place the fault with it, so replaying a challenge is a fresh rep instead
+// of a memory test. The seed lives in a ref: Reset replays the SAME attempt
+// (same seed), Practice Again rolls a new one. Essentials ignore the rng and
+// stay deterministic.
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // Locks the brief/solved sidebar slot to its measured height at level load.
 // Without this, warning text swapping in and out (feedback, clipping, pop
 // messages) changes the BriefCard's height, which changes the canvas height,
@@ -3532,7 +3569,7 @@ function App() {
   const [levelIdx, setLevelIdx] = uS(0);
   const [state, setState] = uS(() => {
     const base = window.defaultState();
-    const lv0 = window.LEVELS[0];
+    const lv0 = SCENARIOS[0];
     base.topology = { ...base.topology, ...(lv0.topology || {}) };
     base.channels = normalizeChannels(base.channels, deriveInvolves(lv0));
     const s = lv0.sabotage(base);
@@ -3542,6 +3579,22 @@ function App() {
   const [solved, setSolved] = uS(false);
   const [audioOn, setAudioOn] = uS(false);
   const [eqPanelOpen, setEqPanelOpen] = uS(false);
+  // Free tier: clicking a locked challenge in the picker shows this pitch
+  // overlay instead of loading the scenario.
+  const [pitchFor, setPitchFor] = uS(null);
+  // Challenge presentation state. hintRevealed gates the hint zone behind a
+  // button on challenges (Essentials keep their always-visible hints);
+  // using the hint is counted into the debrief, not punished.
+  const [hintRevealed, setHintRevealed] = uS(false);
+  const hintsUsedRef = uR(0);
+  // Gesture-level move counter for the debrief: one fader drag is one move,
+  // not fifty state updates. Counted by diffing consecutive states at the
+  // app's single state choke point (the effect below).
+  const movesRef = uR(0);
+  const prevStateRef = uR(null);
+  const lastMoveRef = uR({ key: null, at: 0 });
+  // Seed of the current attempt. Reset replays it; Practice Again re-rolls.
+  const seedRef = uR(1);
   // Cut one band on a wedge's monitor EQ, following the ears to that wedge.
   const setMonitorEqBand = (key, band, v) => setState(prev => {
     const w = prev.outputs[key]; const eq = (w.eq || [0, 0, 0, 0, 0]).slice(); eq[band] = v;
@@ -3552,7 +3605,7 @@ function App() {
   // the monthly content drops members come back for.
   uE(() => { saveProgress(completed); }, [completed]);
 
-  const level = window.LEVELS[levelIdx];
+  const level = SCENARIOS[levelIdx];
 
   // Tracks whether the engineer engaged PFL on a relevant channel at any
   // point during this level. Reset on level change. Used by Level 7
@@ -4052,23 +4105,80 @@ function App() {
     return () => clearInterval(id);
   }, [audio.outputs.pa_l, audio.outputs.pa_r, audio.outputs.wedge, audio.outputs.wedge2]);
 
-  const loadLevel = (i) => {
+  // Load a scenario. reuseSeed replays the same attempt (Reset); omitting it
+  // rolls a fresh seed (level change, Practice Again), which is what makes a
+  // challenge replay a new rep instead of a memory test.
+  const loadLevel = (i, reuseSeed) => {
+    const lv = SCENARIOS[i];
+    if (!lv || isLocked(lv)) { if (lv) setPitchFor(lv); return; }
     const base = window.defaultState();
-    const lv = window.LEVELS[i];
     base.topology = { ...base.topology, ...(lv.topology || {}) };
     base.channels = normalizeChannels(base.channels, deriveInvolves(lv));
-    const sab = lv.sabotage(base);
+    const seed = reuseSeed != null ? reuseSeed : ((Math.random() * 0xffffffff) >>> 0);
+    seedRef.current = seed;
+    const sab = lv.sabotage(base, mulberry32(seed));
     sab.inspect = lv.defaultInspect || 'pa';
     setState(sab);
     setLevelIdx(i);
     setSolved(false);
+    setEqPanelOpen(false);
     // Reset the procedural PFL tracker so each level scores its own
     // workflow rather than counting an earlier solo as a check.
     pflCheckedRef.current = false;
     pflChannelsRef.current = {};
     // Reset the per-speaker verify latches so each attempt starts unchecked.
     verifiedRef.current = {};
+    // Fresh attempt: move counter and hint state restart, and the diff
+    // baseline jumps to the new start state so the load itself isn't a move.
+    movesRef.current = 0;
+    hintsUsedRef.current = 0;
+    setHintRevealed(false);
+    prevStateRef.current = sab;
+    lastMoveRef.current = { key: null, at: 0 };
   };
+
+  // Gesture-level move counting. Diff consecutive states and attribute the
+  // change to a control key; repeated changes to the SAME control inside a
+  // short window are one gesture (a fader drag), a different control or a
+  // pause starts a new move. Listening-position changes (inspect) and
+  // consequences (phantomPop) aren't moves — they're free, like looking.
+  uE(() => {
+    const prev = prevStateRef.current;
+    prevStateRef.current = state;
+    if (!prev || prev === state || solved) return;
+    const key = (() => {
+      for (let i = 0; i < state.channels.length; i++) {
+        const a = prev.channels[i], b = state.channels[i];
+        if (a === b) continue;
+        for (const f of ['gain', 'fader', 'pan', 'aux1', 'aux2', 'mute', 'solo', 'phantom', 'highpass', 'lowCut']) {
+          if (a[f] !== b[f]) return 'ch' + i + '.' + f;
+        }
+      }
+      for (const f of ['fader', 'mute', 'aux1', 'aux2']) {
+        if (prev.master[f] !== state.master[f]) return 'master.' + f;
+      }
+      const po = prev.outputs, no = state.outputs;
+      for (const k of Object.keys(no)) {
+        const a = po[k], b = no[k];
+        if (!a || a === b) continue;
+        for (const f of ['on', 'mute', 'volume']) { if (a[f] !== b[f]) return 'out.' + k + '.' + f; }
+        if (JSON.stringify(a.eq || null) !== JSON.stringify(b.eq || null)) return 'out.' + k + '.eq';
+      }
+      const pm = prev.mixer ? prev.mixer.on !== false : true;
+      const nm = state.mixer ? state.mixer.on !== false : true;
+      if (pm !== nm) return 'mixer.on';
+      if (JSON.stringify(prev.cables) !== JSON.stringify(state.cables)) return 'cables';
+      return null;
+    })();
+    if (!key) return;
+    const now = Date.now();
+    if (key === lastMoveRef.current.key && now - lastMoveRef.current.at < 700) {
+      lastMoveRef.current.at = now; // same gesture, still dragging
+      return;
+    }
+    lastMoveRef.current = { key, at: now };
+    movesRef.current += 1;
+  }, [state]);
 
   // Track when the engineer engages PFL on any channel during the level.
   // The ref is a one-way latch — once true, it stays true until level change.
@@ -4082,8 +4192,13 @@ function App() {
       state.channels.forEach((c, i) => { if (c.solo) pflChannelsRef.current[i + 1] = true; });
     }
   }, [state.channels]);
-  const restart = () => loadLevel(levelIdx);
-  const next = () => { if (levelIdx + 1 < window.LEVELS.length) loadLevel(levelIdx + 1); };
+  // Reset replays the same attempt: same seed, same fault placement.
+  const restart = () => loadLevel(levelIdx, seedRef.current);
+  // Practice Again rolls a new seed — same scenario, fresh fault placement.
+  const practiceAgain = () => loadLevel(levelIdx);
+  // Next into a locked challenge is allowed on purpose: loadLevel shows the
+  // member pitch instead of the scenario (the picker does the same).
+  const next = () => { if (levelIdx + 1 < SCENARIOS.length) loadLevel(levelIdx + 1); };
   const prev = () => { if (levelIdx > 0) loadLevel(levelIdx - 1); };
 
   // Gate to desktop. Every hook below must be called before the early return
@@ -4188,7 +4303,7 @@ function App() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'radial-gradient(ellipse at 30% 0%, #1a1a1f 0%, #0e0e10 50%, #08080a 100%)', position: 'relative' }}>
       <TopBar
-        level={level} levelIdx={levelIdx} totalLevels={window.LEVELS.length}
+        level={level} levelIdx={levelIdx} totalLevels={SCENARIOS.length}
         solved={solved} audioOn={audioOn} setAudioOn={setAudioOn}
         onRestart={restart} onPrev={prev} onNext={next} onPick={loadLevel}
         completed={completed}
@@ -4201,6 +4316,37 @@ function App() {
         ringWedge={feedback ? feedback.ringWedge : null}
         ringBand={feedback ? feedback.ringBand : null}
       />
+
+      {/* Member pitch — shown on the free tier when a locked challenge is
+          clicked. Short and honest; the locked list itself does the selling. */}
+      {pitchFor && (
+        <div onClick={() => setPitchFor(null)} style={{
+          position: 'fixed', inset: 0, zIndex: 90,
+          background: 'rgba(0,0,0,0.65)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            maxWidth: 420, background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
+            border: '1px solid var(--accent)', borderRadius: 8, padding: '18px 20px',
+            boxShadow: '0 0 0 1px rgba(255,201,58,0.15), 0 12px 40px rgba(0,0,0,0.7)',
+            display: 'flex', flexDirection: 'column', gap: 10,
+          }}>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700 }}>🔒 MEMBER CHALLENGE</div>
+            <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+              The free lessons taught you to set up and run the system. Challenges train you to troubleshoot it: you get the symptom, there's no hint unless you ask for one, and the fault lands somewhere new on every attempt. New challenges drop every month.
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
+              Challenges are part of the Audio University membership.
+            </div>
+            <button onClick={() => setPitchFor(null)} className="mono ui-no-select" style={{
+              alignSelf: 'flex-start', padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
+              background: '#1a1a1d', color: 'var(--ink-2)', border: '1px solid #38383e',
+              borderRadius: 4, cursor: 'pointer',
+            }}>BACK TO THE LESSONS</button>
+          </div>
+        </div>
+      )}
 
       {/* Scale-to-fit viewport. The scroll container is now the measurement
           box; inside it an absolutely-positioned flex layer centers the fixed
@@ -4217,9 +4363,12 @@ function App() {
                 sidebarContent={
                   <StableSlot levelKey={levelIdx}>
                   {solved
-                    ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < window.LEVELS.length}
+                    ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < SCENARIOS.length && !isLocked(SCENARIOS[levelIdx + 1])}
+                        onPracticeAgain={level.isChallenge ? practiceAgain : null}
+                        debrief={level.isChallenge ? { moves: movesRef.current, par: level.par, hints: hintsUsedRef.current } : null}
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={level.conditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
+                        hintRevealed={hintRevealed} onRevealHint={() => { hintsUsedRef.current += 1; setHintRevealed(true); }}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
                         verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus}
                         powerStatus={(() => {
@@ -4387,23 +4536,41 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, justifyContent: 'center' }}>
         <button onClick={onPrev} disabled={levelIdx === 0} className="mono ui-no-select" style={navBtn}>←</button>
         <div onClick={() => setPicker(p => !p)} style={{ position: 'relative', cursor: 'pointer', minWidth: 320, textAlign: 'center' }} className="ui-no-select">
-          <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5 }}>LEVEL {String(levelIdx + 1).padStart(2, '0')} / {String(totalLevels).padStart(2, '0')}</div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5 }}>
+            {level.isChallenge
+              ? `CHALLENGE ${String(levelIdx - window.LEVELS.length + 1).padStart(2, '0')} / ${String(totalLevels - window.LEVELS.length).padStart(2, '0')}`
+              : `LEVEL ${String(levelIdx + 1).padStart(2, '0')} / ${String(window.LEVELS.length).padStart(2, '0')}`}
+          </div>
           <div className="display" style={{ fontSize: 16, fontWeight: 700, color: solved ? 'var(--green)' : 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             {solved && <span style={{ fontSize: 12 }}>✓</span>}{level.title}
             <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>▾</span>
           </div>
           {picker && (
             <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8, background: '#16161a', border: '1px solid #38383e', borderRadius: 6, padding: 6, zIndex: 50, minWidth: 340, boxShadow: '0 12px 32px rgba(0,0,0,0.6)', maxHeight: '70vh', overflow: 'auto' }}>
-              {window.LEVELS.map((l, i) => (
-                <div key={l.id} onClick={(e) => { e.stopPropagation(); onPick(i); setPicker(false); }} className="ui-no-select"
-                  style={{ padding: '6px 10px', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: i === levelIdx ? '#2a2a2e' : 'transparent' }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
-                  <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', width: 24 }}>{String(i + 1).padStart(2, '0')}</div>
-                  <div style={{ flex: 1, fontSize: 12 }}>{l.title}</div>
-                  {completed[l.id] && <div style={{ color: 'var(--green)', fontSize: 12 }}>✓</div>}
-                </div>
-              ))}
+              <div className="mono" style={{ padding: '5px 10px 3px', fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left' }}>THE ESSENTIALS · FREE</div>
+              {SCENARIOS.map((l, i) => {
+                const locked = isLocked(l);
+                const isFirstChallenge = l.isChallenge && i === window.LEVELS.length;
+                return (
+                  <React.Fragment key={l.id}>
+                    {isFirstChallenge && (
+                      <div className="mono" style={{ padding: '8px 10px 3px', fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left', borderTop: '1px solid #2a2a2e', marginTop: 4 }}>
+                        CHALLENGES · MEMBERS{TIER !== 'member' ? ' · 🔒' : ''}
+                      </div>
+                    )}
+                    <div onClick={(e) => { e.stopPropagation(); onPick(i); setPicker(false); }} className="ui-no-select"
+                      style={{ padding: '6px 10px', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: i === levelIdx ? '#2a2a2e' : 'transparent', opacity: locked ? 0.6 : 1 }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
+                      <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', width: 24 }}>
+                        {l.isChallenge ? 'C' + String(i - window.LEVELS.length + 1).padStart(2, '0') : String(i + 1).padStart(2, '0')}
+                      </div>
+                      <div style={{ flex: 1, fontSize: 12, textAlign: 'left' }}>{l.title}</div>
+                      {locked ? <div style={{ fontSize: 11 }}>🔒</div> : (completed[l.id] && <div style={{ color: 'var(--green)', fontSize: 12 }}>✓</div>)}
+                    </div>
+                  </React.Fragment>
+                );
+              })}
             </div>
           )}
         </div>
@@ -4439,7 +4606,11 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus }) {
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, hintRevealed, onRevealHint }) {
+  // Essentials show their hint up front (they're lessons). Challenges keep it
+  // behind a button (they're tests) — asking is fine and gets counted into
+  // the debrief, never punished. A level can override with hintAuto.
+  const hintAuto = level.hintAuto != null ? level.hintAuto : !level.isChallenge;
   // Compute per-condition pass / level, and whether all conditions pass.
   const condStates = (conditions || []).map(c => {
     const cont = audio.contributions[c.source];
@@ -4752,18 +4923,33 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
         </div>
       )}
 
-      {/* HINT zone — single string per level (new contract). */}
-      {level.hint && (
+      {/* HINT zone — single string per level. Essentials show it up front;
+          challenges keep it behind a button until asked. */}
+      {level.hint && (hintAuto || hintRevealed) && (
         <div style={zoneStyle('var(--amber)', 'rgba(255,181,71,0.06)')}>
           {zoneLabel('var(--amber)', '💡 HINT')}
           <div style={{ color: 'var(--ink)', fontSize: 11.5, lineHeight: 1.4 }}>{level.hint}</div>
+        </div>
+      )}
+      {level.hint && !hintAuto && !hintRevealed && (
+        <div style={zoneStyle('var(--amber)', 'rgba(255,181,71,0.04)')}>
+          {zoneLabel('var(--amber)', '💡 HINT')}
+          <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+            Work it out from the symptom if you can. Asking is fine too — it just gets noted in your debrief.
+          </div>
+          <button onClick={onRevealHint} className="mono ui-no-select" style={{
+            alignSelf: 'flex-start',
+            padding: '6px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+            color: 'var(--amber)', background: 'rgba(255,181,71,0.08)', border: '1px solid var(--amber)',
+            borderRadius: 4, cursor: 'pointer',
+          }}>NEED A HINT?</button>
         </div>
       )}
     </div>
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, coaching }) {
+function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -4775,9 +4961,28 @@ function SolvedCard({ level, onNext, hasNext, coaching }) {
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>{level.task ? '✓ TASK COMPLETE' : '✓ MIX RESTORED'}</div>
         <div className="display" style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.1 }}>{level.title}</div>
       </div>
-      <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-        <span style={{ color: 'var(--green)', fontWeight: 600 }}>{level.task ? 'Recap: ' : 'Fix: '}</span>{level.solution}
-      </div>
+      {/* Challenges get a DEBRIEF instead of the answer key: how many moves
+          the solve took against the systematic path, and whether a hint was
+          used. The comparison is the coaching — no grades, no medals.
+          Essentials keep showing the solution, because they're lessons. */}
+      {debrief ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div className="mono" style={{ fontSize: 8, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>◎ DEBRIEF</div>
+          <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+            You solved it in <b style={{ color: 'var(--ink)' }}>{debrief.moves} move{debrief.moves === 1 ? '' : 's'}</b>{debrief.par != null && <>. A systematic signal-path check finds this in about <b style={{ color: 'var(--ink)' }}>{debrief.par}</b></>}.
+          </div>
+          <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+            Hints: {debrief.hints > 0 ? <b style={{ color: 'var(--amber)' }}>{debrief.hints} used</b> : <b style={{ color: 'var(--green)' }}>none</b>}.
+          </div>
+          <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
+            The method: walk the signal path from source to speaker, and check the cheap things first.
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+          <span style={{ color: 'var(--green)', fontWeight: 600 }}>{level.task ? 'Recap: ' : 'Fix: '}</span>{level.solution}
+        </div>
+      )}
       {Array.isArray(coaching) && coaching.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, borderTop: '1px solid rgba(255,181,71,0.22)', paddingTop: 5 }}>
           <div className="mono" style={{ fontSize: 8, color: 'var(--amber)', letterSpacing: 1.4, fontWeight: 700 }}>⚠ COACHING</div>
@@ -4788,12 +4993,19 @@ function SolvedCard({ level, onNext, hasNext, coaching }) {
           ))}
         </div>
       )}
+      {onPracticeAgain && (
+        <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
+          width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+          background: '#0a0a0c', color: 'var(--cool)', border: '1px solid var(--cool)',
+          borderRadius: 3, cursor: 'pointer',
+        }}>↻ PRACTICE AGAIN · NEW FAULT</button>
+      )}
       {hasNext ? (
         <button onClick={onNext} className="mono ui-no-select" style={{
           width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
           background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
           border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-        }}>NEXT LEVEL →</button>
+        }}>{level.isChallenge ? 'NEXT CHALLENGE →' : 'NEXT LEVEL →'}</button>
       ) : (
         <div className="mono" style={{ width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1, background: '#0a0a0c', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, textAlign: 'center' }}>🎓 ALL LEVELS COMPLETE</div>
       )}
