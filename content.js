@@ -39,18 +39,25 @@
 //                powered box is still live pops it (cause 'mixer_off_pop'),
 //                so the order the level teaches is: speakers first, console
 //                last.
+//   - requireZeroed : zero-the-console check. Passes when every channel is
+//                back to its default state (gain, aux1/aux2 and fader down,
+//                muted, pan centered, HPF + polarity (lowCut field) off,
+//                +48V off) and the master is down AND muted. Pair with
+//                requirePowerOff for the full end-of-night routine.
 //   - verifyEach : [{source, dest, min, label}] — verify outputs one at a
 //                time. Each destination LATCHES checked the moment its source
 //                reaches it (>= min) and stays checked, so the win does NOT
 //                need them all live at once. Win when every entry is checked.
 //                Use with conditions: [] and an explicit involves.
-//   - gainStructure : { refChannel, unity, faderTol, inputBand? } — gain-
+//   - gainStructure : { refChannel?, unity, faderTol, inputBand? } — gain-
 //                structure lesson. Win also requires the reference channel's
 //                fader AND the master fader to sit at unity (within faderTol).
 //                Optional inputBand [lo, hi] also requires the ref channel's
 //                input (chanIn baseline) to sit in a healthy band, so the
 //                student sets the input gain by hand (pair with requirePflCheck
-//                to make them verify it in PFL first).
+//                to make them verify it in PFL first). Omit refChannel for a
+//                master-only unity check (The Gig: playback ends turned down,
+//                so no single channel is pinned).
 //   - conditions, sabotage, defaultInspect, topology, involves: engine fields
 //
 // Prose rule (Kyle, 2026-06-10): write simple and clear, not "in character."
@@ -68,8 +75,9 @@
 //   5 DI Boxes            - passive (no power) + active (+48V)
 //   6 Monitor Mix         - send a wedge mix
 //   7 Feedback Awareness  - keep the monitor loop under control
-//   8 The Gig             - final exam: the whole setup from a cold start
-//   9 Power-Down          - shut the system down in the right order
+//   8 The Gig             - final exam: full line check from a cold start
+//                           (speakers verified with playback, then the band)
+//   9 Power-Down          - zero the console, then shut down in the right order
 // The early levels build on each other (each starts where the last ended).
 // Troubleshooting faults (Patch, Gain, PFL, Signal Path, Mute, Pan) live in the
 // paid CHALLENGE_BANK, where "something's broken, fix it" is the point.
@@ -332,34 +340,37 @@ window.LEVELS = [
     // FINAL EXAM. Everything from Levels 1-7 performed start to finish from a
     // cold venue, with no new skills. This is a LINE CHECK, the objective
     // version of soundcheck: nobody judges the blend, the student proves every
-    // signal arrives clean. Win = power-on order (requirePowerOn) + playback
-    // reference at unity with healthy input gain (gainStructure) + room level
-    // (playback PA corridor, same numbers as Set the Input Level) + every
-    // input PFL'd (requirePflEach 1-5) + every source present in the PA + the
-    // singer's wedge running, all with no pop / clip / ring (built-in gates).
-    // The per-source PA minimum is 0.08, deliberately lower than the 0.3 used
-    // when inputs were brought up alone: five inputs share one mix bus, and
-    // the desk clips if they all sit at solo level. Managing that summing is
-    // part of the exam. Feasibility was tuned against the engine: playback at
-    // unity (post 0.60-0.75) + four inputs at post 0.16-0.24 each keeps the
-    // main bus under the 1.22 clip threshold with envelope headroom, and the
-    // per-channel fader window (roughly 0.29-0.45 at gain 0.2) is wide enough
-    // to find without pixel-hunting.
+    // signal arrives clean. Win = power-on order (requirePowerOn) + every
+    // speaker TESTED with playback (verifyEach latches each one, exactly like
+    // Test the Wedges — playback is a checking tool, so it can and should be
+    // pulled back down once the speakers are proven) + every input PFL'd
+    // (requirePflEach 1-5) + the band present in the PA + the singer's wedge,
+    // all with no pop / clip / ring (built-in gates). gainStructure here has
+    // NO refChannel: master-only unity check, because playback ends the level
+    // turned down. The band mins are 0.25, reachable with faders at unity and
+    // a healthy gain: the mix bus power-sums (uncorrelated sources add as
+    // sqrt of sum of squares, like a real console), so all five channels at
+    // unity with healthy gain sit well under the clip threshold.
     task: true,
     requirePowerOn: true,
     requirePflEach: [1, 2, 3, 4, 5],
-    gainStructure: { refChannel: 5, unity: 0.75, faderTol: 0.06, inputBand: [0.80, 1.00] },
+    gainStructure: { unity: 0.75, faderTol: 0.06 },
+    involves: [1, 2, 3, 4, 5],
+    verifyEach: [
+      { source: 'playback', dest: 'pa',     min: 0.30, label: 'PA tested with playback' },
+      { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 tested with playback' },
+      { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 tested with playback' },
+    ],
     conditions: [
-      { source: 'playback', dest: 'pa', min: 0.30, max: 0.50 },
-      { source: 'vocal',    dest: 'pa', min: 0.08 },
-      { source: 'vocal2',   dest: 'pa', min: 0.08 },
-      { source: 'guitar',   dest: 'pa', min: 0.08 },
-      { source: 'laptop',   dest: 'pa', min: 0.08 },
-      { source: 'vocal',    dest: 'wedge', min: 0.35 },
+      { source: 'vocal',  dest: 'pa', min: 0.25 },
+      { source: 'vocal2', dest: 'pa', min: 0.25 },
+      { source: 'guitar', dest: 'pa', min: 0.25 },
+      { source: 'laptop', dest: 'pa', min: 0.25 },
+      { source: 'vocal',  dest: 'wedge', min: 0.35 },
     ],
     topology: { paRig: 'powered' },
-    symptom: 'Final exam. You are opening the venue alone today. Everything is connected, the system is off, and the console is zeroed. Do the whole job: power on in the right order, set the playback level and the room level, check every input and bring it into the PA, and give the singer her vocal in her wedge. Keep it clean the whole way.',
-    hint: 'It is everything you have already done, in the order you learned it. Console on first, then the speakers. PFL the playback, set its gain, faders to unity, then the room level. PFL each input, set its gain, bring it up. Turn on +48V for the condenser and the active DI while the channel is muted and before you PFL it. Open AUX 1 on the vocal for her wedge. If the console clips with everything up, bring the channel faders down a little: five inputs share one mix.',
+    symptom: 'Final exam. You are opening the venue alone today. Everything is connected, the system is off, and the console is zeroed. Do the whole job: power on in the right order, test every speaker with your playback, then bring in the band: check every input in PFL, bring it up, and give the singer her vocal in her wedge. Keep it clean the whole way.',
+    hint: 'It is everything you have already done, in the order you learned it. Console on first, then the speakers. PFL the playback, set its gain, and send it to the PA and both wedges: each speaker checks off once it plays and stays checked, so you can turn the playback back down afterward. Then the band: PFL each input, set its gain, and bring it up with the fader at unity. Turn on +48V for the condenser and the active DI while the channel is muted and before you PFL it. Open AUX 1 on the vocal for her wedge.',
     sabotage: (s) => {
       // Cold venue. Everything off, console zeroed, nothing set.
       s.mixer = { on: false };
@@ -378,37 +389,41 @@ window.LEVELS = [
       }
       return s;
     },
-    solution: 'The whole setup, start to finish: power in order, playback reference at unity, room level, every input checked in PFL and brought up clean, and the singer hearing herself in her wedge. That was a full line check. This is the job.',
+    solution: 'The whole setup, start to finish: power in order, every speaker tested with playback, every input checked in PFL and brought up clean, and the singer hearing herself in her wedge. That was a full line check. This is the job.',
     defaultInspect: 'pa',
   },
   {
     id: 9,
     title: 'Power-Down',
-    // The bookend. Power-off is power-on in reverse: master fader down,
-    // powered boxes off FIRST, console off LAST. Turning the console off
-    // while a powered speaker is still live plays the console's power-off
-    // transient through it (cause 'mixer_off_pop' — same physics as the
-    // Level 1 pop, opposite direction). The win is requirePowerOff: master
-    // fader down + both wedges off + both PA speakers off + console off.
-    // Start state is the end of the night: the band's inputs still live at
-    // modest levels (tuned so the standing mix doesn't clip or ring), master
-    // at unity, everything powered. conditions: [] — this is a power lesson,
-    // not a signal lesson. involves keeps channels 1-4 live for the sabotage.
+    // The bookend, in two beats. Beat 1: ZERO THE CONSOLE (requireZeroed) —
+    // every strip back to default: gain, aux sends and fader down, muted, pan
+    // centered, HPF + polarity (Ø) off, +48V off, master down AND muted. The
+    // next engineer powers on into a predictable desk. Beat 2: POWER OFF in
+    // reverse order (requirePowerOff): speakers off FIRST, console off LAST.
+    // Turning the console off while a powered speaker is still live plays the
+    // console's power-off transient through it (cause 'mixer_off_pop' — same
+    // physics as the Level 1 pop, opposite direction). Start state is the end
+    // of the night: the band's inputs still live at modest show levels (main
+    // bus is clean), with the kind of leftovers a real show leaves behind —
+    // pans pushed off center on the DIs, HPF still in on the vocal, polarity
+    // flipped on the condenser, +48V on the powered inputs.
     task: true,
     requirePowerOff: true,
+    requireZeroed: true,
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The show is over and the band has gone home. Shut the system down: pull the master fader all the way down, turn off the wedges and the PA speakers, then turn the console off last.',
-    hint: 'Power-off is power-on in reverse. The speakers go off first and the console goes off last: a console makes a pop when it switches off, and any powered speaker still on will play that pop. Pull the master all the way down first so the console is zeroed for the next show.',
+    symptom: 'The show is over and the band has gone home. Zero out the console, then shut the system down: gains, aux sends and faders all the way down, every channel muted, pans centered, HPF, polarity and +48V switches off, master down and muted. Then the wedges and PA speakers off, and the console off last.',
+    hint: 'Work down each strip: gain down, aux sends down, HPF and polarity off, +48V off, pan back to center, fader down, mute on. Then the master: all the way down and muted. Power-off is power-on in reverse: the speakers go off first and the console goes off last. A console makes a pop when it switches off, and any powered speaker still on will play that pop.',
     sabotage: (s) => {
-      // End-of-night state: the band's inputs live at modest show levels
-      // (main bus ~0.97, under the 1.22 clip threshold with envelope
-      // headroom; vocal-to-wedge ~0.22, well under the 0.55 ring threshold).
-      s.channels[0].mute = false; s.channels[0].fader = 0.55; s.channels[0].gain = 0.3; s.channels[0].phantom = false; s.channels[0].aux1 = 0.45; s.channels[0].aux2 = 0;
-      s.channels[1].mute = false; s.channels[1].fader = 0.55; s.channels[1].gain = 0.3; s.channels[1].phantom = true;  s.channels[1].aux1 = 0;    s.channels[1].aux2 = 0;
-      s.channels[2].mute = false; s.channels[2].fader = 0.4;  s.channels[2].gain = 0.3; s.channels[2].phantom = true;  s.channels[2].aux1 = 0;    s.channels[2].aux2 = 0;
-      s.channels[3].mute = false; s.channels[3].fader = 0.4;  s.channels[3].gain = 0.3; s.channels[3].phantom = false; s.channels[3].aux1 = 0;    s.channels[3].aux2 = 0;
+      // End-of-night state: live mix at modest levels (clean), with realistic
+      // show leftovers for the zero-out: off-center pans on the DIs, HPF in
+      // on the vocal, polarity (lowCut field) flipped on the condenser,
+      // phantom on the condenser + active DI.
+      s.channels[0].mute = false; s.channels[0].fader = 0.55; s.channels[0].gain = 0.3; s.channels[0].phantom = false; s.channels[0].aux1 = 0.45; s.channels[0].aux2 = 0; s.channels[0].highpass = true;
+      s.channels[1].mute = false; s.channels[1].fader = 0.55; s.channels[1].gain = 0.3; s.channels[1].phantom = true;  s.channels[1].aux1 = 0;    s.channels[1].aux2 = 0; s.channels[1].lowCut = true;
+      s.channels[2].mute = false; s.channels[2].fader = 0.4;  s.channels[2].gain = 0.3; s.channels[2].phantom = true;  s.channels[2].aux1 = 0;    s.channels[2].aux2 = 0; s.channels[2].pan = 0.3;
+      s.channels[3].mute = false; s.channels[3].fader = 0.4;  s.channels[3].gain = 0.3; s.channels[3].phantom = false; s.channels[3].aux1 = 0;    s.channels[3].aux2 = 0; s.channels[3].pan = 0.7;
       s.channels[4].mute = true;  s.channels[4].fader = 0;    s.channels[4].gain = 0;   s.channels[4].aux1 = 0;        s.channels[4].aux2 = 0;
       s.master = { ...s.master, mute: false, fader: 0.75 };
       s.mixer = { on: true };
@@ -418,7 +433,7 @@ window.LEVELS = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, volume: 0.6, mute: false };
       return s;
     },
-    solution: 'Master down, speakers off, console off last. The system is safe, and the console is zeroed for whoever powers it on next.',
+    solution: 'Console zeroed, master down and muted, speakers off, console off last. The next engineer powers on into a safe, predictable desk.',
     defaultInspect: 'pa',
   },
 ];

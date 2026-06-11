@@ -79,7 +79,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=17"></script>
+<script src="content.js?v=18"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -342,12 +342,29 @@ function computeAudio(s, envelope) {
     return chanIn[i].level * ch.fader;
   });
 
-  let mixL = 0, mixR = 0;
+  // POWER SUMMING. Different sources (a voice, a bass, a keyboard) are
+  // uncorrelated signals, and uncorrelated signals don't stack amplitude-to-
+  // amplitude — their POWERS add, so the combined level grows as the square
+  // root of the sum of squares (+3 dB per doubling, not +6). Straight
+  // amplitude addition is the worst case and only happens when two channels
+  // carry the SAME signal. This is the real reason a real console can run
+  // every channel at unity without the mix bus clipping: five channels at
+  // nominal sum to ~+7 dB over one channel, comfortably inside the bus
+  // headroom, not +14. (Real desks also carry ~20 dB of bus headroom, and
+  // digital desks sum in floating point — but the uncorrelated-summing math
+  // is the dominant effect and the honest one to model.) Per-source
+  // contributions further down stay linear: each source's own level at a
+  // destination is unaffected by what the other channels are doing.
+  let mixL2 = 0, mixR2 = 0;
   for (let i = 0; i < s.channels.length; i++) {
     const g = panGains(s.channels[i].pan);
-    mixL += post[i] * g.L;
-    mixR += post[i] * g.R;
+    const vL = post[i] * g.L;
+    const vR = post[i] * g.R;
+    mixL2 += vL * vL;
+    mixR2 += vR * vR;
   }
+  const mixL = Math.sqrt(mixL2);
+  const mixR = Math.sqrt(mixR2);
   // MAIN MIX BUS — the signal that leaves the desk, post-master-fader but
   // BEFORE any downstream PA gear. This is what the console's L/R master
   // meter should show. It is independent of PA speaker on/off, mute, or
@@ -401,7 +418,8 @@ function computeAudio(s, envelope) {
   // get the post-speaker value (wedge / wedge2 below); any desk-side aux
   // meter would read wedgeMix / wedge2Mix.
   // Aux send buses also stop leaving the desk when the mixer is off.
-  const wedgeMix = aux1.reduce((a, b) => a + b, 0) * aux1MasterGain * (mixerOn ? 1 : 0);
+  // Aux buses power-sum too (same uncorrelated-sources math as the main mix).
+  const wedgeMix = Math.sqrt(aux1.reduce((a, b) => a + b * b, 0)) * aux1MasterGain * (mixerOn ? 1 : 0);
   const wedge = o.wedge.on && !o.wedge.mute && s.cables.out_wedge ? wedgeMix * o.wedge.volume * 1.6 : 0;
 
   const aux2 = s.channels.map((ch, i) => {
@@ -409,7 +427,7 @@ function computeAudio(s, envelope) {
     // PFL does NOT gate aux 2 either.
     return chanIn[i].level * ch.aux2;
   });
-  const wedge2Mix = aux2.reduce((a, b) => a + b, 0) * aux2MasterGain * (mixerOn ? 1 : 0);
+  const wedge2Mix = Math.sqrt(aux2.reduce((a, b) => a + b * b, 0)) * aux2MasterGain * (mixerOn ? 1 : 0);
   const w2 = o.wedge2 || { on: true, mute: false, volume: 0 };
   const wedge2 = w2.on && !w2.mute && s.cables.out_wedge2 ? wedge2Mix * w2.volume * 1.6 : 0;
 
@@ -3614,6 +3632,19 @@ function App() {
       const masterDown = state.master.fader <= 0.1;
       return consoleOff && wedgesOff && paOff && masterDown;
     })();
+    // Zero-the-console lesson (Power-Down): every strip back to its default
+    // state — gain, aux sends, fader down; muted; pan centered; HPF, polarity
+    // and +48V off; master down AND muted. The next engineer powers on into a
+    // predictable desk. Mirrors normalizeChannels' zeroed shape.
+    const ZTOL = 0.02;
+    const zeroedOk = !level.requireZeroed || (
+      state.channels.every(c =>
+        c.mute && c.fader <= ZTOL && c.gain <= ZTOL &&
+        c.aux1 <= ZTOL && c.aux2 <= ZTOL &&
+        Math.abs(c.pan - 0.5) <= ZTOL &&
+        !c.highpass && !c.lowCut && !c.phantom
+      ) && state.master.mute && state.master.fader <= ZTOL
+    );
     // Verify-each lesson (Test the System): latch each speaker the moment
     // playback reaches it, then require every speaker to have been checked.
     // Latching here (not just in render) keeps the win in sync on the same
@@ -3635,12 +3666,15 @@ function App() {
       const gs = level.gainStructure;
       const unity = gs.unity != null ? gs.unity : 0.75;
       const tol = gs.faderTol != null ? gs.faderTol : 0.06;
-      const refCh = state.channels[(gs.refChannel || 1) - 1];
+      const masterOk = !state.master.mute && Math.abs(state.master.fader - unity) <= tol;
+      // No refChannel = master-only gain lesson (The Gig: playback gets pulled
+      // back down after the speaker test, so no single channel is pinned).
+      if (!gs.refChannel) return masterOk;
+      const refCh = state.channels[gs.refChannel - 1];
       if (!refCh) return false;
       // "Up at unity" = unmuted AND fader at the unity mark. The student has to
       // actually bring the channel and master up, not just nudge the faders.
-      const fadersOk = !refCh.mute && Math.abs(refCh.fader - unity) <= tol
-        && !state.master.mute && Math.abs(state.master.fader - unity) <= tol;
+      const fadersOk = !refCh.mute && Math.abs(refCh.fader - unity) <= tol && masterOk;
       // Optional: the input gain must sit in a healthy band (set by hand in PFL).
       let inputOk = true;
       if (gs.inputBand) {
@@ -3650,7 +3684,7 @@ function App() {
       }
       return fadersOk && inputOk;
     })();
-    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && poweredUp && poweredDown && verifiedOk && gainOk;
+    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk;
     if (won && !blocked) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
@@ -4066,6 +4100,25 @@ function App() {
     });
   }
 
+  // Zero-the-console checklist for the Power-Down brief. Grouped by control
+  // type (one row per knob/switch family across all strips) so the brief
+  // stays readable instead of listing 5 channels x 9 settings.
+  let zeroStatus = null;
+  if (level.requireZeroed) {
+    const Z = 0.02;
+    const chs = state.channels;
+    zeroStatus = [
+      { label: 'Every gain down',       pass: chs.every(c => c.gain <= Z) },
+      { label: 'Every aux send down',   pass: chs.every(c => c.aux1 <= Z && c.aux2 <= Z) },
+      { label: 'Every fader down',      pass: chs.every(c => c.fader <= Z) },
+      { label: 'Every channel muted',   pass: chs.every(c => c.mute) },
+      { label: 'Every pan centered',    pass: chs.every(c => Math.abs(c.pan - 0.5) <= Z) },
+      { label: 'HPF and polarity off',  pass: chs.every(c => !c.highpass && !c.lowCut) },
+      { label: '+48V off everywhere',   pass: chs.every(c => !c.phantom) },
+      { label: 'Master down and muted', pass: state.master.mute && state.master.fader <= Z },
+    ];
+  }
+
   // Unity-fader (+ optional input-gain) status for the gain-structure brief.
   let gainStatus = null;
   if (level.gainStructure) {
@@ -4080,6 +4133,7 @@ function App() {
       inputOk = lvl >= gs.inputBand[0] && lvl <= gs.inputBand[1];
     }
     gainStatus = {
+      hasRef: !!gs.refChannel,
       hasInput: !!gs.inputBand,
       input: inputOk,
       fader: !!refCh && !refCh.mute && Math.abs(refCh.fader - unity) <= tol,
@@ -4122,7 +4176,7 @@ function App() {
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={level.conditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
-                        verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus}
+                        verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus}
                         powerStatus={(() => {
                           const o = state.outputs;
                           const passive = (state.topology && state.topology.paRig) === 'amp+passive';
@@ -4339,7 +4393,7 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus }) {
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus }) {
   // Compute per-condition pass / level, and whether all conditions pass.
   const condStates = (conditions || []).map(c => {
     const cont = audio.contributions[c.source];
@@ -4378,8 +4432,11 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
     extras.push({ label: powerStatus.paLabel || 'PA on', pass: !!powerStatus.paStage, color: 'var(--cool)' });
     extras.push({ label: 'Wedges on', pass: !!powerStatus.wedges, color: 'var(--cool)' });
   }
+  if (level.requireZeroed && zeroStatus) {
+    for (const z of zeroStatus) extras.push({ label: z.label, pass: !!z.pass, color: 'var(--amber)' });
+  }
   if (level.requirePowerOff && powerStatus) {
-    extras.push({ label: 'Master fader down', pass: !!powerStatus.masterDown, color: 'var(--cool)' });
+    if (!level.requireZeroed) extras.push({ label: 'Master fader down', pass: !!powerStatus.masterDown, color: 'var(--cool)' });
     extras.push({ label: 'Wedges off', pass: !!powerStatus.wedgesOff, color: 'var(--cool)' });
     extras.push({ label: powerStatus.paOffLabel || 'PA speakers off', pass: !!powerStatus.paOff, color: 'var(--cool)' });
     extras.push({ label: 'Console off (last)', pass: !powerStatus.console, color: 'var(--cool)' });
@@ -4391,7 +4448,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   }
   if (level.gainStructure && gainStatus) {
     if (gainStatus.hasInput) extras.push({ label: 'Input level healthy', pass: !!gainStatus.input, color: 'var(--cool)' });
-    extras.push({ label: 'Playback up at unity', pass: !!gainStatus.fader, color: 'var(--cool)' });
+    if (gainStatus.hasRef) extras.push({ label: 'Playback up at unity', pass: !!gainStatus.fader, color: 'var(--cool)' });
     extras.push({ label: 'Master up at unity', pass: !!gainStatus.master, color: 'var(--cool)' });
   }
   const allFlowPass = condStates.length === 0 || condStates.every(s => s.pass);
