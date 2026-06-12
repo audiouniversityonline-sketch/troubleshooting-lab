@@ -669,24 +669,29 @@ window.PRACTICE = {
   defaultInspect: 'pa',
 };
 
-// FEEDBACK MODE — the ring-out trainer (Kyle, 2026-06-11 PM). Practice Mode
-// trains diagnosis; this trains the monitor engineer's core physical skill:
-// pushing a wedge toward a target level while killing feedback frequency by
-// frequency. The wedge carries the FULL standard graphic EQ (63 Hz to
-// 16 kHz, 9 octave bands) and a per-rep random feedback profile: every band
-// is an active resonance with its own sensitivity, so several bands ring on
-// the way up — sometimes more than one at once — and each rep is a new
-// wedge in a new room. The rhythm the mode teaches is the real one: up,
-// ring, cut, up, ring, cut.
+// FEEDBACK MODE — the ring-out trainer (Kyle, 2026-06-11 PM; realism pass
+// 2026-06-12 from ring-out research). Practice Mode trains diagnosis; this
+// trains the monitor engineer's core physical skill: pushing a wedge toward
+// a target level while killing feedback frequency by frequency. The wedge
+// carries the FULL ISO third-octave graphic EQ (63 Hz to 16 kHz, 25 bands)
+// and a per-rep random feedback profile. The rhythm the mode teaches is the
+// real one: up, ring, back off a touch, cut a few dB, up again.
 //
-// Physics that make it honest:
-//   - Multiple bands ring simultaneously (detectFeedback returns them all,
-//     each with its own ring tone at its own frequency).
-//   - EQ cuts cost monitor level (eqLevelGain), so slamming the whole EQ
-//     kills the ring AND the level — the target stays out of reach unless
-//     the cuts are surgical.
-// Win = the vocal at >= 0.65 in the wedge with nothing ringing (and no
-// clipping: pushing the preamp too hot is still a fail, like always).
+// What the research pinned down (Carvin Audio, Rane Note 158, Sweetwater,
+// Yamaha, QSC ring-out guides), and how the profile encodes it:
+//   - Feedback starts at the single highest peak in the loop response, and
+//     the first few peaks stand well above the rest. So: a ladder of 3-4
+//     genuinely hot bands (the hottest rings earliest), placed in the real
+//     wedge trouble zones (low-mid hoot, midrange ring, presence whistle).
+//   - Real cuts are a few dB, not slammed sliders ("notches on the order of
+//     a couple of dB, not tens of dB" — Rane). The ladder is tuned so 2-7 dB
+//     per band is enough at the target level.
+//   - Pros STOP after those few cuts: past the top peaks the response is a
+//     crowd of near-ties, and more EQ just wrecks tone for no added gain.
+//     So: every other band is a tame floor that only rings when the send is
+//     pushed far past the target (the real "everything rings at once" wall),
+//     and the toneGate fails the rep if the cuts go far beyond what the
+//     rings needed. Win = target level + no rings + tone intact.
 window.FEEDBACK_MODE = {
   id: 'feedback-mode',
   title: 'Feedback Mode',
@@ -694,9 +699,12 @@ window.FEEDBACK_MODE = {
   conditions: [
     { source: 'vocal', dest: 'wedge', min: 0.65 },
   ],
+  // The wedge must keep >= 92% of its response: a real ring-out's three or
+  // four small cuts pass easily, slammed sliders or shotgun cutting fail.
+  toneGate: 0.92,
   involves: [1],
-  symptom: 'Ring-out training. Bring the singer\'s vocal up to the target level in her wedge. As you push, frequencies will start to ring, sometimes more than one at once. Find each one on the wedge\'s graphic EQ and cut just enough to kill it, then keep climbing.',
-  hint: 'Turn the send up a little at a time. When a ring starts, its band glows on the MONITOR EQ: pull it down just past the point the ringing stops. Keep the cuts small, because every cut also costs monitor level, and a slammed EQ can never reach the target. The wedge volume and the mic gain raise the loop too, and too much gain clips the preamp. This is the rhythm of a real ring-out: up, ring, cut, up, ring, cut.',
+  symptom: 'Ring-out training. Bring the singer\'s vocal up to the target level in her wedge. As you push, a frequency will start to ring. Back the send off a touch, find the glowing band on the wedge\'s graphic EQ, and cut it a few dB, just enough that the ring stays gone. Then keep climbing. A real ring-out only takes a few cuts, so keep them small and stop when you reach the target.',
+  hint: 'Raise the send a little at a time. When a band glows on the MONITOR EQ, pull it down a few dB, just past where the ringing stops. Expect three or four problem frequencies on the way up. Keep every cut small: cuts take real level and tone out of the wedge, and the TONE readout fails the rep if you chop too much. Once the vocal hits the target, stop. More cuts past that point buy nothing. Too much mic gain still clips the preamp.',
   sabotage: (s, rng) => {
     const r = rng || (() => 0.5);
     // The singer's vocal live at a healthy gain, her wedge on, the send low.
@@ -710,22 +718,49 @@ window.FEEDBACK_MODE = {
     s.outputs.pa_l = { ...s.outputs.pa_l, on: false };
     s.outputs.pa_r = { ...s.outputs.pa_r, on: false };
     s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
-    // Full 9-band EQ, flat, plus a fresh random feedback profile: five hot
-    // bands (they WILL ring on the way up, the hottest early) among four
-    // tame ones. Every wedge in every room rings differently.
+    // 25-band ISO third-octave profile. Floor bands are tame: they only ring
+    // when the wedge is pushed far past the target, which is the real wall a
+    // ring-out stops short of. The spectrum extremes are tamer still (a
+    // wedge rolls off down low, and the air bands rarely ring first).
+    const N = 25;
     const profile = [];
-    for (let b = 0; b < 9; b++) profile.push(0.3 + r() * 0.25);
-    const order = [0, 1, 2, 3, 4, 5, 6, 7, 8];
-    for (let i = order.length - 1; i > 0; i--) {
-      const j = Math.floor(r() * (i + 1));
-      const t = order[i]; order[i] = order[j]; order[j] = t;
+    for (let b = 0; b < N; b++) {
+      const edge = (b <= 3 || b >= 23) ? 0.8 : 1.0;
+      profile.push((0.30 + r() * 0.22) * edge);
     }
-    for (let k = 0; k < 5; k++) profile[order[k]] = 0.7 + r() * 0.6;
-    profile[order[0]] = 1.15 + r() * 0.2;
-    s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.8, eq: [0, 0, 0, 0, 0, 0, 0, 0, 0], fbProfile: profile };
+    // The hot ladder: 3 or 4 real resonances, one per trouble zone so the
+    // ear learns the zones (hoot 200-500, ring 630-2k, whistle 2.5k-8k).
+    // Which zone gets the hottest peak shuffles per rep. The hotness values
+    // stagger the onsets: the hottest rings early on the way up, the next
+    // partway, the third near the target, the optional fourth right at it.
+    const zones = [
+      [5, 6, 7, 8, 9],          // 200, 250, 315, 400, 500 Hz — the hoot
+      [10, 11, 12, 13, 14, 15], // 630 Hz .. 2 kHz — the midrange ring
+      [16, 17, 18, 19, 20, 21], // 2.5 kHz .. 8 kHz — the whistle
+    ];
+    for (let i = zones.length - 1; i > 0; i--) {
+      const j = Math.floor(r() * (i + 1));
+      const t = zones[i]; zones[i] = zones[j]; zones[j] = t;
+    }
+    const pick = (zone) => zone[Math.floor(r() * zone.length)];
+    const hot = [
+      { idx: pick(zones[0]), p: 1.30 + r() * 0.25 },
+      { idx: pick(zones[1]), p: 1.02 + r() * 0.14 },
+      { idx: pick(zones[2]), p: 0.86 + r() * 0.10 },
+    ];
+    if (r() < 0.5) {
+      // A fourth, borderline resonance somewhere in the working range. It
+      // rings right around the target, so some reps need a fourth small cut
+      // and some sneak under it. Real rooms vary exactly like this.
+      let idx = 4 + Math.floor(r() * 19);
+      while (hot.some(h => h.idx === idx)) idx = 4 + Math.floor(r() * 19);
+      hot.push({ idx, p: 0.76 + r() * 0.07 });
+    }
+    for (const h of hot) profile[h.idx] = h.p;
+    s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.8, eq: new Array(N).fill(0), fbProfile: profile };
     return s;
   },
   // Never shown (the debrief replaces the answer key); kept for the contract.
-  solution: 'The wedge at the target level, every ring cut at its own frequency.',
+  solution: 'The wedge at the target level, the few real resonances each cut a few dB.',
   defaultInspect: 'wedge',
 };

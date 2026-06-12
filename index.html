@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=24"></script>
+<script src="content.js?v=25"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -206,12 +206,14 @@ const EQ_BANDS = ['250', '500', '1k', '2k', '4k'];
 // the center frequency of whichever band is glowing, so what you hear and what
 // you see (and cut) are always the same note. Index-aligned with EQ_BANDS.
 const EQ_BAND_HZ = [250, 500, 1000, 2000, 4000];
-// FULL graphic EQ — the standard octave centers from 63 Hz to 16 kHz. Used by
-// Feedback Mode, where ringing out a wedge across the whole spectrum is the
-// training. The Essentials keep the simpler 5-band EQ. A wedge carries the
-// full EQ when its eq array has 9 entries.
-const FULL_EQ_BANDS = ['63', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'];
-const FULL_EQ_HZ = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+// FULL graphic EQ — the ISO third-octave centers from 63 Hz to 16 kHz, the
+// band layout of a real 31-band graphic (minus the sub-63 Hz bottom octave a
+// wedge can't reproduce anyway). Used by Feedback Mode, where ringing out a
+// wedge across the whole spectrum is the training. The Essentials keep the
+// simpler 5-band EQ. A wedge carries the full EQ when its eq array length
+// matches this list.
+const FULL_EQ_BANDS = ['63', '80', '100', '125', '160', '200', '250', '315', '400', '500', '630', '800', '1k', '1.25k', '1.6k', '2k', '2.5k', '3.15k', '4k', '5k', '6.3k', '8k', '10k', '12.5k', '16k'];
+const FULL_EQ_HZ = [63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
 const EQ_CUT_DB = 12;
 // Linear relief multiplier from a band's cut fraction (0 flat .. 1 full cut).
 function eqBandRelief(cutFrac) {
@@ -2149,7 +2151,7 @@ function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePowe
 // cut). The handle sits at the cut depth: top = flat (0 dB), bottom = full cut
 // (-EQ_CUT_DB). Drag down to cut that band. When this band is the one ringing,
 // it glows red so the engineer can ring it out.
-function EqBand({ value, onChange, label, ringing, accent, height = 96, width = 22 }) {
+function EqBand({ value, onChange, label, ringing, accent, height = 96, width = 22, vertical }) {
   const ref = React.useRef(null);
   const startRef = React.useRef(null);
   const fitScale = React.useContext(window.FitScaleContext) || 1;
@@ -2171,19 +2173,23 @@ function EqBand({ value, onChange, label, ringing, accent, height = 96, width = 
           background: ringing ? 'var(--hot)' : accent, border: '1px solid ' + (ringing ? '#b8341f' : '#0a0a0c'),
           boxShadow: ringing ? '0 0 8px rgba(255,70,48,0.8)' : '0 1px 2px rgba(0,0,0,0.5)', animation: ringing ? 'pulse 0.9s ease-in-out infinite' : 'none' }}/>
       </div>
-      <div className="mono" style={{ fontSize: 8, lineHeight: 1, fontWeight: 700, color: ringing ? 'var(--hot)' : 'var(--ink-2)' }}>{label}</div>
+      {vertical
+        ? <div className="mono" style={{ fontSize: 7, lineHeight: 1, fontWeight: 700, color: ringing ? 'var(--hot)' : 'var(--ink-2)', writingMode: 'vertical-rl', height: 26, letterSpacing: 0.5 }}>{label}</div>
+        : <div className="mono" style={{ fontSize: 8, lineHeight: 1, fontWeight: 700, color: ringing ? 'var(--hot)' : 'var(--ink-2)' }}>{label}</div>}
     </div>
   );
 }
 
 function EqStrip({ eq, onChange, ringBands, accent, height, width }) {
-  // 9 entries = the full octave EQ (63 Hz .. 16 kHz, Feedback Mode);
-  // 5 entries = the simpler Essentials EQ. More than one band can ring.
-  const labels = (eq && eq.length === FULL_EQ_BANDS.length) ? FULL_EQ_BANDS : EQ_BANDS;
+  // 25 entries = the full ISO third-octave EQ (63 Hz .. 16 kHz, Feedback
+  // Mode): narrow sliders, vertical labels, like the face of a real 31-band
+  // graphic. 5 entries = the simpler Essentials EQ. Any number can ring.
+  const full = !!(eq && eq.length === FULL_EQ_BANDS.length);
+  const labels = full ? FULL_EQ_BANDS : EQ_BANDS;
   return (
-    <div style={{ display: 'flex', gap: labels.length > 5 ? 6 : 8, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', gap: full ? 2 : 8, alignItems: 'flex-start' }}>
       {labels.map((lbl, i) => (
-        <EqBand key={i} value={eq ? eq[i] : 0} onChange={(v) => onChange(i, v)} label={lbl} ringing={!!(ringBands && ringBands.indexOf(i) >= 0)} accent={accent} height={height} width={width}/>
+        <EqBand key={i} value={eq ? eq[i] : 0} onChange={(v) => onChange(i, v)} label={lbl} ringing={!!(ringBands && ringBands.indexOf(i) >= 0)} accent={accent} height={height} width={full ? 12 : width} vertical={full}/>
       ))}
     </div>
   );
@@ -2192,16 +2198,28 @@ function EqStrip({ eq, onChange, ringBands, accent, height, width }) {
 // Exposable "Monitor EQ" panel — the graphic EQs for the two aux/monitor sends,
 // the way they'd sit at FOH (outboard rack, or a screen on a digital desk). It
 // auto-opens when a wedge starts ringing and can be toggled by hand otherwise.
-function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge, ringBand, rings }) {
+function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge, ringBand, rings, toneGate }) {
   if (!open) return null;
   const ringsFor = (key) => (rings || []).filter(r => r.wedge === key).map(r => r.band);
   const col = (key, w, label, accent) => {
     const hot = ringsFor(key);
     const isRinging = hot.length > 0;
+    // Tone readout (Feedback Mode wedges only): how much of the wedge's
+    // response the cuts have eaten. Real ring-outs stop after a few small
+    // cuts; chop too many bands and the wedge goes hollow — the readout
+    // turns red and the rep won't pass until the cuts come back up.
+    const full = !!(w.eq && w.eq.length === FULL_EQ_BANDS.length);
+    const tone = full ? eqLevelGain(w) : 1;
+    const toneBad = full && toneGate ? tone < toneGate : false;
     return (
     <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#141418', border: '1px solid ' + (isRinging ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6, boxShadow: isRinging ? '0 0 0 1px rgba(255,70,48,0.4)' : 'none' }}>
       <div className="mono" style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: isRinging ? 'var(--hot)' : accent }}>{label}{isRinging ? (hot.length > 1 ? ' · RINGING ×' + hot.length : ' · RINGING') : ''}</div>
       <EqStrip eq={w.eq} onChange={(band, v) => onBandChange(key, band, v)} ringBands={hot} accent={accent} height={104} width={20}/>
+      {full && toneGate ? (
+        <div className="mono" style={{ fontSize: 8, letterSpacing: 1, fontWeight: 700, color: toneBad ? 'var(--hot)' : 'var(--ink-2)' }}>
+          TONE {Math.round(tone * 100)}%{toneBad ? ' · TOO MUCH CUT' : ''}
+        </div>
+      ) : null}
     </div>
     );
   };
@@ -4448,6 +4466,12 @@ function App() {
     const clean = clips.length === 0;
     const balanced = !paBalanceIssue;
     const noFeedback = !feedback;
+    // Tone gate (Feedback Mode): the wedge still has to sound like the
+    // singer's voice when the ring-out is done. eqGain.wedge is the fraction
+    // of the wedge's response the EQ has left standing — a real ring-out
+    // takes a few cuts of a few dB and stops, so the gate only fails when
+    // the cuts go far past what the rings actually needed.
+    const toneOk = !level.toneGate || ((audio.eqGain && audio.eqGain.wedge) || 1) >= level.toneGate;
     // Power-on lesson: the win is bringing the rig up, not sending signal.
     // Console, power amp, and both wedges all on. The pop check (blocked,
     // above) handles wrong order, so this just confirms the end state.
@@ -4545,7 +4569,7 @@ function App() {
       const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8;
       return cablesOk && fanOutOk && outFanOk && outOk;
     })();
-    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk;
+    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk;
     if (won && !blocked) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
@@ -4766,7 +4790,7 @@ function App() {
       chordOscs.forEach(co => co.start());
       chainsRef.current[k] = { gainL, gainR, filter, drive, shaper, makeup, envelope, o1, o2, lfo, chordOscs };
     }
-    // Feedback ring voices — one per octave band (63 Hz .. 16 kHz), all
+    // Feedback ring voices — one per third-octave band (63 Hz .. 16 kHz), all
     // silent until detectFeedback lights them. Each voice is a sine at the
     // band's center frequency (the ring you hear is the band you cut) plus
     // a faint inharmonic partial (×2.41, an off-grid ratio that never lands
@@ -5167,6 +5191,7 @@ function App() {
         ringWedge={feedback ? feedback.ringWedge : null}
         ringBand={feedback ? feedback.ringBand : null}
         rings={feedback ? feedback.rings : []}
+        toneGate={level.toneGate}
       />
 
       <ProgressModal open={saveModalOpen} onClose={() => setSaveModalOpen(false)}
@@ -5192,7 +5217,7 @@ function App() {
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
               {pitchFor.isFeedbackMode
-                ? 'Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level while frequencies start to ring, sometimes more than one at once, and cut each one on the full 63 Hz to 16 kHz graphic EQ. Every rep is a new wedge with a new ring profile.'
+                ? 'Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Every rep is a new wedge with a new ring profile.'
                 : 'The free lessons taught you to set up and run the system. Practice Mode trains you to troubleshoot it: the band is playing, something is broken, and every rep hides a new fault in a new place. Turn the difficulty up and it stacks two or three faults at once. Play as long as you want. There\'s always a next rep.'}
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
@@ -5546,6 +5571,10 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   if (level.requirePatch && patchStatus) {
     for (const p of patchStatus) extras.push({ label: p.label, pass: !!p.pass, color: 'var(--cool)' });
   }
+  if (level.toneGate) {
+    const tone = (audio.eqGain && audio.eqGain.wedge) || 1;
+    extras.push({ label: 'Wedge tone intact (a few small cuts, no more)', pass: tone >= level.toneGate, color: 'var(--aux)' });
+  }
   if (level.requirePowerOn && powerStatus) {
     extras.push({ label: 'Console powered on', pass: !!powerStatus.console, color: 'var(--cool)' });
     extras.push({ label: powerStatus.paLabel || 'PA on', pass: !!powerStatus.paStage, color: 'var(--cool)' });
@@ -5888,7 +5917,9 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
             {debrief.rep != null && <> That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} rep{debrief.rep === 1 ? '' : 's'}</b> finished.</>}
           </div>
           <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
-            The method: walk the signal path from source to speaker, and check the cheap things first.
+            {level.isFeedbackMode
+              ? 'The method: push, cut the band that rings by a few dB, push again. A few small cuts, then stop at the target.'
+              : 'The method: walk the signal path from source to speaker, and check the cheap things first.'}
           </div>
         </div>
       ) : (
