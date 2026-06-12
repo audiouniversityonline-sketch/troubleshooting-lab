@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=26"></script>
+<script src="content.js?v=27"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -4541,7 +4541,7 @@ function App() {
   // Challenge presentation state. hintRevealed gates the hint zone behind a
   // button on challenges (Essentials keep their always-visible hints);
   // using the hint is counted into the debrief, not punished.
-  const [hintRevealed, setHintRevealed] = uS(false);
+  const [hintCount, setHintCount] = uS(0);
   const hintsUsedRef = uR(0);
   // Gesture-level move counter for the debrief: one fader drag is one move,
   // not fifty state updates. Counted by diffing consecutive states at the
@@ -5410,7 +5410,7 @@ function App() {
     // baseline jumps to the new start state so the load itself isn't a move.
     movesRef.current = 0;
     hintsUsedRef.current = 0;
-    setHintRevealed(false);
+    setHintCount(0);
     prevStateRef.current = sab;
     lastMoveRef.current = { key: null, at: 0 };
   };
@@ -5618,6 +5618,37 @@ function App() {
     };
   }
 
+  // Console power status — shared by the brief card and the adaptive hints.
+  const powerStatus = (() => {
+    const o = state.outputs;
+    const passive = (state.topology && state.topology.paRig) === 'amp+passive';
+    return {
+      console: state.mixer ? state.mixer.on !== false : true,
+      paStage: passive ? !!(o.amp && o.amp.on) : (!!(o.pa_l && o.pa_l.on) && !!(o.pa_r && o.pa_r.on)),
+      paLabel: passive ? 'Power amp on' : 'PA speakers on',
+      wedges: !!(o.wedge && o.wedge.on && o.wedge2 && o.wedge2.on),
+      masterDown: state.master.fader <= 0.1,
+      wedgesOff: !(o.wedge && o.wedge.on) && !(o.wedge2 && o.wedge2.on),
+      paOff: passive ? !(o.amp && o.amp.on) : (!(o.pa_l && o.pa_l.on) && !(o.pa_r && o.pa_r.on)),
+      paOffLabel: passive ? 'Power amp off' : 'PA speakers off',
+    };
+  })();
+
+  // Adaptive hints. A level can define hints: [{ text, done(ctx) }]. We show
+  // only the steps not yet done, one more per click (hintCount in the brief),
+  // so a hint for something already handled (phantom already on, a channel
+  // already up) never appears. Levels with only a legacy hint string fall back
+  // to a single on-request hint.
+  const hintCtx = {
+    state, audio, powerStatus, gainStatus, verifyStatus, pflEachStatus,
+    zeroStatus, patchStatus, feedback,
+    pflChannels: pflChannelsRef.current, pflChecked: pflCheckedRef.current,
+  };
+  const hintDefs = level.hints || (level.hint ? [{ text: level.hint, done: () => false }] : []);
+  const pendingHints = hintDefs
+    .filter(h => { try { return !h.done(hintCtx); } catch (e) { return true; } })
+    .map(h => h.text);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'radial-gradient(ellipse at 30% 0%, #1a1a1f 0%, #0e0e10 50%, #08080a 100%)', position: 'relative' }}>
       <TopBar
@@ -5717,25 +5748,10 @@ function App() {
                         } : null}
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={effConditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
-                        hintRevealed={hintRevealed} onRevealHint={() => { hintsUsedRef.current += 1; setHintRevealed(true); }}
+                        pendingHints={pendingHints} hintCount={hintCount} onRevealHint={() => { hintsUsedRef.current += 1; setHintCount(c => c + 1); }}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
                         verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus} patchStatus={patchStatus}
-                        powerStatus={(() => {
-                          const o = state.outputs;
-                          const passive = (state.topology && state.topology.paRig) === 'amp+passive';
-                          return {
-                            console: state.mixer ? state.mixer.on !== false : true,
-                            paStage: passive ? !!(o.amp && o.amp.on) : (!!(o.pa_l && o.pa_l.on) && !!(o.pa_r && o.pa_r.on)),
-                            paLabel: passive ? 'Power amp on' : 'PA speakers on',
-                            wedges: !!(o.wedge && o.wedge.on && o.wedge2 && o.wedge2.on),
-                            // Power-down lesson fields. "Off" needs BOTH boxes
-                            // off, so it can't reuse the on-flags above.
-                            masterDown: state.master.fader <= 0.1,
-                            wedgesOff: !(o.wedge && o.wedge.on) && !(o.wedge2 && o.wedge2.on),
-                            paOff: passive ? !(o.amp && o.amp.on) : (!(o.pa_l && o.pa_l.on) && !(o.pa_r && o.pa_r.on)),
-                            paOffLabel: passive ? 'Power amp off' : 'PA speakers off',
-                          };
-                        })()}/>}
+                        powerStatus={powerStatus}/>}
                   </StableSlot>
                 }
               />
@@ -5990,11 +6006,7 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, patchStatus, hintRevealed, onRevealHint }) {
-  // Essentials show their hint up front (they're lessons). Challenges keep it
-  // behind a button (they're tests) — asking is fine and gets counted into
-  // the debrief, never punished. A level can override with hintAuto.
-  const hintAuto = level.hintAuto != null ? level.hintAuto : !level.isChallenge;
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, patchStatus, pendingHints, hintCount, onRevealHint }) {
   // Compute per-condition pass / level, and whether all conditions pass.
   const condStates = (conditions || []).map(c => {
     const cont = audio.contributions[c.source];
@@ -6183,26 +6195,33 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
         </div>
       )}
 
-      {/* HINT zone — single string per level. Essentials show it up front;
-          challenges keep it behind a button until asked. */}
-      {level.hint && (hintAuto || hintRevealed) && (
-        <div style={zoneStyle('var(--amber)', 'rgba(255,181,71,0.06)')}>
+      {/* HINT zone — adaptive and on request. Nothing shows until the engineer
+          asks; each click reveals the next step they still need. Steps already
+          done are filtered out upstream (pendingHints), so a hint never points
+          at something already handled. */}
+      {pendingHints && pendingHints.length > 0 && (
+        <div style={zoneStyle('var(--amber)', hintCount > 0 ? 'rgba(255,181,71,0.06)' : 'rgba(255,181,71,0.04)')}>
           {zoneLabel('var(--amber)', '💡 HINT')}
-          <div style={{ color: 'var(--ink)', fontSize: 11.5, lineHeight: 1.4 }}>{level.hint}</div>
-        </div>
-      )}
-      {level.hint && !hintAuto && !hintRevealed && (
-        <div style={zoneStyle('var(--amber)', 'rgba(255,181,71,0.04)')}>
-          {zoneLabel('var(--amber)', '💡 HINT')}
-          <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-            Work it out from the symptom if you can. Asking is fine too — it just gets noted in your debrief.
-          </div>
-          <button onClick={onRevealHint} className="mono ui-no-select" style={{
-            alignSelf: 'flex-start',
-            padding: '6px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
-            color: 'var(--amber)', background: 'rgba(255,181,71,0.08)', border: '1px solid var(--amber)',
-            borderRadius: 4, cursor: 'pointer',
-          }}>NEED A HINT?</button>
+          {hintCount === 0 ? (
+            <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+              Read the task and try it with what you know. Stuck? Reveal a hint one step at a time. It just gets noted in your debrief.
+            </div>
+          ) : (
+            pendingHints.slice(0, hintCount).map((t, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, color: 'var(--ink)', fontSize: 11.5, lineHeight: 1.4 }}>
+                <span className="mono" style={{ color: 'var(--amber)', fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span>
+                <span>{t}</span>
+              </div>
+            ))
+          )}
+          {hintCount < pendingHints.length && (
+            <button onClick={onRevealHint} className="mono ui-no-select" style={{
+              alignSelf: 'flex-start',
+              padding: '6px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+              color: 'var(--amber)', background: 'rgba(255,181,71,0.08)', border: '1px solid var(--amber)',
+              borderRadius: 4, cursor: 'pointer',
+            }}>{hintCount === 0 ? 'NEED A HINT?' : 'SHOW ANOTHER HINT'}</button>
+          )}
         </div>
       )}
     </div>

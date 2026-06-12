@@ -104,6 +104,22 @@
 //                (outPatch). Used by Patch the System and every practice rep.
 // Ids renumbered 2026-06-10 and again 2026-06-11 (Patch the System became
 // lesson 1), both pre-launch. After launch the append-only rule is absolute.
+
+// --- Adaptive-hint helper --------------------------------------------------
+// Each lesson can define hints: [{ text, done(ctx) }]. The brief shows only the
+// steps not yet done, one more per click, so a hint never points at something
+// the engineer already handled. ctx carries the live state, audio, and the same
+// status objects the OBJECTIVE checklist reads, so a hint clears exactly when
+// its step actually gets done. hintReaches mirrors the checklist's level read.
+function hintReaches(ctx, src, dest, min) {
+  var a = ctx && ctx.audio;
+  if (!a || !a.contributions) return false;
+  var c = a.contributions[src];
+  if (!c) return false;
+  var lvl = dest === 'pa' ? Math.max(c.pa_l || 0, c.pa_r || 0) : (c[dest] || 0);
+  return lvl >= (min == null ? 0.3 : min);
+}
+
 window.LEVELS = [
   {
     id: 1,
@@ -132,6 +148,13 @@ window.LEVELS = [
     topology: { paRig: 'powered' },
     symptom: 'First job of the day: connect the whole system from the paperwork, with everything still powered off. Open the I/O LIST in the top bar for the plan, then patch each cable to the port it calls for.',
     hint: 'Drag a cable end and drop it on a port or an output chip. Dropping on a taken spot swaps the two cables. The colors follow the standard 8-channel snake code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray. Patching with the power off is the professional habit: nothing can pop while the system is dead.',
+    hints: [
+      { text: 'Open the I/O LIST in the top bar for the full patch plan. Drag a cable end onto a port; drop it on a taken spot to swap. Colors follow the snake code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
+      { text: 'Inputs first: plug each source cable into its numbered stage-box input. Vocal Mic 1 to 1, Vocal Mic 2 to 2, Bass to 3, Keyboard to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
+      { text: 'Now the input tails at FOH: drop snake tails 1 to 4 onto their matching console channels, color for color.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[1] && ctx.patchStatus[1].pass },
+      { text: 'Outputs next: connect the console outputs into snake 5 to 8 at FOH. MAIN L to 5, MAIN R to 6, AUX 1 to 7, AUX 2 to 8.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
+      { text: 'Last, the speaker lines: run each speaker line to its numbered out port at the stage box. PA L to 5, PA R to 6, Wedge 1 to 7, Wedge 2 to 8.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
+    ],
     sabotage: (s) => {
       // Load-in state: nothing connected anywhere. Input cables loose above
       // the stage box, speaker lines loose below it, input tails coiled
@@ -178,6 +201,10 @@ window.LEVELS = [
     involves: [],
     symptom: 'Everything is connected and the console is zeroed out. Power the system up, and mind the order: bring it up the wrong way and you pop the speakers.',
     hint: 'Power on from the console end first, then the powered speakers last. If you turn a PA speaker or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the wedges and the PA speakers.',
+    hints: [
+      { text: 'Power up from the console end first: switch the console on before any speaker. If you turn a PA speaker or wedge on first and then the console, the console pop hits live speakers.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
+      { text: 'With the console on, bring up the rest: both PA speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
+    ],
     conditions: [],
     // Active speakers: powered PA boxes with their own on/off, no power amp.
     topology: { paRig: 'powered' },
@@ -219,6 +246,12 @@ window.LEVELS = [
     ],
     symptom: 'The system is on and the console is fully zeroed, with your playback connected. Set your gain structure the right way: check it in PFL, set the gain, bring the faders to unity, then set the room level on the PA.',
     hint: 'Press PFL on the playback to hear it in your headphones. Set the GAIN so the meter sits in the healthy zone. Release PFL, unmute the playback and the master, and bring both faders up to unity. Then bring up the PA speaker volume until the room sits at a good level on the loudness meter.',
+    hints: [
+      { text: 'Start in your headphones: press PFL on the playback channel so you can set it without sending it to the room yet.', done: (ctx) => ctx.pflChecked || (ctx.state.channels[4] && ctx.state.channels[4].solo) },
+      { text: 'Set the GAIN so the input meter sits in the healthy zone: not so low it is weak, not so hot it pins.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.input },
+      { text: 'Release PFL, unmute the playback and the master, and bring both faders up to unity.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.fader && ctx.gainStatus.master },
+      { text: 'Now set the room level: bring up the PA speaker volume until the loudness meter sits in a good range.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.50; } },
+    ],
     sabotage: (s) => {
       // Continuous with Power-On: rig on, console fully zeroed. Channel muted,
       // fader 0, GAIN all the way down. Master muted, fader 0. PA speaker volume
@@ -253,6 +286,10 @@ window.LEVELS = [
     conditions: [],
     symptom: 'The PA is set. Now bring up your monitor wedges. AUX 1 feeds Wedge 1, AUX 2 feeds Wedge 2.',
     hint: 'Turn up AUX 1 on the playback channel and bring up the Wedge 1 volume on stage until it plays. Do the same with AUX 2 for Wedge 2. Each wedge gets checked off once it is playing.',
+    hints: [
+      { text: 'Wedge 1: turn up AUX 1 on the playback channel, then raise the Wedge 1 volume on stage until it plays.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
+      { text: 'Wedge 2: same idea with AUX 2 and the Wedge 2 volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
+    ],
     sabotage: (s) => {
       // Carried from Set the Input Level: good input, faders at unity, PA set.
       // The wedges are not up yet: sends closed, wedge volumes down.
@@ -288,6 +325,11 @@ window.LEVELS = [
     ],
     symptom: 'The system is up. Bring in your vocal mics: a dynamic on channel 1 and a condenser on channel 2. PFL each one to check it in your headphones, set its gain, then bring it up. One of them needs power.',
     hint: 'PFL each mic to check it in your headphones, set its gain, then bring it up. The dynamic on channel 1 needs no power. The condenser on channel 2 needs +48V phantom. Turn +48V on while the channel is muted and NOT in PFL, then PFL to check it: turning +48V on while you are listening in PFL pops your headphones.',
+    hints: [
+      { text: 'Channel 1 is a dynamic mic, no power needed. PFL it to check it in your headphones, set the gain, then unmute and bring the fader up.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[1] },
+      { text: 'Channel 2 is a condenser, so it needs +48V phantom to pass signal. Switch +48V on while the channel is muted (and not in PFL).', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom },
+      { text: 'Then check channel 2 in PFL, set its gain, and bring it up.', done: (ctx) => hintReaches(ctx, 'vocal2', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[2] },
+    ],
     sabotage: (s) => {
       // System set up (master at unity, PA at a good level, wedges still up from
       // Test the Wedges). The two vocal channels start muted, faders down, gain
@@ -323,6 +365,11 @@ window.LEVELS = [
     ],
     symptom: 'Now the instruments. Set up both direct boxes: an active DI on the bass (channel 3) and a passive DI on the keyboard (channel 4). PFL each, set its gain, then bring it up. One of them needs power.',
     hint: 'PFL each DI to check it, set its gain, then bring it up. The active DI on the bass (channel 3) has electronics that need +48V phantom, just like a condenser: turn +48V on while the channel is muted and NOT in PFL (it pops your headphones if you do it while listening in PFL). The passive DI on the keyboard (channel 4) needs no power.',
+    hints: [
+      { text: 'Channel 3 is the bass on an active DI. Active DIs have electronics that need +48V phantom, just like a condenser. Switch +48V on while the channel is muted.', done: (ctx) => ctx.state.channels[2] && ctx.state.channels[2].phantom },
+      { text: 'Then check channel 3 in PFL, set its gain, and bring it up.', done: (ctx) => hintReaches(ctx, 'guitar', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[3] },
+      { text: 'Channel 4 is the keyboard on a passive DI, no power needed. PFL it, set the gain, and bring it up.', done: (ctx) => hintReaches(ctx, 'laptop', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[4] },
+    ],
     sabotage: (s) => {
       // Mics from the last level kept as set, but muted so the audio stops.
       s.channels[0].mute = true; s.channels[0].fader = 0.72; s.channels[0].gain = 0.5; s.channels[0].phantom = false;
@@ -348,6 +395,9 @@ window.LEVELS = [
     // is purely the aux send: open AUX 1 on the vocal to feed her wedge.
     symptom: 'The singer needs to hear themselves on stage. Send her vocal to her wedge so she can hear herself.',
     hint: 'Her wedge is on and turned up. Send her vocal to it by turning up AUX 1 on the vocal channel.',
+    hints: [
+      { text: 'Her wedge is already on and turned up. Send her vocal into it by bringing up AUX 1 on the vocal channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
+    ],
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
       { source: 'vocal', dest: 'wedge', min: 0.35 },
@@ -378,6 +428,10 @@ window.LEVELS = [
     // surgical fix; HPF is the stopgap so the level is solvable today.
     symptom: 'The singer still can\'t hear herself well in her wedge. Turn her vocal up in the monitor for her. Careful, monitors feed back when you push them too hard.',
     hint: 'Turn up AUX 1 on the vocal to give her more in her wedge. When it starts to ring, look at the monitor EQ on her wedge: the ringing frequency glows. Pull that band down just far enough to stop the ring. Cuts cost a little monitor level too, so keep them small. (HPF only helps low-frequency ring, not this one.)',
+    hints: [
+      { text: 'Give her more of herself: bring AUX 1 on the vocal up so her wedge reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.6) },
+      { text: 'When it starts to ring, open her Monitor EQ and pull the glowing band down just far enough to stop the ring. Keep the cuts small. HPF only helps a low-frequency ring, not this one.', done: (ctx) => !ctx.feedback },
+    ],
     // Wedge min sits at 0.6 (was 0.7) since 2026-06-11 PM: EQ cuts now cost
     // level (eqLevelGain), so the ring-out's own cut eats a little of the
     // send level — exactly like a real desk.
@@ -440,6 +494,14 @@ window.LEVELS = [
     topology: { paRig: 'powered' },
     symptom: 'Final exam. You are opening the venue alone today, from a cold system. Do the whole job in order: power on, test every speaker with your playback, then bring the band in clean. Keep it clean the whole way.',
     hint: 'It is everything you have already done, in the order you learned it. Console on first, then the speakers. PFL the playback, set its gain, and send it to the PA and both wedges: each speaker checks off once it plays and stays checked, so you can turn the playback back down afterward. Then the band: PFL each input, set its gain, and bring it up with the fader at unity. Turn on +48V for the condenser and the active DI while the channel is muted and before you PFL it. Open AUX 1 on the vocal for her wedge.',
+    hints: [
+      { text: 'Power on in order: console first, then both PA speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
+      { text: 'Test every speaker with your playback: PFL the playback, set its gain, and send it to the PA and both wedges. Each checks off once it plays, then you can pull playback back down.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.pa && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2 },
+      { text: 'Turn +48V on for the two powered inputs while they are muted: the condenser on channel 2 and the active DI on channel 3.', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom && ctx.state.channels[2] && ctx.state.channels[2].phantom },
+      { text: 'Check every input in PFL before you bring it up: channels 1 through 5.', done: (ctx) => ctx.pflChannels && [1, 2, 3, 4, 5].every((ch) => ctx.pflChannels[ch]) },
+      { text: 'Bring the band up clean with the faders at unity: vocals, bass, and keys all present in the PA.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.25) && hintReaches(ctx, 'vocal2', 'pa', 0.25) && hintReaches(ctx, 'guitar', 'pa', 0.25) && hintReaches(ctx, 'laptop', 'pa', 0.25) },
+      { text: 'Give the singer her wedge: open AUX 1 on her vocal.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
+    ],
     sabotage: (s) => {
       // Cold venue. Everything off, console zeroed, nothing set.
       s.mixer = { on: false };
@@ -484,6 +546,12 @@ window.LEVELS = [
     topology: { paRig: 'powered' },
     symptom: 'The show is over and the band has gone home. Zero the console back to default, then shut down in reverse order: speakers and wedges off first, console off last.',
     hint: 'Work down each strip: gain down, aux sends down, HPF off, +48V off, pan back to center, fader down, mute on. Then the master: all the way down and muted. Power-off is power-on in reverse: the speakers go off first and the console goes off last. A console makes a pop when it switches off, and any powered speaker still on will play that pop.',
+    hints: [
+      { text: 'Beat one, zero the console. Work down each strip: gains down, aux sends down, faders down, every channel muted, pans back to center, HPF off, +48V off.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus.slice(0, 7).every((z) => z.pass) },
+      { text: 'Then the master: all the way down and muted.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus[7] && ctx.zeroStatus[7].pass },
+      { text: 'Beat two, power off in reverse order: the PA speakers and wedges go off first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paOff && ctx.powerStatus.wedgesOff },
+      { text: 'Console off last. A console pops when it switches off, and any speaker still on would play that pop.', done: (ctx) => ctx.powerStatus && !ctx.powerStatus.console },
+    ],
     sabotage: (s) => {
       // End-of-night state: live mix at modest levels (clean), with realistic
       // show leftovers for the zero-out: off-center pans on the DIs, HPF in
