@@ -2230,6 +2230,11 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge,
           </div>
           <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
         </div>
+        {rings && rings.length > 0 && (
+          <div style={{ marginBottom: 10, padding: '8px 10px', background: 'rgba(255,70,48,0.10)', border: '1px solid var(--hot)', borderRadius: 6, fontSize: 11, color: 'var(--ink)', lineHeight: 1.45 }}>
+            The system is <b style={{ color: 'var(--hot)' }}>feeding back</b>. On the wedge that's ringing, pull its <b style={{ color: 'var(--hot)' }}>glowing band</b> down to cut that frequency. A couple of small cuts is enough. (HPF only helps a low-frequency ring.)
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 14 }}>
           {col('wedge', wedge, 'WEDGE 1', 'var(--aux)')}
           {col('wedge2', wedge2, 'WEDGE 2', 'var(--cool)')}
@@ -4385,6 +4390,121 @@ function IoListPanel({ open, onClose }) {
   );
 }
 
+// Shared red "take action" button used inside the WarningModal.
+const hotBtn = {
+  alignSelf: 'flex-start',
+  padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+  color: '#fff', background: 'var(--hot)', border: '1px solid #b8341f',
+  borderRadius: 4, cursor: 'pointer', textTransform: 'uppercase',
+  boxShadow: '0 0 8px rgba(255,70,48,0.35)',
+};
+
+// Centered, dismissible fault alert. Pops, distortion, and PA imbalance used
+// to stack their explanation text into the bottom-left brief card, which made
+// it tall enough to shrink the stage or push the Reset button off-screen.
+// Now they announce themselves here, in the same centered-overlay style as the
+// I/O list and Monitor EQ windows, and dismiss out of the way so the engineer
+// can act. Feedback keeps its own flow (the Monitor EQ auto-opens to the
+// ring-out), so it isn't routed through here. The brief card's status pill
+// still shows the live state after this is dismissed.
+function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset, onClose }) {
+  if (!open) return null;
+  const clipping = clips && clips.length > 0;
+  const audienceLive = ((audio?.outputs?.pa_l || 0) + (audio?.outputs?.pa_r || 0)) > 0.05;
+
+  let tag = '⚠ HEADS UP';
+  let body = null;
+  let action = null;
+
+  if (phantomPop) {
+    const cause = phantomPop.cause;
+    tag = cause === 'amp_loud' ? '⚠ BLASTED' : '⚠ POPPED';
+    const desc = cause === 'plug' ? (
+      <>You plugged a cable into a <b style={{ color: 'var(--hot)' }}>live channel</b>. Plugging in makes a loud pop, and the channel was on, so the pop went through the PA. In a real venue that can damage speakers.</>
+    ) : cause === 'patch_live' ? (
+      <>You changed a patch on a <b style={{ color: 'var(--hot)' }}>live channel</b>. Connecting or disconnecting any cable makes a pop, and that channel's path to the speakers was open, so the pop played through the system. This applies to every patch point: the stage box, the snake, and the fan-out.</>
+    ) : cause === 'speaker_patch' ? (
+      <>You moved a speaker's line while the <b style={{ color: 'var(--hot)' }}>speaker was live</b>. Plugging or unplugging a powered speaker makes a pop, and the speaker's own amplifier plays it at full level.</>
+    ) : cause === 'amp_loud' ? (
+      <>You turned the <b style={{ color: 'var(--hot)' }}>amp on</b> with the master up. Sound hit the speakers at full level the moment they came on. In a real venue that's painfully loud and can damage the system.</>
+    ) : cause === 'mixer_pop' ? (
+      <>You turned the <b style={{ color: 'var(--hot)' }}>console on</b> while the amp was already on. A console makes an electrical pop when it powers up, and the amp sent that pop straight to the speakers. Muting the master doesn't prevent this, because the pop is electrical, not sound from the mix.</>
+    ) : cause === 'mixer_off_pop' ? (
+      <>You turned the <b style={{ color: 'var(--hot)' }}>console off</b> while speakers were still on. A console makes an electrical pop when it powers down, the same as when it powers up, and the live speakers played that pop at full level. Pulling the master down doesn't prevent this, because the pop is electrical, not sound from the mix.</>
+    ) : cause === 'phantom_cans' ? (
+      <>You turned on <b style={{ color: 'var(--hot)' }}>+48V</b> while you were listening to that channel in PFL. PFL is pre-fader, so the switch-on pop went straight to your headphones, right in your ears. Muting the channel doesn't help here. That kind of pop can damage your hearing.</>
+    ) : (
+      <>You turned on <b style={{ color: 'var(--hot)' }}>+48V</b> while the channel was live. That sends a loud pop through the system. In a real venue it can damage speakers and some mics.</>
+    );
+    const fix = cause === 'plug' ? (
+      <>The correct order: <b>mute the channel</b> (or pull its fader down) → plug the cable in → bring the channel back up.</>
+    ) : cause === 'patch_live' ? (
+      <>The correct order: <b>close the path first</b>. Mute the channel, or pull the master down when the change touches more than one channel → make the patch change → bring it back up.</>
+    ) : cause === 'speaker_patch' ? (
+      <>The correct order: <b>turn the speaker off</b> (or its volume all the way down) → move the line → bring the speaker back.</>
+    ) : cause === 'amp_loud' ? (
+      <>The correct order: <b>pull the master down</b> → turn the amp on → bring the master back up slowly.</>
+    ) : cause === 'mixer_pop' ? (
+      <>The correct order: <b>console on first</b>, before any amp. Then master down, amp on, master back up.</>
+    ) : cause === 'mixer_off_pop' ? (
+      <>The correct order is power-on in reverse: master fader down → <b>speakers and wedges off</b> → console off last.</>
+    ) : cause === 'phantom_cans' ? (
+      <>The correct order: turn on <b>+48V before you PFL the channel</b> (or release PFL first). Then PFL to check it, release, and bring the channel up.</>
+    ) : (
+      <>The correct order: <b>mute the channel</b> (or pull its fader down) → turn on +48V → wait a moment → bring the channel back up.</>
+    );
+    body = (<><div style={{ color: 'var(--ink)' }}>{desc}</div><div>{fix}</div></>);
+    action = onReset ? (
+      <button onClick={onReset} className="mono ui-no-select" style={hotBtn}>↻ Reset · try the safe way</button>
+    ) : null;
+  } else if (clipping) {
+    tag = audienceLive ? '⚠ DISTORTING' : '⚠ PEAKING';
+    body = (
+      <>
+        <div style={{ color: 'var(--ink)' }}>
+          {audienceLive
+            ? (<>The sound is <b style={{ color: 'var(--hot)' }}>distorting</b>. Something in the signal chain is in the red, and the audience can hear it.</>)
+            : (<>Something in the signal chain is <b style={{ color: 'var(--hot)' }}>in the red</b>. The audience can't hear it yet because the signal isn't reaching the PA, but it will distort as soon as it does. Fix the level first.</>)}
+        </div>
+        {clips.map((c, i) => (
+          <div key={i}><b style={{ color: 'var(--hot)' }}>{c.label}:</b> {c.fix}</div>
+        ))}
+      </>
+    );
+    action = <button onClick={onClose} className="mono ui-no-select" style={hotBtn}>Got it</button>;
+  } else if (paBalanceIssue) {
+    tag = '⚠ IMBALANCED';
+    body = (
+      <>
+        <div style={{ color: 'var(--ink)' }}>The two sides of the PA <b style={{ color: 'var(--hot)' }}>don't match</b>. One side is louder than the other, or silent.</div>
+        <div>{paBalanceIssue.fix}</div>
+      </>
+    );
+    action = <button onClick={onClose} className="mono ui-no-select" style={hotBtn}>Got it</button>;
+  } else {
+    return null;
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 85, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} className="ui-no-select" style={{
+        width: 460, maxWidth: '92vw', maxHeight: '86vh', overflow: 'auto',
+        background: 'linear-gradient(180deg,#241619 0%, #17100f 100%)',
+        border: '1px solid var(--hot)', borderRadius: 10, padding: '16px 18px',
+        boxShadow: '0 0 0 1px rgba(255,70,48,0.25), 0 16px 48px rgba(0,0,0,0.7)',
+        display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div className="mono" style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.4, color: 'var(--hot)' }}>{tag}</div>
+          <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
+        </div>
+        <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 8 }}>{body}</div>
+        {action && <div style={{ display: 'flex', gap: 8 }}>{action}</div>}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [levelIdx, setLevelIdx] = uS(0);
   const [state, setState] = uS(() => {
@@ -4541,6 +4661,24 @@ function App() {
   // engineer is taken right to the ring-out (the band is glowing). Only on the
   // no-feedback -> feedback transition, so closing it by hand mid-ring sticks.
   uE(() => { if (feedback) setEqPanelOpen(true); }, [!!feedback]);
+
+  // Fault warning modal. Pops, distortion, and PA imbalance announce
+  // themselves in a centered dismissible modal instead of stacking text into
+  // the brief card. Feedback is excluded — it has its own ring-out flow (the
+  // Monitor EQ auto-opens above). Keyed by a fault signature so a brand-new
+  // event reopens the modal, but dismissing an ongoing fault sticks until the
+  // engineer fixes it (or it clears on its own).
+  const [warnOpen, setWarnOpen] = uS(false);
+  const warnDismissedSigRef = uR(null);
+  const faultSig = feedback ? null
+                : state.phantomPop ? ('pop:' + state.phantomPop.at)
+                : (clips && clips.length) ? 'clip'
+                : paBalanceIssue ? 'bal'
+                : null;
+  uE(() => {
+    if (faultSig == null) { setWarnOpen(false); warnDismissedSigRef.current = null; return; }
+    if (faultSig !== warnDismissedSigRef.current) setWarnOpen(true);
+  }, [faultSig]);
 
   const stableRef = uR(null);
   uE(() => {
@@ -5498,6 +5636,13 @@ function App() {
         toneGate={level.toneGate}
       />
 
+      <WarningModal
+        open={warnOpen}
+        phantomPop={state.phantomPop} clips={clips} paBalanceIssue={paBalanceIssue} audio={audio}
+        onReset={restart}
+        onClose={() => { warnDismissedSigRef.current = faultSig; setWarnOpen(false); }}
+      />
+
       <ProgressModal open={saveModalOpen} onClose={() => setSaveModalOpen(false)}
         completed={completed} reps={reps}
         onRestore={(d) => { setCompleted(d.completed); if (d.reps != null) setReps(d.reps); }}
@@ -5920,6 +6065,38 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
     <div className="mono" style={{ fontSize: 10, color, letterSpacing: 1.2, fontWeight: 700 }}>{text}</div>
   );
 
+  // Live status chip — the brief card's at-a-glance state. The fault detail
+  // itself now lives in the centered WarningModal; the pill stays so the state
+  // (POPPED, DISTORTING, etc.) is still visible after the modal is dismissed.
+  const statusPill = (() => {
+    const clipping = clips && clips.length > 0;
+    const audienceLive = ((audio?.outputs?.pa_l || 0) + (audio?.outputs?.pa_r || 0)) > 0.05;
+    const clipPillText = audienceLive ? '⚠ DISTORTING' : '⚠ PEAKING';
+    const balancing = !!paBalanceIssue;
+    const ringing = !!feedback;
+    const popPillText = phantomPop && phantomPop.cause === 'amp_loud' ? '⚠ BLASTED' : '⚠ POPPED';
+    const pillText = phantomPop ? popPillText
+                  : ringing ? '⚠ RINGING'
+                  : clipping ? clipPillText
+                  : balancing ? '⚠ IMBALANCED'
+                  : (allPass ? '✓ SOLVED' : 'IN PROGRESS');
+    const isFault = phantomPop || ringing || clipping || balancing;
+    const pillColor = isFault ? 'var(--hot)' : (allPass ? 'var(--green)' : 'var(--accent)');
+    const pillBg = isFault ? 'rgba(255,70,48,0.18)' : (allPass ? 'rgba(74,222,128,0.14)' : 'rgba(255,201,58,0.10)');
+    return (
+      <div className="mono" style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: 1.2, lineHeight: 1,
+        padding: '4px 8px', borderRadius: 12,
+        background: pillBg, color: pillColor, border: '1px solid ' + pillColor,
+      }}>{pillText}</div>
+    );
+  })();
+  const workChip = (
+    <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
+      {level.isPractice ? 'PRACTICE REP' : 'WORK ORDER · ' + String(level.id).padStart(2, '0')}
+    </div>
+  );
+
   return (
     <div style={{
       background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
@@ -5927,193 +6104,22 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
       display: 'flex', flexDirection: 'row', gap: 12,
       boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
       alignItems: 'stretch',
+      // Cap the height so a long objective list or hint scrolls inside the
+      // card instead of inflating the measured board height (designH) — which
+      // would otherwise shrink the whole stage or clip the bottom off-screen.
+      maxHeight: 200, overflowY: 'auto',
     }}>
-      {/* TITLE zone — status pill, work order #, level title, brief description.
-          Status pill priority (highest first):
-            ⚠ POPPED       — permanent, requires Reset. DC-transient event
-                             (phantom on hot channel, plug into hot channel).
-            ⚠ BLASTED      — permanent, requires Reset. Abrupt full-level
-                             signal hit the speakers when the amp powered on
-                             with the master up. Not a DC pop, an over-level
-                             event.
-            ⚠ RINGING      — recoverable; feedback loop is hot, audience hears it.
-            ⚠ DISTORTING   — recoverable; audience hears clipping right now.
-            ⚠ PEAKING      — recoverable; desk is in the red but audience
-                             can't hear it (signal isn't reaching the PA).
-            ⚠ IMBALANCED   — recoverable; PA L and R aren't matched.
-            ✓ SOLVED       — all conditions met, no fault.
-            IN PROGRESS    — default working state. */}
-      <div style={{ flex: '1.2 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          {(() => {
-            const clipping = clips && clips.length > 0;
-            const audienceLive = ((audio?.outputs?.pa_l || 0) + (audio?.outputs?.pa_r || 0)) > 0.05;
-            const clipPillText = audienceLive ? '⚠ DISTORTING' : '⚠ PEAKING';
-            const balancing = !!paBalanceIssue;
-            const ringing = !!feedback;
-            const popPillText = phantomPop && phantomPop.cause === 'amp_loud' ? '⚠ BLASTED' : '⚠ POPPED';
-            const pillText = phantomPop ? popPillText
-                          : ringing ? '⚠ RINGING'
-                          : clipping ? clipPillText
-                          : balancing ? '⚠ IMBALANCED'
-                          : (allPass ? '✓ SOLVED' : 'IN PROGRESS');
-            const isFault = phantomPop || ringing || clipping || balancing;
-            const pillColor = isFault ? 'var(--hot)' : (allPass ? 'var(--green)' : 'var(--accent)');
-            const pillBg = isFault ? 'rgba(255,70,48,0.18)' : (allPass ? 'rgba(74,222,128,0.14)' : 'rgba(255,201,58,0.10)');
-            return (
-              <div className="mono" style={{
-                fontSize: 9, fontWeight: 700, letterSpacing: 1.2, lineHeight: 1,
-                padding: '4px 8px', borderRadius: 12,
-                background: pillBg, color: pillColor, border: '1px solid ' + pillColor,
-              }}>{pillText}</div>
-            );
-          })()}
-          <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-            {level.isPractice ? 'PRACTICE REP' : 'WORK ORDER · ' + String(level.id).padStart(2, '0')}
-          </div>
-        </div>
-        <div className="display" style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.1, color: 'var(--ink)', letterSpacing: -0.01 }}>
-          {level.title}
-        </div>
-        {phantomPop ? (
-          /* Damaging-event blocker. Cause-tagged so the description and
-             recovery sequence adapt:
-               'plug'        — XLR contact transient into a hot channel
-               'amp_loud'    — power amp flipped on with the master up; the
-                               abrupt full-level signal hits the speakers
-                               as soon as they come alive. Not a DC pop,
-                               but an audience-blasting / speaker-stress event.
-               'mixer_pop'   — console flipped on while an amp it feeds is
-                               already live. The switch-on transient goes
-                               straight into the live amp and pops the
-                               speakers. Electrical, not program level, so it
-                               happens even with the master muted.
-               'mixer_off_pop' — the mirror image: console flipped OFF while
-                               a powered box it feeds is still live. Same
-                               electrical transient, opposite direction. The
-                               power-down order lesson.
-               (default)     — +48V engaged with the channel live */
-          (() => {
-            const cause = phantomPop.cause;
-            return (
-              <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ color: 'var(--ink)' }}>
-                  {cause === 'plug' ? (
-                    <>You plugged a cable into a <b style={{ color: 'var(--hot)' }}>live channel</b>. Plugging in makes a loud pop, and the channel was on, so the pop went through the PA. In a real venue that can damage speakers.</>
-                  ) : cause === 'patch_live' ? (
-                    <>You changed a patch on a <b style={{ color: 'var(--hot)' }}>live channel</b>. Connecting or disconnecting any cable makes a pop, and that channel's path to the speakers was open, so the pop played through the system. This applies to every patch point: the stage box, the snake, and the fan-out.</>
-                  ) : cause === 'speaker_patch' ? (
-                    <>You moved a speaker's line while the <b style={{ color: 'var(--hot)' }}>speaker was live</b>. Plugging or unplugging a powered speaker makes a pop, and the speaker's own amplifier plays it at full level.</>
-                  ) : cause === 'amp_loud' ? (
-                    <>You turned the <b style={{ color: 'var(--hot)' }}>amp on</b> with the master up. Sound hit the speakers at full level the moment they came on. In a real venue that's painfully loud and can damage the system.</>
-                  ) : cause === 'mixer_pop' ? (
-                    <>You turned the <b style={{ color: 'var(--hot)' }}>console on</b> while the amp was already on. A console makes an electrical pop when it powers up, and the amp sent that pop straight to the speakers. Muting the master doesn't prevent this, because the pop is electrical, not sound from the mix.</>
-                  ) : cause === 'mixer_off_pop' ? (
-                    <>You turned the <b style={{ color: 'var(--hot)' }}>console off</b> while speakers were still on. A console makes an electrical pop when it powers down, the same as when it powers up, and the live speakers played that pop at full level. Pulling the master down doesn't prevent this, because the pop is electrical, not sound from the mix.</>
-                  ) : cause === 'phantom_cans' ? (
-                    <>You turned on <b style={{ color: 'var(--hot)' }}>+48V</b> while you were listening to that channel in PFL. PFL is pre-fader, so the switch-on pop went straight to your headphones, right in your ears. Muting the channel doesn't help here. That kind of pop can damage your hearing.</>
-                  ) : (
-                    <>You turned on <b style={{ color: 'var(--hot)' }}>+48V</b> while the channel was live. That sends a loud pop through the system. In a real venue it can damage speakers and some mics.</>
-                  )}
-                </div>
-                <div style={{ color: 'var(--ink-2)' }}>
-                  {cause === 'plug' ? (
-                    <>The correct order: <b>mute the channel</b> (or pull its fader down) → plug the cable in → bring the channel back up.</>
-                  ) : cause === 'patch_live' ? (
-                    <>The correct order: <b>close the path first</b>. Mute the channel, or pull the master down when the change touches more than one channel → make the patch change → bring it back up.</>
-                  ) : cause === 'speaker_patch' ? (
-                    <>The correct order: <b>turn the speaker off</b> (or its volume all the way down) → move the line → bring the speaker back.</>
-                  ) : cause === 'amp_loud' ? (
-                    <>The correct order: <b>pull the master down</b> → turn the amp on → bring the master back up slowly.</>
-                  ) : cause === 'mixer_pop' ? (
-                    <>The correct order: <b>console on first</b>, before any amp. Then master down, amp on, master back up.</>
-                  ) : cause === 'mixer_off_pop' ? (
-                    <>The correct order is power-on in reverse: master fader down → <b>speakers and wedges off</b> → console off last.</>
-                  ) : cause === 'phantom_cans' ? (
-                    <>The correct order: turn on <b>+48V before you PFL the channel</b> (or release PFL first). Then PFL to check it, release, and bring the channel up.</>
-                  ) : (
-                    <>The correct order: <b>mute the channel</b> (or pull its fader down) → turn on +48V → wait a moment → bring the channel back up.</>
-                  )}
-                </div>
-                {onReset && (
-                  <button onClick={onReset} className="mono ui-no-select" style={{
-                    alignSelf: 'flex-start',
-                    padding: '6px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
-                    color: '#fff', background: 'var(--hot)', border: '1px solid #b8341f',
-                    borderRadius: 4, cursor: 'pointer', textTransform: 'uppercase',
-                    boxShadow: '0 0 8px rgba(255,70,48,0.35)',
-                  }}>↻ Reset · try the safe way</button>
-                )}
-              </div>
-            );
-          })()
-        ) : feedback ? (
-          /* Feedback loop ringing. Recoverable. The three controls in the
-             loop are channel gain, channel aux send, and wedge volume.
-             HPF on the live channel knocks low-end stage rumble out of
-             the loop and pushes the ring threshold up. Any one of them
-             pulled below the loop unity gain clears the ringing. */
-          <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ color: 'var(--ink)' }}>
-              The system is <b style={{ color: 'var(--hot)' }}>feeding back</b>. The mic is picking up its own sound from the wedge, and it keeps building. The whole room hears it.
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--ink-2)' }}>
-              Ring it out: on the wedge that's ringing, pull down the <b style={{ color: 'var(--hot)' }}>glowing band</b> on its monitor EQ to cut that frequency. That stops the ring without losing the level. (HPF only helps a low-frequency ring.)
-            </div>
-          </div>
-        ) : (clips && clips.length > 0) ? (
-          /* Clipping warning — recoverable, no reset needed. Shows the
-             offending stage(s) and the fix. The moment the user backs off
-             the right control, this clears and the level becomes solvable
-             again. The text is intentionally short and specific to the
-             stage so the user knows exactly which knob to reach for.
-
-             Wording adapts to whether the audience is actually hearing
-             audio right now (PA on/unmuted/up + master open). If the room
-             is live, the audience IS hearing distortion. If not, the
-             clipping is happening inside the desk — they don't hear it
-             yet, but opening the channel/master to the room would push it
-             out. Either way the discipline is the same: fix the gain
-             staging before you take it to the audience. */
-          (() => {
-            const paLLive = (audio?.outputs?.pa_l || 0) > 0.05;
-            const paRLive = (audio?.outputs?.pa_r || 0) > 0.05;
-            const audienceLive = paLLive || paRLive;
-            return (
-              <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ color: 'var(--ink)' }}>
-                  {audienceLive ? (
-                    <>The sound is <b style={{ color: 'var(--hot)' }}>distorting</b>. Something in the signal chain is in the red, and the audience can hear it.</>
-                  ) : (
-                    <>Something in the signal chain is <b style={{ color: 'var(--hot)' }}>in the red</b>. The audience can't hear it yet because the signal isn't reaching the PA, but it will distort as soon as it does. Fix the level first.</>
-                  )}
-                </div>
-                {clips.map((c, i) => (
-                  <div key={i} style={{ fontSize: 11, color: 'var(--ink-2)' }}>
-                    <b style={{ color: 'var(--hot)' }}>{c.label}:</b> {c.fix}
-                  </div>
-                ))}
-              </div>
-            );
-          })()
-        ) : paBalanceIssue ? (
-          /* Stereo PA imbalance — recoverable. The audience can hear it
-             because one side is louder / silent. Match the two PAs and
-             the warning clears. */
-          <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ color: 'var(--ink)' }}>
-              The two sides of the PA <b style={{ color: 'var(--hot)' }}>don't match</b>. One side is louder than the other, or silent.
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--ink-2)' }}>{paBalanceIssue.fix}</div>
-          </div>
-        ) : null}
-      </div>
-
       {/* SYMPTOM / TASK zone. Setup levels (level.task) aren't describing a
           problem, so they get a neutral TASK label instead of the red
           warning SYMPTOM treatment. */}
       <div style={zoneStyle(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? 'rgba(255,255,255,0.03)' : 'rgba(255,70,48,0.08)')}>
-        {zoneLabel(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? '▸ TASK' : '⚠ SYMPTOM')}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {zoneLabel(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? '▸ TASK' : '⚠ SYMPTOM')}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {statusPill}
+            {workChip}
+          </div>
+        </div>
         <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.4 }}>{level.symptom}</div>
       </div>
 
