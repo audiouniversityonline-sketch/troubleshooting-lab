@@ -130,7 +130,7 @@ window.LEVELS = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'First job of the day: connect the whole system from the paperwork, with everything still powered off. Open the I/O LIST in the top bar for the plan. Inputs ride snake channels 1 to 4: plug each source into its numbered input at the stage box, and land each tail on its console channel at FOH. Outputs ride the same snake on channels 5 to 8: connect the console outputs to tails 5 to 8, and run each speaker line to its numbered out port.',
+    symptom: 'First job of the day: connect the whole system from the paperwork, with everything still powered off. Open the I/O LIST in the top bar for the plan, then patch each cable to the port it calls for.',
     hint: 'Drag a cable end and drop it on a port or an output chip. Dropping on a taken spot swaps the two cables. The colors follow the standard 8-channel snake code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray. Patching with the power off is the professional habit: nothing can pop while the system is dead.',
     sabotage: (s) => {
       // Load-in state: nothing connected anywhere. Input cables loose above
@@ -176,7 +176,7 @@ window.LEVELS = [
     // down (the zeroed console start). Without it, deriveInvolves defaults to
     // [1] to avoid an accidentally-dead desk, which would leave channel 1 live.
     involves: [],
-    symptom: 'Everything is connected and the console is zeroed out (every setting is set to its default state). It\'s time to power on the whole system: the console, the wedges, and the two PA speakers.',
+    symptom: 'Everything is connected and the console is zeroed out. Power the system up, and mind the order: bring it up the wrong way and you pop the speakers.',
     hint: 'Power on from the console end first, then the powered speakers last. If you turn a PA speaker or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the wedges and the PA speakers.',
     conditions: [],
     // Active speakers: powered PA boxes with their own on/off, no power amp.
@@ -217,7 +217,7 @@ window.LEVELS = [
     conditions: [
       { source: 'playback', dest: 'pa', min: 0.30, max: 0.50 },
     ],
-    symptom: 'The rig is on and the console is fully zeroed. Your playback device is connected. PFL the playback, set the input gain healthy in your headphones, unmute and bring the channel and master faders to unity, then set the PA speaker level for a good loudness in the room.',
+    symptom: 'The system is on and the console is fully zeroed, with your playback connected. Set your gain structure the right way: check it in PFL, set the gain, bring the faders to unity, then set the room level on the PA.',
     hint: 'Press PFL on the playback to hear it in your headphones. Set the GAIN so the meter sits in the healthy zone. Release PFL, unmute the playback and the master, and bring both faders up to unity. Then bring up the PA speaker volume until the room sits at a good level on the loudness meter.',
     sabotage: (s) => {
       // Continuous with Power-On: rig on, console fully zeroed. Channel muted,
@@ -251,7 +251,7 @@ window.LEVELS = [
       { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 plays' },
     ],
     conditions: [],
-    symptom: 'The PA is set. Now bring up your monitor wedges. Send the reference out to each wedge and confirm it plays. AUX 1 feeds Wedge 1, AUX 2 feeds Wedge 2.',
+    symptom: 'The PA is set. Now bring up your monitor wedges. AUX 1 feeds Wedge 1, AUX 2 feeds Wedge 2.',
     hint: 'Turn up AUX 1 on the playback channel and bring up the Wedge 1 volume on stage until it plays. Do the same with AUX 2 for Wedge 2. Each wedge gets checked off once it is playing.',
     sabotage: (s) => {
       // Carried from Set the Input Level: good input, faders at unity, PA set.
@@ -438,7 +438,7 @@ window.LEVELS = [
       { source: 'vocal',  dest: 'wedge', min: 0.35 },
     ],
     topology: { paRig: 'powered' },
-    symptom: 'Final exam. You are opening the venue alone today. Everything is connected, the system is off, and the console is zeroed. Do the whole job: power on in the right order, test every speaker with your playback, then bring in the band: check every input in PFL, bring it up, and give the singer her vocal in her wedge. Keep it clean the whole way.',
+    symptom: 'Final exam. You are opening the venue alone today, from a cold system. Do the whole job in order: power on, test every speaker with your playback, then bring the band in clean. Keep it clean the whole way.',
     hint: 'It is everything you have already done, in the order you learned it. Console on first, then the speakers. PFL the playback, set its gain, and send it to the PA and both wedges: each speaker checks off once it plays and stays checked, so you can turn the playback back down afterward. Then the band: PFL each input, set its gain, and bring it up with the fader at unity. Turn on +48V for the condenser and the active DI while the channel is muted and before you PFL it. Open AUX 1 on the vocal for her wedge.',
     sabotage: (s) => {
       // Cold venue. Everything off, console zeroed, nothing set.
@@ -482,7 +482,7 @@ window.LEVELS = [
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The show is over and the band has gone home. Zero out the console, then shut the system down: gains, aux sends and faders all the way down, every channel muted, pans centered, HPF and +48V switches off, master down and muted. Then the wedges and PA speakers off, and the console off last.',
+    symptom: 'The show is over and the band has gone home. Zero the console back to default, then shut down in reverse order: speakers and wedges off first, console off last.',
     hint: 'Work down each strip: gain down, aux sends down, HPF off, +48V off, pan back to center, fader down, mute on. Then the master: all the way down and muted. Power-off is power-on in reverse: the speakers go off first and the console goes off last. A console makes a pop when it switches off, and any powered speaker still on will play that pop.',
     sabotage: (s) => {
       // End-of-night state: live mix at modest levels (clean), with realistic
