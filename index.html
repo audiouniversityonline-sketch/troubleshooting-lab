@@ -2203,7 +2203,7 @@ function EqStrip({ eq, onChange, ringBands, accent, height, width }) {
 // Exposable "Monitor EQ" panel — the graphic EQs for the two aux/monitor sends,
 // the way they'd sit at FOH (outboard rack, or a screen on a digital desk). It
 // auto-opens when a wedge starts ringing and can be toggled by hand otherwise.
-function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge, ringBand, rings, toneGate }) {
+function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge, ringBand, rings, toneGate, byEar }) {
   if (!open) return null;
   const ringsFor = (key) => (rings || []).filter(r => r.wedge === key).map(r => r.band);
   const col = (key, w, label, accent) => {
@@ -2219,7 +2219,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge,
     return (
     <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#141418', border: '1px solid ' + (isRinging ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6, boxShadow: isRinging ? '0 0 0 1px rgba(255,70,48,0.4)' : 'none' }}>
       <div className="mono" style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: isRinging ? 'var(--hot)' : accent }}>{label}{isRinging ? (hot.length > 1 ? ' · RINGING ×' + hot.length : ' · RINGING') : ''}</div>
-      <EqStrip eq={w.eq} onChange={(band, v) => onBandChange(key, band, v)} ringBands={hot} accent={accent} height={104} width={20}/>
+      <EqStrip eq={w.eq} onChange={(band, v) => onBandChange(key, band, v)} ringBands={byEar ? [] : hot} accent={accent} height={104} width={20}/>
       {full && toneGate ? (
         <div className="mono" style={{ fontSize: 8, letterSpacing: 1, fontWeight: 700, color: toneBad ? 'var(--hot)' : 'var(--ink-2)' }}>
           TONE {Math.round(tone * 100)}%{toneBad ? ' · TOO MUCH CUT' : ''}
@@ -2250,9 +2250,13 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge,
               border: '1px solid ' + (ringing ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6,
               fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
               {ringing ? (
-                <span style={{ color: 'var(--ink)' }}>Feeding back. Pull the <b style={{ color: 'var(--hot)' }}>glowing band</b> down to cut that frequency, just enough to stop it. A couple of small cuts is enough.</span>
+                byEar
+                  ? <span style={{ color: 'var(--ink)' }}>Feeding back. Find the ringing frequency by <b style={{ color: 'var(--hot)' }}>ear</b> and pull that band down, just enough to stop it.</span>
+                  : <span style={{ color: 'var(--ink)' }}>Feeding back. Pull the <b style={{ color: 'var(--hot)' }}>glowing band</b> down to cut that frequency, just enough to stop it. A couple of small cuts is enough.</span>
               ) : (
-                <span>Pull a band down to cut that frequency. A band glows red when it is ringing; cut it just enough to stop it.</span>
+                byEar
+                  ? <span>Listen for the ring, then pull that frequency's band down. No band glows in this mode; use your ear.</span>
+                  : <span>Pull a band down to cut that frequency. A band glows red when it is ringing; cut it just enough to stop it.</span>
               )}
             </div>
           );
@@ -4584,6 +4588,10 @@ function App() {
   uE(() => { try { window.localStorage.setItem(REPS_KEY, String(reps)); } catch (e) {} }, [reps]);
   const [practiceFaults, setPracticeFaultsState] = uS(1);
   const practiceFaultsRef = uR(1);
+  // Feedback Mode difficulty: false = guided (the ringing band glows red),
+  // true = by ear (no glow; the engineer finds the ringing frequency by
+  // listening). Only affects Feedback Mode.
+  const [feedbackByEar, setFeedbackByEar] = uS(false);
   const practiceInfoRef = uR(null);
 
   // First-run tour: shows once per browser, before anything else.
@@ -5676,6 +5684,7 @@ function App() {
         onOpenIoList={() => setIoListOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
         practiceFaults={practiceFaults} onSetPracticeFaults={setPracticeFaults}
+        feedbackByEar={feedbackByEar} onSetFeedbackByEar={setFeedbackByEar}
       />
 
       <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
@@ -5690,6 +5699,7 @@ function App() {
         ringBand={feedback ? feedback.ringBand : null}
         rings={feedback ? feedback.rings : []}
         toneGate={level.toneGate}
+        byEar={feedbackByEar && level.isFeedbackMode}
       />
 
       <WarningModal
@@ -5885,7 +5895,7 @@ function App() {
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, nudgeSound, practiceFaults, onSetPracticeFaults }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar }) {
   const [picker, setPicker] = uS(false);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
   // column width, so this is the reliable "use my whole screen" path: it puts
@@ -5982,6 +5992,21 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                 color: practiceFaults === n ? '#0a0a0c' : 'var(--ink-2)',
                 borderColor: practiceFaults === n ? '#2c5d9e' : '#38383e',
               }}>{n}</button>
+            ))}
+          </div>
+        )}
+        {/* Ring-out difficulty — Feedback Mode only. Guided glows the ringing
+            band; By Ear hides it so the engineer finds the frequency by ear. */}
+        {level.isFeedbackMode && onSetFeedbackByEar && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }}>
+            <div className="mono" title="Guided glows the ringing band. By ear hides it: find the ringing frequency by listening." style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>DIFFICULTY</div>
+            {[{ v: false, l: 'GUIDED' }, { v: true, l: 'BY EAR' }].map(opt => (
+              <button key={opt.l} onClick={() => onSetFeedbackByEar(opt.v)} className="mono ui-no-select" style={{
+                ...navBtn, padding: '6px 10px', fontWeight: 800,
+                background: feedbackByEar === opt.v ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d',
+                color: feedbackByEar === opt.v ? '#0a0a0c' : 'var(--ink-2)',
+                borderColor: feedbackByEar === opt.v ? '#2c5d9e' : '#38383e',
+              }}>{opt.l}</button>
             ))}
           </div>
         )}
