@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=23"></script>
+<script src="content.js?v=24"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -206,11 +206,27 @@ const EQ_BANDS = ['250', '500', '1k', '2k', '4k'];
 // the center frequency of whichever band is glowing, so what you hear and what
 // you see (and cut) are always the same note. Index-aligned with EQ_BANDS.
 const EQ_BAND_HZ = [250, 500, 1000, 2000, 4000];
+// FULL graphic EQ — the standard octave centers from 63 Hz to 16 kHz. Used by
+// Feedback Mode, where ringing out a wedge across the whole spectrum is the
+// training. The Essentials keep the simpler 5-band EQ. A wedge carries the
+// full EQ when its eq array has 9 entries.
+const FULL_EQ_BANDS = ['63', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'];
+const FULL_EQ_HZ = [63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 const EQ_CUT_DB = 12;
 // Linear relief multiplier from a band's cut fraction (0 flat .. 1 full cut).
 function eqBandRelief(cutFrac) {
   const c = Math.max(0, Math.min(1, cutFrac || 0));
   return Math.pow(10, (-EQ_CUT_DB * c) / 20);
+}
+// What the EQ does to the monitor's overall LEVEL: energy comes out of the
+// wedge with every cut (mean of the band gains). This is why a real engineer
+// cuts surgically — slamming the whole EQ down kills the ring AND the
+// monitor. Feeds the wedge output chain in computeAudio.
+function eqLevelGain(w) {
+  if (!w || !w.eq || !w.eq.length) return 1;
+  let sum = 0;
+  for (const c of w.eq) sum += eqBandRelief(c);
+  return sum / w.eq.length;
 }
 
 const DEFAULT_CHANNEL = {
@@ -468,11 +484,16 @@ function computeAudio(s, envelope) {
   // The 1.3 PA multiplier sits below the previous 1.7 so a typical
   // multi-channel mix at default settings doesn't park the speaker LED in
   // the red; wedges run their own 1.6 amp gain.
+  // The wedge EQs cost level as well as loop gain (eqLevelGain): cutting a
+  // band takes that band's energy out of the monitor, so deep or wholesale
+  // cuts audibly shrink the wedge. Ring out surgically.
+  const wedgeEqGain = eqLevelGain(o.wedge);
+  const wedge2EqGain = eqLevelGain(w2);
   const spkChain = {
     pa_l: paLOn && !o.pa_l.mute ? o.pa_l.volume * 1.3 * paGate : 0,
     pa_r: paROn && !o.pa_r.mute ? o.pa_r.volume * 1.3 * paGate : 0,
-    wedge: o.wedge.on && !o.wedge.mute ? o.wedge.volume * 1.6 : 0,
-    wedge2: w2.on && !w2.mute ? w2.volume * 1.6 : 0,
+    wedge: o.wedge.on && !o.wedge.mute ? o.wedge.volume * 1.6 * wedgeEqGain : 0,
+    wedge2: w2.on && !w2.mute ? w2.volume * 1.6 * wedge2EqGain : 0,
   };
   // SPEAKER OUTPUTS — patched bus × the speaker's own chain. This is what
   // each box is actually producing; the on-speaker LED meter reads from
@@ -563,6 +584,9 @@ function computeAudio(s, envelope) {
     },
     paGate,
     contributions,
+    // EQ level multipliers, so detectFeedback can recover the PRE-EQ wedge
+    // feed (the loop math applies per-band relief itself).
+    eqGain: { wedge: wedgeEqGain, wedge2: wedge2EqGain },
     anyPfl,
     pflBus,
     pflLevel: pflTotal,
@@ -1072,31 +1096,49 @@ window.speakerLiveForPatch = speakerLiveForPatch;
 // engaging it drops the effective loop gain ~40% — often enough on its own to
 // drop a ringing wedge back under threshold. Engine field name is `highpass`.
 //
-// Returns null when safe, or { channelIdx, riskAmount } when a loop is hot.
-// Hysteresis memory for detectFeedback. A loop that has started ringing
-// keeps ringing until the loop gain drops clearly below the onset point —
-// physically true (the ring sustains itself) and it stops the warning from
-// strobing when the level wobbles right at the threshold (program envelope
-// swings push the loop above and below it many times a second at onset).
-// Module-level is safe here: every caller in a frame passes the same state,
-// so the flag settles to the same answer for all of them.
-let _ringActive = false;
+// Returns null when safe, or an aggregate when one or more loops are hot:
+//   { channelIdx, riskAmount, ringWedge, ringBand, rings: [...] }
+// rings lists EVERY hot loop ({ wedge, band, hz, risk }) — in Feedback Mode
+// more than one frequency can ring at once, exactly like a real wedge.
+// channelIdx/ringWedge/ringBand describe the LOUDEST ring (legacy consumers).
+//
+// Hysteresis memory, per wedge+band: a loop that has started ringing keeps
+// ringing until its gain drops clearly below the onset point — physically
+// true (the ring sustains itself) and it stops the warning from strobing
+// when a level wobbles right at the threshold. Module-level is safe here:
+// every caller in a frame passes the same state.
+const _ringActive = {};
 function detectFeedback(s, audio) {
   if (!s || !s.channels || !audio || !audio.contributions) return null;
   const WEDGE_COUPLING = 1.0;   // wedge points at the mic
   const MAINS_COUPLING = 0.22;  // mains face away — only ring when cranked hard
-  // Enter at 0.55; once ringing, only release below 0.45.
-  const RING_THRESHOLD = _ringActive ? 0.45 : 0.55;
   const o = s.outputs || {};
-  // Loop gain through one wedge for a mic, after that wedge's EQ cut at its
-  // ring band and (for a low ring band only) an HPF on the channel. The EQ is
-  // the surgical fix; HPF only helps low-frequency ringing.
-  const wedgeRisk = (w, contrib, hpf) => {
-    if (!w || !contrib) return 0;
-    const band = w.ringBand != null ? w.ringBand : 2;
-    const eqRelief = w.eq ? eqBandRelief(w.eq[band]) : 1.0;
-    const hpfRelief = (hpf && band <= 1) ? 0.6 : 1.0;
-    return contrib * WEDGE_COUPLING * eqRelief * hpfRelief;
+  const rings = [];
+  // Per-band loop check for one wedge. Two wedge models:
+  //   - fbProfile (Feedback Mode): every band is an active resonance with
+  //     its own sensitivity; any number can ring at once.
+  //   - legacy ringBand: the wedge rings at one resonant band.
+  // `feed` is the PRE-EQ wedge level (contributions carry the EQ's level
+  // cost, so divide it back out — the loop applies per-band relief itself).
+  // HPF relieves only the LOW bands (stage rumble), never a mid/high ring.
+  const checkWedge = (wKey, w, feed, hpf, chIdx) => {
+    if (!w || !feed) return;
+    const full = !!(w.fbProfile && w.eq && w.eq.length === w.fbProfile.length);
+    const hzOf = (b) => (w.eq && w.eq.length === FULL_EQ_HZ.length) ? FULL_EQ_HZ[b] : EQ_BAND_HZ[b];
+    const bands = full ? w.fbProfile.map((p, b) => ({ b, p })) : [{ b: (w.ringBand != null ? w.ringBand : 2), p: 1.0 }];
+    for (const { b, p } of bands) {
+      const lowBand = hzOf(b) <= 250;
+      const hpfRelief = (hpf && lowBand) ? 0.6 : 1.0;
+      const loop = feed * WEDGE_COUPLING * p * (w.eq ? eqBandRelief(w.eq[b]) : 1.0) * hpfRelief;
+      const key = wKey + ':' + b;
+      const th = _ringActive[key] ? 0.45 : 0.55;
+      if (loop > th) {
+        _ringActive[key] = true;
+        rings.push({ wedge: wKey, band: b, hz: hzOf(b), risk: loop, channelIdx: chIdx });
+      } else {
+        _ringActive[key] = false;
+      }
+    }
   };
   for (let i = 0; i < s.channels.length; i++) {
     const ch = s.channels[i];
@@ -1110,19 +1152,23 @@ function detectFeedback(s, audio) {
     if (srcDef.kind === 'condenser' && !ch.phantom) continue;
     const c = audio.contributions[srcKey];
     if (!c) continue;
-    const w1 = wedgeRisk(o.wedge, c.wedge || 0, ch.highpass);
-    const w2 = wedgeRisk(o.wedge2, c.wedge2 || 0, ch.highpass);
+    const eqg = audio.eqGain || { wedge: 1, wedge2: 1 };
+    checkWedge('wedge', o.wedge, (c.wedge || 0) / (eqg.wedge || 1), ch.highpass, i);
+    checkWedge('wedge2', o.wedge2, (c.wedge2 || 0) / (eqg.wedge2 || 1), ch.highpass, i);
+    // Mains loop — no single band; the ring tone falls back to 2 kHz.
     const mainsLoop = ((c.pa_l || 0) + (c.pa_r || 0)) * MAINS_COUPLING * (ch.highpass ? 0.6 : 1.0);
-    const risk = Math.max(w1, w2, mainsLoop);
-    if (risk > RING_THRESHOLD) {
-      // Which wedge is ringing, so the UI can highlight its ring band.
-      const ringWedge = w1 >= w2 && w1 >= mainsLoop ? 'wedge' : (w2 >= mainsLoop ? 'wedge2' : null);
-      _ringActive = true;
-      return { channelIdx: i, riskAmount: risk, ringWedge, ringBand: ringWedge ? (o[ringWedge].ringBand) : null };
+    const mKey = 'mains:' + i;
+    const mTh = _ringActive[mKey] ? 0.45 : 0.55;
+    if (mainsLoop > mTh) {
+      _ringActive[mKey] = true;
+      rings.push({ wedge: null, band: null, hz: 2000, risk: mainsLoop, channelIdx: i });
+    } else {
+      _ringActive[mKey] = false;
     }
   }
-  _ringActive = false;
-  return null;
+  if (!rings.length) return null;
+  const primary = rings.reduce((a, b) => (b.risk > a.risk ? b : a));
+  return { channelIdx: primary.channelIdx, riskAmount: primary.risk, ringWedge: primary.wedge, ringBand: primary.band, rings };
 }
 window.detectFeedback = detectFeedback;
 window.wouldPopOnPlug = wouldPopOnPlug;
@@ -2130,11 +2176,14 @@ function EqBand({ value, onChange, label, ringing, accent, height = 96, width = 
   );
 }
 
-function EqStrip({ eq, onChange, ringBand, accent, height, width }) {
+function EqStrip({ eq, onChange, ringBands, accent, height, width }) {
+  // 9 entries = the full octave EQ (63 Hz .. 16 kHz, Feedback Mode);
+  // 5 entries = the simpler Essentials EQ. More than one band can ring.
+  const labels = (eq && eq.length === FULL_EQ_BANDS.length) ? FULL_EQ_BANDS : EQ_BANDS;
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-      {EQ_BANDS.map((lbl, i) => (
-        <EqBand key={i} value={eq ? eq[i] : 0} onChange={(v) => onChange(i, v)} label={lbl} ringing={ringBand === i} accent={accent} height={height} width={width}/>
+    <div style={{ display: 'flex', gap: labels.length > 5 ? 6 : 8, alignItems: 'flex-start' }}>
+      {labels.map((lbl, i) => (
+        <EqBand key={i} value={eq ? eq[i] : 0} onChange={(v) => onChange(i, v)} label={lbl} ringing={!!(ringBands && ringBands.indexOf(i) >= 0)} accent={accent} height={height} width={width}/>
       ))}
     </div>
   );
@@ -2143,14 +2192,19 @@ function EqStrip({ eq, onChange, ringBand, accent, height, width }) {
 // Exposable "Monitor EQ" panel — the graphic EQs for the two aux/monitor sends,
 // the way they'd sit at FOH (outboard rack, or a screen on a digital desk). It
 // auto-opens when a wedge starts ringing and can be toggled by hand otherwise.
-function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge, ringBand }) {
+function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge, ringBand, rings }) {
   if (!open) return null;
-  const col = (key, w, label, accent) => (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#141418', border: '1px solid ' + (ringWedge === key ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6, boxShadow: ringWedge === key ? '0 0 0 1px rgba(255,70,48,0.4)' : 'none' }}>
-      <div className="mono" style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: ringWedge === key ? 'var(--hot)' : accent }}>{label}{ringWedge === key ? ' · RINGING' : ''}</div>
-      <EqStrip eq={w.eq} onChange={(band, v) => onBandChange(key, band, v)} ringBand={ringWedge === key ? ringBand : null} accent={accent} height={104} width={20}/>
+  const ringsFor = (key) => (rings || []).filter(r => r.wedge === key).map(r => r.band);
+  const col = (key, w, label, accent) => {
+    const hot = ringsFor(key);
+    const isRinging = hot.length > 0;
+    return (
+    <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#141418', border: '1px solid ' + (isRinging ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6, boxShadow: isRinging ? '0 0 0 1px rgba(255,70,48,0.4)' : 'none' }}>
+      <div className="mono" style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: isRinging ? 'var(--hot)' : accent }}>{label}{isRinging ? (hot.length > 1 ? ' · RINGING ×' + hot.length : ' · RINGING') : ''}</div>
+      <EqStrip eq={w.eq} onChange={(band, v) => onBandChange(key, band, v)} ringBands={hot} accent={accent} height={104} width={20}/>
     </div>
-  );
+    );
+  };
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, background: 'rgba(0,0,0,0.45)' }}>
       <div onClick={(e) => e.stopPropagation()} className="ui-no-select" style={{ background: 'linear-gradient(180deg,#1c1c20 0%, #141417 100%)', border: '1px solid #38383e', borderRadius: 10, padding: '14px 16px', boxShadow: '0 16px 48px rgba(0,0,0,0.6)' }}>
@@ -3904,6 +3958,7 @@ const TIER = (() => {
 const SCENARIOS = [
   ...window.LEVELS,
   ...(window.PRACTICE ? [{ ...window.PRACTICE, isChallenge: true, isPractice: true }] : []),
+  ...(window.FEEDBACK_MODE ? [{ ...window.FEEDBACK_MODE, isChallenge: true, isFeedbackMode: true }] : []),
 ];
 const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
 
@@ -4321,16 +4376,15 @@ function App() {
   const envelopeRef = uR({ vocal: 1, vocal2: 1, guitar: 1, laptop: 1 });
   const envStartRef = uR(performance.now() / 1000);
   const [envTick, setEnvTick] = uS(0);
-  // Feedback ringing tone — built in ensureAudio, gated by detectFeedback.
+  // Feedback ring voices — built in ensureAudio, gated by detectFeedback.
   // feedbackRiskRef is updated every render below so the animation loop can
-  // adjust the oscillator's gain without taking a hard dependency on state.
-  // Declared early because the feedback derivation below writes to the ref
-  // during render, and the audio chain creation needs the chain ref.
+  // adjust voice gains without taking a hard dependency on state.
+  // feedbackRingsRef carries EVERY active ring ({hzIndex into FULL_EQ_HZ,
+  // risk}) — more than one frequency can ring at once in Feedback Mode, and
+  // each gets its own voice.
   const feedbackChainRef = uR(null);
   const feedbackRiskRef = uR(0);
-  // Which EQ band (index into EQ_BAND_HZ) is currently ringing, so the audio
-  // loop can tune the ring tone to that band's center frequency. null = no ring.
-  const feedbackBandRef = uR(null);
+  const feedbackRingsRef = uR([]);
 
   const audio = uM(() => window.computeAudio(state, envelopeRef.current), [state, envTick]);
 
@@ -4356,9 +4410,11 @@ function App() {
   // Push the risk amount into a ref so the audio animation loop can read
   // it without taking a dependency on state. 0 when no loop is hot.
   feedbackRiskRef.current = feedback ? feedback.riskAmount : 0;
-  // Tone frequency tracks the glowing band. Hold the last band when the loop
-  // clears so the ring decays at the same pitch instead of jumping.
-  if (feedback && feedback.ringBand != null) feedbackBandRef.current = feedback.ringBand;
+  // Every active ring, mapped to its voice (index into FULL_EQ_HZ). Voices
+  // whose band stops ringing decay to silence in the animation loop.
+  feedbackRingsRef.current = (feedback && feedback.rings ? feedback.rings : [])
+    .map(r => ({ hzIndex: FULL_EQ_HZ.indexOf(r.hz), risk: r.risk }))
+    .filter(r => r.hzIndex >= 0);
   // Auto-open the Monitor EQ panel the moment a wedge starts ringing, so the
   // engineer is taken right to the ring-out (the band is glowing). Only on the
   // no-feedback -> feedback transition, so closing it by hand mid-ring sticks.
@@ -4573,31 +4629,23 @@ function App() {
           chain.envelope.gain.value = f;
         }
       }
-      // Feedback ringing tone gain follows the loop math. Ramp toward
-      // a target gain that scales with how far past threshold the loop
-      // is, so the ring builds and decays naturally as the engineer
-      // moves the offending control. Threshold matches detectFeedback.
+      // Feedback ring voices follow the loop math: each active ring drives
+      // ITS band's voice (the pitch you hear is the band you cut), and any
+      // number can sound at once. Per-voice first-order smoothing (~120 ms)
+      // makes rings build and decay naturally as the engineer works.
       const fbChain = feedbackChainRef.current;
-      if (fbChain && fbChain.gain) {
-        const risk = feedbackRiskRef.current;
-        const target = risk > 0.55 ? Math.min(0.35, (risk - 0.55) * 1.3) : 0;
-        // Tune the ring to the center frequency of the glowing band, so the
-        // pitch you hear matches the band you cut. Glide (setTargetAtTime) to
-        // avoid a click if the ringing wedge — and therefore the band — changes.
-        const band = feedbackBandRef.current;
-        const ctxNow = ctxRef.current;
-        if (band != null && fbChain.osc && ctxNow) {
-          const hz = EQ_BAND_HZ[band];
-          if (hz) {
-            fbChain.osc.frequency.setTargetAtTime(hz, ctxNow.currentTime, 0.02);
-            if (fbChain.osc2) fbChain.osc2.frequency.setTargetAtTime(hz * 2.41, ctxNow.currentTime, 0.02);
+      if (fbChain && fbChain.voices) {
+        const rings = feedbackRingsRef.current || [];
+        const targets = new Array(fbChain.voices.length).fill(0);
+        for (const r of rings) {
+          if (r.hzIndex >= 0 && r.hzIndex < targets.length) {
+            targets[r.hzIndex] = Math.max(targets[r.hzIndex], Math.min(0.3, Math.max(0, (r.risk - 0.45) * 1.1)));
           }
         }
-        const cur = fbChain.gain.gain.value;
-        // First-order smoother — about 120 ms to track. Long enough to
-        // feel like a ring building, short enough to clear when the
-        // engineer kills the loop.
-        fbChain.gain.gain.value = cur + (target - cur) * 0.15;
+        fbChain.voices.forEach((v, i) => {
+          const cur = v.gain.gain.value;
+          v.gain.gain.value = cur + (targets[i] - cur) * 0.15;
+        });
       }
       setEnvTick(n => (n + 1) & 0xff);
       raf = requestAnimationFrame(loop);
@@ -4718,29 +4766,31 @@ function App() {
       chordOscs.forEach(co => co.start());
       chainsRef.current[k] = { gainL, gainR, filter, drive, shaper, makeup, envelope, o1, o2, lfo, chordOscs };
     }
-    // Feedback ringing tone. The primary oscillator sits exactly on the
-    // center frequency of whichever EQ band is glowing — the animation loop
-    // retunes it from feedbackBandRef — so the ring you hear is the same note
-    // you cut. The second oscillator is a faint inharmonic partial (×2.41, an
-    // off-grid ratio that never lands on another band) to keep it sounding
-    // like a real ring instead of a lab test tone. Gain starts at zero; the
-    // animation loop ramps it up when detectFeedback fires.
+    // Feedback ring voices — one per octave band (63 Hz .. 16 kHz), all
+    // silent until detectFeedback lights them. Each voice is a sine at the
+    // band's center frequency (the ring you hear is the band you cut) plus
+    // a faint inharmonic partial (×2.41, an off-grid ratio that never lands
+    // on another band) so it sounds like a real ring instead of a test
+    // tone. Per-voice gains let MULTIPLE bands ring at once — the Feedback
+    // Mode reality. The animation loop drives the gains.
     {
-      const fbGain = ctx.createGain();
-      fbGain.gain.value = 0;
-      fbGain.connect(stereoMerger, 0, 0);
-      fbGain.connect(stereoMerger, 0, 1);
-      const startHz = 2000; // wedge 1's default ring band (2 kHz)
-      const fbOsc = ctx.createOscillator();
-      fbOsc.type = 'sine'; fbOsc.frequency.value = startHz;
-      const fbOsc2 = ctx.createOscillator();
-      fbOsc2.type = 'sine'; fbOsc2.frequency.value = startHz * 2.41;
-      const fbMix = ctx.createGain(); fbMix.gain.value = 0.6;
-      const fbMix2 = ctx.createGain(); fbMix2.gain.value = 0.18;
-      fbOsc.connect(fbMix); fbMix.connect(fbGain);
-      fbOsc2.connect(fbMix2); fbMix2.connect(fbGain);
-      fbOsc.start(); fbOsc2.start();
-      feedbackChainRef.current = { gain: fbGain, osc: fbOsc, osc2: fbOsc2 };
+      const voices = FULL_EQ_HZ.map(hz => {
+        const g = ctx.createGain();
+        g.gain.value = 0;
+        g.connect(stereoMerger, 0, 0);
+        g.connect(stereoMerger, 0, 1);
+        const o1 = ctx.createOscillator();
+        o1.type = 'sine'; o1.frequency.value = hz;
+        const m1 = ctx.createGain(); m1.gain.value = 0.6;
+        o1.connect(m1); m1.connect(g);
+        const o2 = ctx.createOscillator();
+        o2.type = 'sine'; o2.frequency.value = Math.min(hz * 2.41, 18000);
+        const m2 = ctx.createGain(); m2.gain.value = 0.15;
+        o2.connect(m2); m2.connect(g);
+        o1.start(); o2.start();
+        return { gain: g };
+      });
+      feedbackChainRef.current = { voices };
     }
     ctxRef.current = ctx;
   };
@@ -5116,6 +5166,7 @@ function App() {
         onBandChange={setMonitorEqBand}
         ringWedge={feedback ? feedback.ringWedge : null}
         ringBand={feedback ? feedback.ringBand : null}
+        rings={feedback ? feedback.rings : []}
       />
 
       <ProgressModal open={saveModalOpen} onClose={() => setSaveModalOpen(false)}
@@ -5140,10 +5191,12 @@ function App() {
             <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700 }}>🔒 MEMBERS ONLY</div>
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-              The free lessons taught you to set up and run the system. Practice Mode trains you to troubleshoot it: the band is playing, something is broken, and every rep hides a new fault in a new place. Turn the difficulty up and it stacks two or three faults at once. Play as long as you want. There's always a next rep.
+              {pitchFor.isFeedbackMode
+                ? 'Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level while frequencies start to ring, sometimes more than one at once, and cut each one on the full 63 Hz to 16 kHz graphic EQ. Every rep is a new wedge with a new ring profile.'
+                : 'The free lessons taught you to set up and run the system. Practice Mode trains you to troubleshoot it: the band is playing, something is broken, and every rep hides a new fault in a new place. Turn the difficulty up and it stacks two or three faults at once. Play as long as you want. There\'s always a next rep.'}
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
-              Practice Mode is part of the Audio University membership.
+              {pitchFor.title} is part of the Audio University membership.
             </div>
             <button onClick={() => setPitchFor(null)} className="mono ui-no-select" style={{
               alignSelf: 'flex-start', padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
@@ -5359,6 +5412,8 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5 }}>
             {level.isPractice
               ? 'PRACTICE MODE · MEMBERS'
+              : level.isFeedbackMode
+              ? 'FEEDBACK MODE · MEMBERS'
               : `LEVEL ${String(levelIdx + 1).padStart(2, '0')} / ${String(window.LEVELS.length).padStart(2, '0')}`}
           </div>
           <div className="display" style={{ fontSize: 16, fontWeight: 700, color: solved ? 'var(--green)' : 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -5375,7 +5430,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                   <React.Fragment key={l.id}>
                     {isFirstChallenge && (
                       <div className="mono" style={{ padding: '8px 10px 3px', fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left', borderTop: '1px solid #2a2a2e', marginTop: 4 }}>
-                        PRACTICE MODE · MEMBERS{TIER !== 'member' ? ' · 🔒' : ''}
+                        TRAINING MODES · MEMBERS{TIER !== 'member' ? ' · 🔒' : ''}
                       </div>
                     )}
                     <div onClick={(e) => { e.stopPropagation(); onPick(i); setPicker(false); }} className="ui-no-select"
@@ -5383,9 +5438,11 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                       onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
                       onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
                       <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', width: 24 }}>
-                        {l.isPractice ? '∞' : String(i + 1).padStart(2, '0')}
+                        {(l.isPractice || l.isFeedbackMode) ? '∞' : String(i + 1).padStart(2, '0')}
                       </div>
-                      <div style={{ flex: 1, fontSize: 12, textAlign: 'left' }}>{l.isPractice ? l.title + ' · endless reps' : l.title}</div>
+                      <div style={{ flex: 1, fontSize: 12, textAlign: 'left' }}>
+                        {l.isPractice ? l.title + ' · endless reps' : l.isFeedbackMode ? l.title + ' · ring-out training' : l.title}
+                      </div>
                       {locked ? <div style={{ fontSize: 11 }}>🔒</div> : (completed[l.id] && <div style={{ color: 'var(--green)', fontSize: 12 }}>✓</div>)}
                     </div>
                   </React.Fragment>
@@ -5849,13 +5906,13 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           ))}
         </div>
       )}
-      {level.isPractice ? (
-        /* Practice never ends — the primary action is always the next rep. */
+      {(level.isPractice || level.isFeedbackMode) ? (
+        /* The training modes never end — the primary action is the next rep. */
         <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
           width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
           background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
           border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-        }}>NEXT REP · NEW FAULT →</button>
+        }}>{level.isFeedbackMode ? 'NEXT REP · NEW WEDGE →' : 'NEXT REP · NEW FAULT →'}</button>
       ) : hasNext ? (
         <button onClick={onNext} className="mono ui-no-select" style={{
           width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,

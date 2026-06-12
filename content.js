@@ -10,6 +10,7 @@
      window.LEVELS          - the free Essentials tier, in order.
      window.PRACTICE        - the paid Practice Mode scenario (endless reps).
      window.PRACTICE_FAULTS - the fault pool Practice Mode draws from.
+     window.FEEDBACK_MODE   - the paid ring-out trainer (endless wedges).
 
    Rules that keep monthly drops from disturbing student progress:
      - Every entry has a STABLE id. Progress is saved by id.
@@ -376,10 +377,13 @@ window.LEVELS = [
     // level stays up). NEXT TURN: add an EQ on the aux outputs as the real,
     // surgical fix; HPF is the stopgap so the level is solvable today.
     symptom: 'The singer still can\'t hear herself well in her wedge. Turn her vocal up in the monitor for her. Careful, monitors feed back when you push them too hard.',
-    hint: 'Turn up AUX 1 on the vocal to give her more in her wedge. When it starts to ring, look at the monitor EQ on her wedge: the ringing frequency glows. Pull that band down to cut it. The ring stops and her level stays up. (HPF only helps low-frequency ring, not this one.)',
+    hint: 'Turn up AUX 1 on the vocal to give her more in her wedge. When it starts to ring, look at the monitor EQ on her wedge: the ringing frequency glows. Pull that band down just far enough to stop the ring. Cuts cost a little monitor level too, so keep them small. (HPF only helps low-frequency ring, not this one.)',
+    // Wedge min sits at 0.6 (was 0.7) since 2026-06-11 PM: EQ cuts now cost
+    // level (eqLevelGain), so the ring-out's own cut eats a little of the
+    // send level — exactly like a real desk.
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
-      { source: 'vocal', dest: 'wedge', min: 0.7 },
+      { source: 'vocal', dest: 'wedge', min: 0.6 },
     ],
     sabotage: (s) => {
       // Vocal live in the PA. Her wedge has been pushed up all night (volume
@@ -663,4 +667,65 @@ window.PRACTICE = {
   // Never shown (the debrief replaces the answer key); kept for the contract.
   solution: 'Walk the signal path and fix what is broken.',
   defaultInspect: 'pa',
+};
+
+// FEEDBACK MODE — the ring-out trainer (Kyle, 2026-06-11 PM). Practice Mode
+// trains diagnosis; this trains the monitor engineer's core physical skill:
+// pushing a wedge toward a target level while killing feedback frequency by
+// frequency. The wedge carries the FULL standard graphic EQ (63 Hz to
+// 16 kHz, 9 octave bands) and a per-rep random feedback profile: every band
+// is an active resonance with its own sensitivity, so several bands ring on
+// the way up — sometimes more than one at once — and each rep is a new
+// wedge in a new room. The rhythm the mode teaches is the real one: up,
+// ring, cut, up, ring, cut.
+//
+// Physics that make it honest:
+//   - Multiple bands ring simultaneously (detectFeedback returns them all,
+//     each with its own ring tone at its own frequency).
+//   - EQ cuts cost monitor level (eqLevelGain), so slamming the whole EQ
+//     kills the ring AND the level — the target stays out of reach unless
+//     the cuts are surgical.
+// Win = the vocal at >= 0.65 in the wedge with nothing ringing (and no
+// clipping: pushing the preamp too hot is still a fail, like always).
+window.FEEDBACK_MODE = {
+  id: 'feedback-mode',
+  title: 'Feedback Mode',
+  par: 12,
+  conditions: [
+    { source: 'vocal', dest: 'wedge', min: 0.65 },
+  ],
+  involves: [1],
+  symptom: 'Ring-out training. Bring the singer\'s vocal up to the target level in her wedge. As you push, frequencies will start to ring, sometimes more than one at once. Find each one on the wedge\'s graphic EQ and cut just enough to kill it, then keep climbing.',
+  hint: 'Turn the send up a little at a time. When a ring starts, its band glows on the MONITOR EQ: pull it down just past the point the ringing stops. Keep the cuts small, because every cut also costs monitor level, and a slammed EQ can never reach the target. The wedge volume and the mic gain raise the loop too, and too much gain clips the preamp. This is the rhythm of a real ring-out: up, ring, cut, up, ring, cut.',
+  sabotage: (s, rng) => {
+    const r = rng || (() => 0.5);
+    // The singer's vocal live at a healthy gain, her wedge on, the send low.
+    s.channels[0].mute = false;
+    s.channels[0].gain = 0.55;
+    s.channels[0].fader = 0.72;
+    s.channels[0].aux1 = 0.15;
+    s.master.mute = false;
+    s.master.fader = 0.75;
+    // Ring-out happens before doors: PA off, all focus on the wedge.
+    s.outputs.pa_l = { ...s.outputs.pa_l, on: false };
+    s.outputs.pa_r = { ...s.outputs.pa_r, on: false };
+    s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
+    // Full 9-band EQ, flat, plus a fresh random feedback profile: five hot
+    // bands (they WILL ring on the way up, the hottest early) among four
+    // tame ones. Every wedge in every room rings differently.
+    const profile = [];
+    for (let b = 0; b < 9; b++) profile.push(0.3 + r() * 0.25);
+    const order = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(r() * (i + 1));
+      const t = order[i]; order[i] = order[j]; order[j] = t;
+    }
+    for (let k = 0; k < 5; k++) profile[order[k]] = 0.7 + r() * 0.6;
+    profile[order[0]] = 1.15 + r() * 0.2;
+    s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.8, eq: [0, 0, 0, 0, 0, 0, 0, 0, 0], fbProfile: profile };
+    return s;
+  },
+  // Never shown (the debrief replaces the answer key); kept for the contract.
+  solution: 'The wedge at the target level, every ring cut at its own frequency.',
+  defaultInspect: 'wedge',
 };
