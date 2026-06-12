@@ -2012,27 +2012,16 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
         </div>
         <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
           <div
-            onClick={(e) => { e.stopPropagation(); onMute(); }}
-            className="mono ui-no-select"
-            style={{
-              fontSize: 8, padding: '2px 6px',
-              background: muted ? 'var(--hot)' : '#0a0a0c',
-              color: muted ? '#0a0a0c' : 'var(--ink-2)',
-              border: '1px solid ' + (muted ? 'var(--hot)' : '#38383e'),
-              borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5,
-            }}
-          >{muted ? 'MUTED' : 'LIVE'}</div>
-          <div
             onClick={(e) => { e.stopPropagation(); onPatch(); }}
             className="mono ui-no-select"
             style={{
               fontSize: 8, padding: '2px 6px',
               background: '#0a0a0c',
-              color: patchTarget ? patchColor : 'var(--hot)',
-              border: '1px solid ' + (patchTarget ? '#38383e' : 'var(--hot)'),
+              color: patchTarget ? patchColor : 'var(--ink-3)',
+              border: '1px solid #38383e',
               borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5,
             }}
-          >{patchTarget ? `→ PORT ${patchTarget}` : 'UNPLUGGED'}</div>
+          >{patchTarget ? `→ PORT ${patchTarget}` : 'PATCH'}</div>
         </div>
       </div>
     </div>
@@ -2932,7 +2921,42 @@ function ChannelAnchors({ state, channelRefs, masterLRef, masterRRef, aux1Ref, a
     anchors.push(chip('out-' + o.label, o.ref, o.x, o.label, o.dest, o.color));
   });
 
-  return <>{anchors}</>;
+  // FOH PLAYBACK DEVICE — the laptop or phone at the desk, hardwired into the
+  // stereo 5/6 line input. It isn't on stage and never touches the snake, so it
+  // lives right above its own channel's LINE IN chip as a visible source. A
+  // short patch cord drops from the device into the input.
+  const playbackIdx = state.channels.findIndex(c => c.stereo);
+  let playbackDevice = null;
+  if (playbackIdx >= 0) {
+    const px = padding + playbackIdx * (stripWidth + gap) + stripWidth / 2;
+    const blue = (window.SOURCES && window.SOURCES.playback ? window.SOURCES.playback.color : '#6aa9ff');
+    playbackDevice = (
+      <div key="playback-device" className="ui-no-select" style={{
+        position: 'absolute', top: -82, left: px, transform: 'translateX(-50%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0,
+        pointerEvents: 'none',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          background: 'linear-gradient(180deg,#1c1c1f 0%, #141417 100%)',
+          border: '1px solid ' + blue, borderRadius: 5, padding: '4px 7px',
+        }}>
+          <LaptopIcon size={22}/>
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+            <span className="mono" style={{ fontSize: 7, color: blue, letterSpacing: 0.5, fontWeight: 700 }}>PLAYBACK</span>
+            <span className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.3, fontWeight: 700 }}>laptop / phone</span>
+          </div>
+        </div>
+        {/* short patch cord into the LINE IN chip below */}
+        <svg width="10" height="20" viewBox="0 0 10 20" style={{ marginTop: -1 }}>
+          <path d="M5 0 L5 18" stroke={blue} strokeWidth="2" strokeLinecap="round"/>
+          <circle cx="5" cy="18" r="2" fill={blue}/>
+        </svg>
+      </div>
+    );
+  }
+
+  return <>{anchors}{playbackDevice}</>;
 }
 
 function ConsoleWithRefs({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref }) {
@@ -3164,6 +3188,63 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
     }
   };
 
+  // Release a cable into open space (no port/chip under the cursor) = pull it
+  // out. A real engineer unplugs by dropping the connector, not only by trading
+  // it for another. No-op if the cable was already loose. Disconnecting a live
+  // path still pops, exactly like the disconnect side of a swap.
+  const applyUnplug = (drag) => {
+    if (drag.type === 'source') {
+      const srcKey = drag.id;
+      const oldPort = state.cables[srcKey];
+      if (!oldPort) return;
+      setState(s => {
+        const next = { ...s, cables: { ...s.cables, [srcKey]: 0 } };
+        const fanOut = s.fanOut || [1, 2, 3, 4];
+        const oldCh = fanOut[oldPort - 1];
+        if (oldCh >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, oldCh - 1)) {
+          next.phantomPop = { channel: oldCh - 1, at: Date.now(), cause: 'patch_live' };
+        }
+        return next;
+      });
+    } else if (drag.type === 'fanout') {
+      const port = parseInt(drag.id, 10);
+      const oldCh = state.fanOut ? state.fanOut[port - 1] : 0;
+      if (!oldCh) return;
+      setState(s => {
+        const next = { ...s, fanOut: [...s.fanOut] };
+        next.fanOut[port - 1] = 0;
+        if (oldCh >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, oldCh - 1)) {
+          next.phantomPop = { channel: oldCh - 1, at: Date.now(), cause: 'patch_live' };
+        }
+        return next;
+      });
+    } else if (drag.type === 'outpatch') {
+      const spk = drag.id;
+      setState(s => {
+        const op = { ...(s.outPatch || window.DEFAULT_OUT_PATCH) };
+        if (!op[spk]) return s;
+        const next = { ...s, outPatch: { ...op, [spk]: null } };
+        if (window.speakerLiveForPatch && window.speakerLiveForPatch(s, spk)) {
+          next.phantomPop = { at: Date.now(), cause: 'speaker_patch' };
+        }
+        return next;
+      });
+    } else if (drag.type === 'outfan') {
+      const ch = parseInt(drag.id, 10);
+      setState(s => {
+        const of2 = { ...(s.outFan || window.DEFAULT_OUT_FAN) };
+        if (!of2[ch]) return s;
+        const next = { ...s, outFan: { ...of2, [ch]: null } };
+        const op = s.outPatch || window.DEFAULT_OUT_PATCH;
+        const downstreamSpk = Object.keys(op).find(spk => op[spk] === ch);
+        if (downstreamSpk && window.speakerLiveForPatch && window.speakerLiveForPatch(s, downstreamSpk)) {
+          next.phantomPop = { at: Date.now(), cause: 'speaker_patch' };
+        }
+        return next;
+      });
+    }
+  };
+
   const startDrag = (e, drag) => {
     e.preventDefault();
     e.stopPropagation();
@@ -3188,6 +3269,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
       const cursor = clientToLocal(e.clientX, e.clientY);
       const snap = findSnapTarget(drag, cursor);
       if (snap) applyDrop(drag, snap.payload);
+      else applyUnplug(drag);
       setDragState(null);
     };
     document.addEventListener('pointermove', onMove);
@@ -3551,9 +3633,12 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
           const xSorted = [...paths.stageCables].filter(c => c.from && c.to).sort((a, b) => a.from.x - b.from.x);
           return paths.stageCables.map(c => {
             if (!c.from || !c.to) return null;
-            const color = window.SOURCES[c.src].color;
             const isDragged = dragState && dragState.type === 'source' && dragState.id === c.src;
             const someOtherDragged = dragState && !isDragged;
+            // Loose input cables are neutral gray: the cable has no channel
+            // identity until it's plugged into a stage-box port. Once patched
+            // it wears the source's color. (The output lines already do this.)
+            const color = c.unplugged ? '#8a877e' : window.SOURCES[c.src].color;
             const rank = xSorted.indexOf(c);
             const n = xSorted.length;
             const railOffset = (rank - (n - 1) / 2) * 6;
@@ -3566,11 +3651,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
               ? window._cableCurve(c.from, portEnd)
               : window._routedCable(c.from, c.to, railY);
             const opacity = someOtherDragged ? 0.18 : 0.95;
-            // Unplugged cables: cable runs out to a dangle position near
-            // the stage box but doesn't connect to a port. Add an
-            // "UNPLUGGED" badge near the loose connector so the student
-            // can spot that something needs patching.
-            const showUnpluggedTag = c.unplugged && !isDragged && !someOtherDragged;
+            // No "unplugged" badge: the loose cable dangling from the source
+            // is enough to read that it needs patching.
             return (
               <g key={c.src} style={{ pointerEvents: 'none' }}>
                 <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round" strokeLinejoin="round"/>
@@ -3578,18 +3660,6 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
                 <circle cx={c.from.x} cy={c.from.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
                 {!isDragged && (
                   <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
-                )}
-                {showUnpluggedTag && (
-                  <g pointerEvents="none">
-                    <rect
-                      x={c.to.x - 26} y={c.to.y - 22}
-                      width={52} height={12} rx={2}
-                      fill="rgba(255,70,48,0.15)" stroke="var(--hot)" strokeWidth={0.8}/>
-                    <text x={c.to.x} y={c.to.y - 13}
-                      textAnchor="middle" fill="var(--hot)"
-                      fontFamily="Geist Mono" fontSize="7.5" fontWeight="700"
-                      letterSpacing="0.6">UNPLUGGED</text>
-                  </g>
                 )}
                 {/* DRAG HANDLE — port-end of the cable. Larger invisible hit
                     zone over a slightly larger visible plug graphic. Cursor
