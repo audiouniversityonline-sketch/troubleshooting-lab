@@ -555,7 +555,9 @@ function computeAudio(s, envelope) {
   // channel doesn't change what's in the engineer's cans.
   const pflBus = {};
   let pflTotal = 0;
-  for (let i = 0; i < s.channels.length; i++) {
+  // PFL listens through the console's preamps and headphone amp. With the
+  // console powered off, that whole path is dead, so PFL produces nothing.
+  for (let i = 0; mixerOn && i < s.channels.length; i++) {
     if (!s.channels[i].solo) continue;
     const k = chanIn[i].srcKey;
     if (!k) continue;
@@ -597,11 +599,13 @@ function computeAudio(s, envelope) {
     // EQ level multipliers, so detectFeedback can recover the PRE-EQ wedge
     // feed (the loop math applies per-band relief itself).
     eqGain: { wedge: wedgeEqGain, wedge2: wedge2EqGain },
-    anyPfl,
+    // PFL only monitors when the console is powered; an off desk has no live
+    // headphone bus, so anyPfl reads false even with a solo button down.
+    anyPfl: anyPfl && mixerOn,
     pflBus,
     pflLevel: pflTotal,
     // Legacy alias — code that read `anySolo` should switch to `anyPfl`.
-    anySolo: anyPfl,
+    anySolo: anyPfl && mixerOn,
   };
 }
 
@@ -1735,7 +1739,10 @@ function Console({ state, setState, audio, faultChannelIdx }) {
       const turningOn = !ch.phantom;
       const channels = prev.channels.map((c, j) => j === i ? { ...c, phantom: !c.phantom } : c);
       const next = { ...prev, channels };
-      if (turningOn) {
+      // Phantom power comes from the console's supply. With the desk off there
+      // is no +48V and no transient, so nothing pops (and PFL cans are dead).
+      const mixerOnNow = prev.mixer ? prev.mixer.on !== false : true;
+      if (turningOn && mixerOnNow) {
         // PFL is pre-fader/pre-mute: if this channel is soloed, the +48V
         // switch-on transient goes straight to the engineer's headphones,
         // muted or not. Right in the ears. That's the worst kind of pop.
@@ -5457,15 +5464,18 @@ function App() {
   // Track when the engineer engages PFL on any channel during the level.
   // The ref is a one-way latch — once true, it stays true until level change.
   uE(() => {
-    if (state.channels && state.channels.some(c => c.solo)) {
+    // PFL only checks a channel when the console is powered. With it off the
+    // headphone path is dead, so a solo button down counts for nothing.
+    const mixerOn = state.mixer ? state.mixer.on !== false : true;
+    if (mixerOn && state.channels && state.channels.some(c => c.solo)) {
       pflCheckedRef.current = true;
     }
     // Latch each channel that gets soloed (PFL'd) so requirePflEach can confirm
     // every input was checked in the cans, one by one.
-    if (state.channels) {
+    if (mixerOn && state.channels) {
       state.channels.forEach((c, i) => { if (c.solo) pflChannelsRef.current[i + 1] = true; });
     }
-  }, [state.channels]);
+  }, [state.channels, state.mixer ? state.mixer.on : true]);
   // Reset replays the same attempt: same seed, same fault placement.
   const restart = () => loadLevel(levelIdx, seedRef.current);
   // Practice Again rolls a new seed — same scenario, fresh fault placement.
@@ -5756,7 +5766,8 @@ function App() {
             the corresponding speaker or wedge — auto-routes the device-
             speaker audio to that bus. */}
         {(() => {
-          const anyPfl = state.channels.some(c => c.solo);
+          const mixerOn = state.mixer ? state.mixer.on !== false : true;
+          const anyPfl = mixerOn && state.channels.some(c => c.solo);
           const listening = anyPfl ? 'pfl' : state.inspect;
           const slots = [
             { id: 'pa',     label: 'MAIN PA' },
