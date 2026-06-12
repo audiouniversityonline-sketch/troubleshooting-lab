@@ -290,6 +290,10 @@ function defaultState() {
     outPatch: { ...DEFAULT_OUT_PATCH },
     fanOut: [1, 2, 3, 4],
     sourceMute: { vocal: false, guitar: false, laptop: false, vocal2: false, playback: false },
+    // Playback 5/6 source: 'music' (the synth bed, later a real music file) or
+    // 'pink' (a pink-noise generator for ringing the system out). Audible only;
+    // the metering/physics treat the line input the same either way.
+    playbackMode: 'music',
     testing: 'vocal',
     inspect: 'pa',
     topology: {
@@ -2842,7 +2846,7 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
   );
 }
 
-function ChannelAnchors({ state, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref }) {
+function ChannelAnchors({ state, setState, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref }) {
   const stripWidth = 100, gap = 8, padding = 14, dividerWidth = 1, masterWidth = 150;
   const anchors = [];
   const masterLeft = padding + state.channels.length * (stripWidth + gap) + dividerWidth + 4 + masterWidth / 2;
@@ -2942,9 +2946,30 @@ function ChannelAnchors({ state, channelRefs, masterLRef, masterRRef, aux1Ref, a
           border: '1px solid ' + blue, borderRadius: 5, padding: '4px 7px',
         }}>
           <LaptopIcon size={22}/>
-          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, lineHeight: 1.15 }}>
             <span className="mono" style={{ fontSize: 7, color: blue, letterSpacing: 0.5, fontWeight: 700 }}>PLAYBACK</span>
-            <span className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.3, fontWeight: 700 }}>laptop / phone</span>
+            {/* MUSIC / PINK toggle. pointerEvents re-enabled (the anchor layer is
+                otherwise click-through). Pink noise is the ring-out test signal. */}
+            <div style={{ display: 'flex', pointerEvents: 'auto' }}>
+              {[['music', 'MUSIC'], ['pink', 'PINK']].map(([mode, lbl], i) => {
+                const on = (state.playbackMode || 'music') === mode;
+                return (
+                  <div key={mode}
+                    onClick={(e) => { e.stopPropagation(); if (setState) setState(s => ({ ...s, playbackMode: mode })); }}
+                    className="mono ui-no-select"
+                    style={{
+                      fontSize: 6, fontWeight: 700, letterSpacing: 0.4, padding: '2px 5px', cursor: 'pointer',
+                      color: on ? '#0a0a0c' : 'var(--ink-3)',
+                      background: on ? blue : '#0a0a0c',
+                      borderTop: '1px solid ' + (on ? blue : '#38383e'),
+                      borderBottom: '1px solid ' + (on ? blue : '#38383e'),
+                      borderLeft: '1px solid ' + (on ? blue : '#38383e'),
+                      borderRight: i === 0 ? 'none' : ('1px solid ' + (on ? blue : '#38383e')),
+                      borderRadius: i === 0 ? '3px 0 0 3px' : '0 3px 3px 0',
+                    }}>{lbl}</div>
+                );
+              })}
+            </div>
           </div>
         </div>
         {/* short patch cord into the LINE IN chip below */}
@@ -2963,7 +2988,7 @@ function ConsoleWithRefs({ state, setState, audio, channelRefs, masterLRef, mast
   return (
     <div style={{ position: 'relative' }}>
       <window.Console state={state} setState={setState} audio={audio} faultChannelIdx={-1}/>
-      <ChannelAnchors state={state} channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref}/>
+      <ChannelAnchors state={state} setState={setState} channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref}/>
     </div>
   );
 }
@@ -4719,7 +4744,7 @@ function App() {
         const f = envelopeFactor(k, t);
         envelopeRef.current[k] = f;
         const chain = chainsRef.current && chainsRef.current[k];
-        if (chain && chain.envelope) {
+        if (chain && chain.envelope && !chain.skipEnvelope) {
           chain.envelope.gain.value = f;
         }
       }
@@ -4858,8 +4883,88 @@ function App() {
       }
       o1.start(); o2.start();
       chordOscs.forEach(co => co.start());
-      chainsRef.current[k] = { gainL, gainR, filter, drive, shaper, makeup, envelope, o1, o2, lfo, chordOscs };
+      chainsRef.current[k] = { gainL, gainR, filter, drive, shaper, makeup, envelope, mix, o1, o2, lfo, chordOscs };
     }
+
+    // PLAYBACK 5/6 — MUSIC / PINK toggle. The chord-pad oscillators are the
+    // "music" (a real music file slots in here later); pink noise is the
+    // broadband test signal an engineer rings a system out with. Both sum into
+    // the same channel-5 chain through their own selector gain, and
+    // state.playbackMode crossfades between them.
+    {
+      const pb = chainsRef.current.playback;
+      if (pb) {
+        const musicSel = ctx.createGain(); musicSel.gain.value = 1; // music is the default
+        const pinkSel  = ctx.createGain(); pinkSel.gain.value  = 0;
+        // Reroute the music oscillators off the raw mix and through musicSel.
+        [pb.o1, pb.o2, ...(pb.chordOscs || [])].forEach(o => { try { o.disconnect(); o.connect(musicSel); } catch (_) {} });
+        musicSel.connect(pb.mix);
+        // Pink noise: a few seconds of generated pink noise, looped. Long
+        // enough that the loop seam is rare and unobtrusive.
+        const pinkLen = Math.floor(ctx.sampleRate * 5);
+        const pinkBuf = ctx.createBuffer(1, pinkLen, ctx.sampleRate);
+        const pd = pinkBuf.getChannelData(0);
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        for (let i = 0; i < pinkLen; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+          pd[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+          b6 = white * 0.115926;
+        }
+        const pinkSrc = ctx.createBufferSource();
+        pinkSrc.buffer = pinkBuf; pinkSrc.loop = true;
+        pinkSrc.connect(pinkSel); pinkSel.connect(pb.mix);
+        pinkSrc.start();
+        pb.musicSel = musicSel; pb.pinkSel = pinkSel; pb.pinkSrc = pinkSrc;
+      }
+    }
+
+    // STAGE SOURCE LOOPS — swap the placeholder synth for the real recorded
+    // stems. The four files are identical-length (19.2 s) mono loops, so once
+    // they all start on the same context clock with loop=true they stay
+    // sample-accurately locked to each other forever (no drift). The synth
+    // chain (filter, drive, gain staging) stays in place downstream, so a clip
+    // still responds to gain, fader, EQ, and clipping exactly like the synth
+    // did. Oscillators keep playing until the buffers decode, then hand off; a
+    // failed load just leaves the synth running for that source.
+    const CLIP_SOURCES = { guitar: 'audio/bass.wav', laptop: 'audio/keys.wav', vocal: 'audio/vocal1.wav', vocal2: 'audio/vocal2.wav' };
+    Promise.all(Object.keys(CLIP_SOURCES).map(k =>
+      fetch(CLIP_SOURCES[k])
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+        .then(ab => ctx.decodeAudioData(ab))
+        .then(buf => ({ k, buf }))
+        .catch(e => { console.warn('clip load failed:', k, e); return null; })
+    )).then(results => {
+      const ok = results.filter(Boolean);
+      if (!ok.length) return;
+      // One shared start time for every decoded loop = phase-locked playback.
+      const startTime = ctx.currentTime + 0.15;
+      for (const { k, buf } of ok) {
+        const chain = chainsRef.current[k];
+        if (!chain || !chain.mix) continue;
+        const src = ctx.createBufferSource();
+        src.buffer = buf; src.loop = true;
+        src.connect(chain.mix);
+        src.start(startTime);
+        // Hand off from the synth: stop its oscillators at the same instant.
+        try {
+          chain.o1 && chain.o1.stop(startTime);
+          chain.o2 && chain.o2.stop(startTime);
+          (chain.chordOscs || []).forEach(o => o.stop(startTime));
+          chain.lfo && chain.lfo.stop(startTime);
+        } catch (_) {}
+        // The recording carries its own dynamics, so drop the synthetic
+        // envelope modulation (the animation loop skips clip chains).
+        chain.skipEnvelope = true;
+        chain.envelope.gain.value = 1;
+        chain.clipSrc = src;
+      }
+    });
     // Feedback ring voices — one per third-octave band (63 Hz .. 16 kHz), all
     // silent until detectFeedback lights them. Each voice is a sine at the
     // band's center frequency (the ring you hear is the band you cut) plus
@@ -4990,6 +5095,18 @@ function App() {
       rampParam(chainsRef.current[k].makeup.gain, ctx, 1 / drive);
     }
   }, [audioOn, audio, state.inspect]);
+
+  // Playback MUSIC / PINK crossfade. Audible only — the simulation treats the
+  // 5/6 line input identically, so nothing in computeAudio or the win logic
+  // changes. Just rides the two selector gains built in ensureAudio.
+  uE(() => {
+    const ch = chainsRef.current && chainsRef.current.playback;
+    const ctx = ctxRef.current;
+    if (!ch || !ctx || !ch.musicSel || !ch.pinkSel) return;
+    const pink = state.playbackMode === 'pink';
+    rampParam(ch.musicSel.gain, ctx, pink ? 0 : 1);
+    rampParam(ch.pinkSel.gain, ctx, pink ? 1 : 0);
+  }, [state.playbackMode, audioOn]);
 
   const [, force] = uS(0);
   uE(() => {
