@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=28"></script>
+<script src="content.js?v=29"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -278,11 +278,12 @@ function defaultState() {
       pa_l:   { on: true, mute: false, volume: 0.7 },
       pa_r:   { on: true, mute: false, volume: 0.7 },
       // eq: per-band cut on the monitor send, 0 (flat) .. 1 (full -12 dB cut),
-      // one entry per EQ_BANDS frequency. ringBand: the band this wedge rings
-      // at when it feeds back (its resonant frequency). Cutting that band on
-      // the monitor EQ rings the wedge out.
-      wedge:  { on: true, mute: false, volume: 0.0, eq: [0, 0, 0, 0, 0], ringBand: 3 },
-      wedge2: { on: true, mute: false, volume: 0.0, eq: [0, 0, 0, 0, 0], ringBand: 2 },
+      // one entry per FULL_EQ_BANDS frequency. Every wedge now carries the full
+      // 31-band graphic EQ (consistent across all levels and modes, and the
+      // realistic monitor tool). ringBand: the band this wedge rings at when it
+      // feeds back, as an index into FULL_EQ_HZ (15 = 2 kHz, 12 = 1 kHz).
+      wedge:  { on: true, mute: false, volume: 0.0, eq: new Array(FULL_EQ_BANDS.length).fill(0), ringBand: 15 },
+      wedge2: { on: true, mute: false, volume: 0.0, eq: new Array(FULL_EQ_BANDS.length).fill(0), ringBand: 12 },
       amp:    { on: true },
     },
     cables: {
@@ -2237,11 +2238,25 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge,
           </div>
           <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
         </div>
-        {rings && rings.length > 0 && (
-          <div style={{ marginBottom: 10, padding: '8px 10px', background: 'rgba(255,70,48,0.10)', border: '1px solid var(--hot)', borderRadius: 6, fontSize: 11, color: 'var(--ink)', lineHeight: 1.45 }}>
-            The system is <b style={{ color: 'var(--hot)' }}>feeding back</b>. On the wedge that's ringing, pull its <b style={{ color: 'var(--hot)' }}>glowing band</b> down to cut that frequency. A couple of small cuts is enough. (HPF only helps a low-frequency ring.)
-          </div>
-        )}
+        {/* Always-present guidance line. Rendered whether or not a band is
+            ringing so the panel keeps a stable height (it used to grow and
+            shrink each time the ring crossed threshold). It just swaps copy and
+            turns red when something is actually ringing. */}
+        {(() => {
+          const ringing = rings && rings.length > 0;
+          return (
+            <div style={{ marginBottom: 10, padding: '8px 10px', minHeight: 34, display: 'flex', alignItems: 'center',
+              background: ringing ? 'rgba(255,70,48,0.10)' : 'rgba(255,255,255,0.03)',
+              border: '1px solid ' + (ringing ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6,
+              fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+              {ringing ? (
+                <span style={{ color: 'var(--ink)' }}>Feeding back. Pull the <b style={{ color: 'var(--hot)' }}>glowing band</b> down to cut that frequency, just enough to stop it. A couple of small cuts is enough.</span>
+              ) : (
+                <span>Pull a band down to cut that frequency. A band glows red when it is ringing; cut it just enough to stop it.</span>
+              )}
+            </div>
+          );
+        })()}
         <div style={{ display: 'flex', gap: 14 }}>
           {col('wedge', wedge, 'WEDGE 1', 'var(--aux)')}
           {col('wedge2', wedge2, 'WEDGE 2', 'var(--cool)')}

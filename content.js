@@ -202,7 +202,7 @@ window.LEVELS = [
     symptom: 'Everything is connected and the console is zeroed out. Power the system up, and mind the order: bring it up the wrong way and you pop the speakers.',
     hint: 'Power on from the console end first, then the powered speakers last. If you turn a PA speaker or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the wedges and the PA speakers.',
     hints: [
-      { text: 'Console on first, before any speaker, so its switch-on pop never hits a live box.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
+      { text: 'Console on first, so its switch-on pop never reaches a powered speaker.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
       { text: 'With the console on, bring up the rest: both PA speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
     ],
     conditions: [],
@@ -390,6 +390,7 @@ window.LEVELS = [
   {
     id: 7,
     title: 'Monitor Mix',
+    task: true,
     // A positive setup task, not a problem: build the singer her monitor mix.
     // The wedge volume is already up (set in Test the Wedges and kept), so this
     // is purely the aux send: open AUX 1 on the vocal to feed her wedge.
@@ -418,6 +419,7 @@ window.LEVELS = [
   {
     id: 8,
     title: 'Feedback Awareness',
+    task: true,
     // Does NOT start ringing. The singer has a little of herself in the wedge
     // (aux 1 low) and asks for more. As the student turns AUX 1 up to give her
     // more, the loop gain crosses the ring threshold and the wedge starts to
