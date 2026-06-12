@@ -4913,12 +4913,15 @@ function App() {
           b3 = 0.86650 * b3 + white * 0.3104856;
           b4 = 0.55000 * b4 + white * 0.5329522;
           b5 = -0.7616 * b5 - white * 0.0168980;
-          pd[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+          pd[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.10;
           b6 = white * 0.115926;
         }
         const pinkSrc = ctx.createBufferSource();
         pinkSrc.buffer = pinkBuf; pinkSrc.loop = true;
-        pinkSrc.connect(pinkSel); pinkSel.connect(pb.mix);
+        // Pink runs straight into the drive stage too, past the playback trim
+        // (0.07) and lowpass — full-band and at a confident level, the way a
+        // real ring-out signal sits. Music (the synth bed) keeps its own path.
+        pinkSrc.connect(pinkSel); pinkSel.connect(pb.drive);
         pinkSrc.start();
         pb.musicSel = musicSel; pb.pinkSel = pinkSel; pb.pinkSrc = pinkSrc;
       }
@@ -4946,10 +4949,23 @@ function App() {
       const startTime = ctx.currentTime + 0.15;
       for (const { k, buf } of ok) {
         const chain = chainsRef.current[k];
-        if (!chain || !chain.mix) continue;
+        if (!chain || !chain.drive) continue;
+        // Level: the synth's mix trim (0.18) and per-source lowpass were tuned
+        // for full-scale oscillators and leave a real recording far too quiet
+        // and dull. Route the clip PAST both — straight into the drive stage —
+        // and peak-normalize it to a consistent working level so stems (and any
+        // future files) sit right without hand-tuning. 0.6 keeps headroom below
+        // the saturation knee; everything downstream (drive, clipping, gain
+        // staging) is unchanged.
+        let peak = 0;
+        const d0 = buf.getChannelData(0);
+        for (let i = 0; i < d0.length; i++) { const a = d0[i] < 0 ? -d0[i] : d0[i]; if (a > peak) peak = a; }
+        const clipGain = ctx.createGain();
+        clipGain.gain.value = peak > 0.0001 ? Math.min(8, 0.6 / peak) : 1;
         const src = ctx.createBufferSource();
         src.buffer = buf; src.loop = true;
-        src.connect(chain.mix);
+        src.connect(clipGain); clipGain.connect(chain.drive);
+        chain.clipGain = clipGain;
         src.start(startTime);
         // Hand off from the synth: stop its oscillators at the same instant.
         try {
