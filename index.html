@@ -4829,6 +4829,21 @@ const SCENARIOS = [
   ...window.LEVELS,
   ...(window.PRACTICE ? [{ ...window.PRACTICE, isChallenge: true, isPractice: true }] : []),
   ...(window.FEEDBACK_MODE ? [{ ...window.FEEDBACK_MODE, isChallenge: true, isFeedbackMode: true }] : []),
+  // Free Play / sandbox. The band is up and the system is healthy; there is no
+  // fault, no win, no clock. A frictionless place to poke at a real console
+  // (and to meet the digital surface). Free and never email-gated because it
+  // sits past the LEVELS range. isSandbox (not isChallenge) so it never locks.
+  // The healthy board is defaultState plus bass phantom on (so all four band
+  // sources are audible), the same base the authoring flow uses.
+  {
+    id: 'sandbox', isSandbox: true,
+    title: 'Free Play',
+    symptom: 'Nothing is broken. The band is up and the system is working. Poke around: move faders, set gains, build a monitor mix, flip the SURFACE between analog and digital. Turn the sound on to hear what you change. No goal, no clock, nothing to fix. When you want a real challenge, open the lessons or a practice rep from the menu above.',
+    conditions: [],
+    involves: [1, 2, 3, 4],
+    defaultInspect: 'pa',
+    sabotage: (s) => { if (s.channels[2]) s.channels[2].phantom = true; return s; },
+  },
 ];
 
 // The Scenario Library: a curated, growing shelf of real-world situations Kyle
@@ -4892,10 +4907,12 @@ const FREE_PRACTICE_LIMIT = 3;
 // when that mode ships.
 const SCENARIO_BANDS = [
   { id: 'LEARN',   label: 'LEARN · THE ESSENTIALS',   member: false },
+  { id: 'PLAY',    label: 'FREE PLAY',                member: false },
   { id: 'DRILL',   label: 'DRILL · ENDLESS REPS',     member: true },
   { id: 'LIBRARY', label: 'SCENARIO LIBRARY',         member: true },
 ];
 function bandOf(l) {
+  if (l.isSandbox) return 'PLAY';      // free, no-goal exploration
   if (l.isLibrary) return 'LIBRARY';   // curated, browsable real-world scenarios
   if (l.isChallenge) return 'DRILL';   // Practice + Feedback Mode + any future packs
   return 'LEARN';
@@ -6047,7 +6064,9 @@ function App() {
     // suppressed: the engineer has to recognize it and sign off. Every other
     // rep still auto-wins the moment the fix lands.
     const isZeroFault = level.isPractice && practiceInfoRef.current && practiceInfoRef.current.zeroFault;
-    const effWon = won && (!isZeroFault || signedOff);
+    // Sandbox / Free Play never "wins" — there is nothing to solve. Warnings and
+    // statuses above still compute, so clipping a fader still flags in free play.
+    const effWon = won && (!isZeroFault || signedOff) && !level.isSandbox;
     if (effWon && !blocked) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
@@ -7326,6 +7345,8 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
               ? (practiceFreeLeft != null ? 'PRACTICE MODE · FREE PREVIEW' : 'PRACTICE MODE · MEMBERS')
               : level.isFeedbackMode
               ? 'FEEDBACK MODE · MEMBERS'
+              : level.isSandbox
+              ? 'FREE PLAY · NO GOAL'
               : `LEVEL ${String(levelIdx + 1).padStart(2, '0')} / ${String(window.LEVELS.length).padStart(2, '0')}`}
           </div>
           <div className="display" style={{ fontSize: 16, fontWeight: 700, color: solved ? 'var(--green)' : 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -7358,10 +7379,10 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                       onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
                       onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
                       <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', width: 24 }}>
-                        {(l.isPractice || l.isFeedbackMode) ? '∞' : l.isLibrary ? '◆' : String(i + 1).padStart(2, '0')}
+                        {(l.isPractice || l.isFeedbackMode) ? '∞' : l.isSandbox ? '▶' : l.isLibrary ? '◆' : String(i + 1).padStart(2, '0')}
                       </div>
                       <div style={{ flex: 1, fontSize: 12, textAlign: 'left' }}>
-                        {l.isPractice ? l.title + ' · endless reps' : l.isFeedbackMode ? l.title + ' · ring-out training' : l.title}
+                        {l.isPractice ? l.title + ' · endless reps' : l.isFeedbackMode ? l.title + ' · ring-out training' : l.isSandbox ? l.title + ' · no goal, just explore' : l.title}
                       </div>
                       {locked ? <div style={{ fontSize: 11 }}>🔒</div>
                         : softFree ? <div className="mono" style={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.6, color: 'var(--green)', border: '1px solid var(--green)', borderRadius: 3, padding: '1px 4px' }}>{practiceFreeLeft} FREE</div>
@@ -7451,6 +7472,27 @@ const navBtn = {
 };
 
 function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, patchStatus, pendingHints, hintCount, onRevealHint, onSignOff, signoffMsg, onCopyRepLink, repCopied }) {
+  // Free Play has no objective and never solves, so it gets its own calm card
+  // instead of the symptom/objective machinery below.
+  if (level.isSandbox) {
+    return (
+      <div style={{
+        background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
+        border: '1px solid #38383e', borderRadius: 8, padding: '12px 14px',
+        display: 'flex', flexDirection: 'column', gap: 8,
+        boxShadow: '0 4px 14px rgba(0,0,0,0.4)', maxHeight: 200, overflowY: 'auto',
+      }}>
+        <div className="mono" style={{ fontSize: 10, color: 'var(--cool)', letterSpacing: 1.2, fontWeight: 700 }}>▸ FREE PLAY · NO GOAL</div>
+        <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.45 }}>{level.symptom}</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={onReset} className="mono ui-no-select" style={{
+            padding: '6px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+            background: '#1a1a1d', color: 'var(--ink-2)', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer',
+          }}>↻ RESET THE BOARD</button>
+        </div>
+      </div>
+    );
+  }
   // Compute per-condition pass / level, and whether all conditions pass.
   const condStates = (conditions || []).map(c => {
     const cont = audio.contributions[c.source];
