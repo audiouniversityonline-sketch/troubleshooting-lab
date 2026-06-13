@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=35"></script>
+<script src="content.js?v=36"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -4245,11 +4245,12 @@ const SCENARIO_PARAM = (() => {
 })();
 
 // The default goal when an author doesn't capture one: restore the full mix,
-// every band source audible on both sides of the PA (the diagnose-and-fix win).
+// every band source audible IN the PA (heard in the room). Uses the combined
+// 'pa' check (louder side), not both pa_l and pa_r, so pan is a free creative
+// choice rather than a fault. Matches the lessons and Practice Mode.
 const RESTORE_CONDITIONS = [];
 ['vocal', 'vocal2', 'guitar', 'laptop'].forEach((src) => {
-  RESTORE_CONDITIONS.push({ source: src, dest: 'pa_l', min: 0.2 });
-  RESTORE_CONDITIONS.push({ source: src, dest: 'pa_r', min: 0.2 });
+  RESTORE_CONDITIONS.push({ source: src, dest: 'pa', min: 0.2 });
 });
 
 // Overwrite a fresh state with an authored/captured board state. The captured

@@ -691,11 +691,13 @@ window.PRACTICE_FAULTS = [
   } },
 ];
 
-// Win conditions: every band source audible on BOTH sides of the PA.
+// Win conditions: every band source audible in the PA (heard in the room).
+// Uses the combined 'pa' check (the louder side), NOT both pa_l and pa_r, so
+// pan is a free creative choice, not a fault. Centering is only "correct" when
+// zeroing the console, not during an active mix. Matches how the lessons score.
 const PRACTICE_CONDITIONS = [];
 for (const src of BAND_SOURCES) {
-  PRACTICE_CONDITIONS.push({ source: src, dest: 'pa_l', min: 0.2 });
-  PRACTICE_CONDITIONS.push({ source: src, dest: 'pa_r', min: 0.2 });
+  PRACTICE_CONDITIONS.push({ source: src, dest: 'pa', min: 0.2 });
 }
 
 // PRACTICE GOALS — the dynamic part. A practice rep isn't always "something is
@@ -952,13 +954,13 @@ window.SCENARIO_LIBRARY = [
     start: {"channels":[{"label":"Vocal 1","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":true,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.55,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.5,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.45,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.55,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.7},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
   },
   {
-    id: 'vocal-one-side',
-    title: 'Vocal 2 is only on one side',
-    symptom: 'The second vocal is coming out of the left speaker only. The right side of the room can barely hear it. Get it sitting evenly so both sides hear it.',
-    hint: 'Check where the channel is panned, not its level.',
-    solution: 'Vocal 2 was panned hard left, so only the left speaker carried it. Re-centering the pan put it evenly across both speakers. Pan decides how a channel splits between left and right.',
+    id: 'pa-side-quiet',
+    title: 'One side of the room is quiet',
+    symptom: 'The right side of the audience is getting a lot less than the left. Even out the two main speakers so the whole room hears the same mix.',
+    hint: 'This is a PA output level, not a channel. Check the two mains against each other.',
+    solution: 'PA Right was turned down well below PA Left, so half the room got a thin mix. Matching the two main outputs evened out the coverage. Keep your main sides level so the whole room hears the same thing.',
     conditions: [],
-    start: {"channels":[{"label":"Vocal 1","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.55,"phantom":true,"highpass":false,"pan":0,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.5,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.45,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.55,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.7},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
+    start: {"channels":[{"label":"Vocal 1","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.55,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.5,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.45,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.55,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.35},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
   },
   {
     id: 'keys-buried',
