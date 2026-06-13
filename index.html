@@ -5058,9 +5058,12 @@ function bandOf(l) {
 // FAULTS selector — members keep their free choice — it just tracks the highest
 // rung reached and points at the next. need(d) takes a solved rep's difficulty
 // { faults, zeroFault } and returns whether that clean solve counts here.
-// Ranks 1-4 are live; 5-6 (by ear) arrive with BY EAR for Practice, so
-// HIGHEST_LIVE_RANK caps progression until then. The whole thing rides the
-// profile envelope: rank + rankClean persist and travel in the save code.
+// Ranks 1-4 are live and cap progression (HIGHEST_LIVE_RANK). Higher rungs are
+// a future direction, NOT by-ear: Kyle 2026-06-13, the meters are a primary
+// diagnostic tool, so blanking them would train a worse habit. The likely top
+// rung is the live-show "cost to diagnose" / PFL-discipline idea instead. The
+// whole thing rides the profile envelope: rank + rankClean persist and travel
+// in the save code.
 const RANK_GATE = 3;
 const HIGHEST_LIVE_RANK = 4;
 const RANKS = [
@@ -5068,8 +5071,6 @@ const RANKS = [
   { n: 2, label: 'Find two',   blurb: 'Two faults at once, no answer key.', faults: 2, need: (d) => d.faults >= 2 },
   { n: 3, label: 'Find three', blurb: 'A full stack of three.',             faults: 3, need: (d) => d.faults >= 3 },
   { n: 4, label: 'Sign-off',   blurb: 'Know when nothing is broken.',       faults: 1, signoff: true, need: (d) => d.zeroFault },
-  { n: 5, label: 'By ear',     blurb: 'Diagnose with the meters dark.',     faults: 2, locked: true, need: () => false },
-  { n: 6, label: 'Master',     blurb: 'Three faults, by ear.',              faults: 3, locked: true, need: () => false },
 ];
 const rankByN = (n) => RANKS.find((r) => r.n === n) || RANKS[0];
 
@@ -8078,7 +8079,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
               : <div className="mono" style={{ fontSize: 8, color: 'var(--accent)', letterSpacing: 1.2, fontWeight: 700 }}>⛰ DRILL LADDER · RANK {cur.n} — {cur.label.toUpperCase()}</div>}
             <div style={{ fontSize: 9, color: 'var(--ink-3)', lineHeight: 1.4 }}>
               {atTop
-                ? 'Top of the live ladder. By ear is coming next.'
+                ? 'Top of the live ladder. More rungs are coming.'
                 : rank >= HIGHEST_LIVE_RANK
                 ? <>{rankClean} of {RANK_GATE} clean to master Sign-off. Train this rank to face more healthy systems.</>
                 : <>{rankClean} of {RANK_GATE} clean toward Rank {nxt.n}: {nxt.label}.</>}
