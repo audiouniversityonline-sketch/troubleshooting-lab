@@ -832,7 +832,11 @@ window.PRACTICE = {
     // alone is half of real troubleshooting judgment, and no other sim trains
     // it. Seeded like everything else, so Reset replays the same clean rep.
     // Drawn before the fault loop so the seed stays deterministic.
-    const ZERO_FAULT_CHANCE = 0.12;
+    // The app can raise this when a member is training the sign-off rung of the
+    // drill ladder (window.PRACTICE_ZEROFAULT_CHANCE), so healthy systems show
+    // up often enough to drill the call. Unset by default, so normal reps keep
+    // the 12% surprise rate.
+    const ZERO_FAULT_CHANCE = (typeof window.PRACTICE_ZEROFAULT_CHANCE === 'number') ? window.PRACTICE_ZEROFAULT_CHANCE : 0.12;
     if (r() < ZERO_FAULT_CHANCE) {
       window.PRACTICE_LAST = { par: 0, faults: [], zeroFault: true, extraConditions: [] };
       return s; // bandUp() already left it healthy
@@ -841,7 +845,9 @@ window.PRACTICE = {
     // fix the gain, check the speakers. These ignore the FAULTS count (a task is
     // a task), carry their own win conditions + prompt text (winSpec), and make
     // Practice train the whole job instead of only diagnosis.
-    const GOAL_TASK_CHANCE = 0.25;
+    // Also overridable (window.PRACTICE_GOAL_CHANCE): the sign-off drill sets it
+    // to 0 so a rep is a clean "broken or fine?" call, not a build-a-mix task.
+    const GOAL_TASK_CHANCE = (typeof window.PRACTICE_GOAL_CHANCE === 'number') ? window.PRACTICE_GOAL_CHANCE : 0.25;
     if (window.PRACTICE_GOALS && window.PRACTICE_GOALS.length && r() < GOAL_TASK_CHANCE) {
       const g = window.PRACTICE_GOALS[Math.floor(r() * window.PRACTICE_GOALS.length)];
       const winSpec = g.apply(s, r);
