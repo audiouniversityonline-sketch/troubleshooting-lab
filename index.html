@@ -1859,6 +1859,258 @@ function Console({ state, setState, audio, faultChannelIdx }) {
 }
 
 window.Console = Console;
+
+// ============================================================
+// DIGITAL CONSOLE SURFACE (Phase 1): select-then-edit.
+// A second VIEW of the exact same engine state — no engine changes.
+// On a digital desk you SELECT a channel and one shared editor
+// section operates it (gain, EQ, sends, pan). The number-one
+// real-world digital mistake, adjusting the wrong channel because
+// you didn't confirm what was selected, only exists on this surface.
+// The fader bay deliberately mirrors the analog Console's outer
+// geometry (strip width 100, gap 8, 14px pad, 1px divider, 150 master)
+// so the shared ChannelAnchors chips and the whole cable overlay line
+// up with zero changes to Chain.
+// ============================================================
+function DigitalSelStrip({ ch, idx, selected, onSelect, onMute, onFader, level, isFaultStrip, srcLabel, powered }) {
+  const isSel = idx === selected;
+  const srcDisplay = srcLabel?.label || (ch.label === '—' ? 'EMPTY' : ch.label);
+  return (
+    <div
+      onPointerDownCapture={() => onSelect(idx)}
+      style={{
+        width: 100, cursor: 'pointer',
+        background: isSel ? 'linear-gradient(180deg,#2c2c34 0%, #202028 100%)' : 'linear-gradient(180deg,#222226 0%, #1a1a1d 8%, #1a1a1d 100%)',
+        border: '1px solid ' + (isSel ? 'var(--accent)' : '#0a0a0c'),
+        borderTop: '1px solid ' + (isSel ? 'var(--accent)' : '#3a3a40'),
+        borderRadius: 4,
+        padding: '8px 5px 10px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+        position: 'relative',
+        boxShadow: isFaultStrip
+          ? '0 0 0 1.5px rgba(255,70,48,0.5), 0 0 20px rgba(255,70,48,0.25)'
+          : (isSel ? '0 0 14px rgba(255,201,58,0.18)' : 'none'),
+        opacity: powered ? 1 : 0.5,
+        filter: powered ? 'none' : 'grayscale(0.75)',
+        transition: 'box-shadow 0.15s, border-color 0.15s, background 0.15s, opacity 0.15s, filter 0.15s',
+      }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 2px' }}>
+        <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', fontWeight: 600 }}>CH</div>
+        <div className="display" style={{ fontSize: ch.stereo ? 13 : 15, color: 'var(--ink)', fontWeight: 800, lineHeight: 1 }}>{ch.stereo ? `${idx + 1}/${idx + 2}` : idx + 1}</div>
+      </div>
+
+      {/* SELECT — the defining digital gesture. Highlights the strip and points
+          the shared editor below at this channel. */}
+      <BP active={isSel} onClick={() => onSelect(idx)} label="SEL" color="var(--accent)" width={66} height={16} fontSize={8.5}
+        tip="Select this channel. The SELECTED CHANNEL panel below then controls it (gain, HPF, sends, pan). One shared section for the whole desk, the way a digital console works." />
+
+      <div className="mono" style={{
+        width: 'calc(100% - 4px)', background: '#0e0e10',
+        color: srcLabel ? 'var(--label)' : 'var(--ink-3)',
+        border: '1px solid ' + (srcLabel ? '#38383e' : '#222226'), borderRadius: 2,
+        padding: '2px 3px', fontSize: 8, textAlign: 'center', letterSpacing: 0.3, fontWeight: 600,
+        textTransform: 'uppercase', minHeight: 14, lineHeight: 1.2,
+      }}>{srcDisplay}</div>
+
+      <BP active={ch.mute} onClick={() => onMute()} label="MUTE" color="var(--hot)" width={58} height={16} fontSize={8}
+        tip="Silences this channel everywhere after the preamp: PA and wedges." />
+
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
+        <F value={ch.fader} onChange={(v) => onFader(v)} height={172} />
+        <M level={level} height={172} segments={22} />
+      </div>
+    </div>
+  );
+}
+
+function DigitalChannelEditor({ ch, idx, srcLabel, pflLevel, onChange, onPhantomToggle, onInspect, powered }) {
+  const set = (patch) => onChange({ ...ch, ...patch });
+  const insp = (d) => { if (onInspect) onInspect(d); };
+  const togglePhantom = onPhantomToggle ? () => onPhantomToggle() : () => set({ phantom: !ch.phantom });
+  const name = srcLabel?.label || (ch.label === '—' ? 'EMPTY' : ch.label);
+  return (
+    <div style={{
+      marginTop: 8, width: '100%', boxSizing: 'border-box',
+      background: 'linear-gradient(180deg,#26262c 0%, #1b1b20 100%)',
+      border: '1px solid #0a0a0c', borderTop: '1px solid var(--accent)', borderRadius: 6,
+      padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+      opacity: powered ? 1 : 0.5, filter: powered ? 'none' : 'grayscale(0.75)',
+      transition: 'opacity 0.15s, filter 0.15s',
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 86 }}>
+        <div className="mono" style={{ fontSize: 8, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700 }}>SELECTED CHANNEL</div>
+        <div className="display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', lineHeight: 1 }}>CH {ch.stereo ? `${idx + 1}/${idx + 2}` : idx + 1}</div>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--label)', fontWeight: 700, textTransform: 'uppercase' }}>{name}</div>
+      </div>
+
+      <div style={{ width: 1, alignSelf: 'stretch', background: '#0a0a0c', boxShadow: '1px 0 0 #3a3a40' }} />
+
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+        <BP active={ch.phantom} onClick={togglePhantom} label="+48V" color="var(--hot)" width={40} height={16} fontSize={8}
+          tip={(!ch.mute && ch.fader > 0.05)
+            ? 'Phantom power (+48V). This channel is LIVE: mute it before switching +48V, or the pop goes to the speakers.'
+            : 'Phantom power (+48V) for condenser mics and active DIs. Switch it while the channel is muted.'} />
+        <L on={powered && ch.phantom} color="var(--hot)" size={6} />
+      </div>
+
+      <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={42} color="var(--accent)"
+        tip="Input gain. Sets how strong the source hits the preamp. Set it first, checking in PFL." />
+
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+        <window.MiniMeter level={pflLevel} width={42} segments={10} />
+        <div className="mono" style={{ fontSize: 6.5, color: ch.solo ? 'var(--amber)' : 'var(--ink-3)', letterSpacing: 0.5, fontWeight: 700 }}>{ch.solo ? 'PFL' : 'INPUT'}</div>
+      </div>
+
+      <BP active={ch.highpass} onClick={() => set({ highpass: !ch.highpass })} label="HPF" color="var(--cool)" width={40} height={16} fontSize={8}
+        tip="High-pass filter. Cuts the low rumble below the useful range of this source." />
+
+      <K value={ch.pan} onChange={(v) => set({ pan: v })} label={ch.stereo ? 'BAL' : 'PAN'} size={40} color="var(--ink)" detentAt={0.5}
+        tip={ch.stereo ? 'Balance for the stereo channel. Double-click to center.' : 'Pan. Places this channel between the left and right PA speakers. Double-click to center.'} />
+
+      <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={38} color="var(--aux)"
+        tip="How much of this channel goes to Wedge 1 (the monitor mix). Doesn't change the PA." />
+      <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={38} color="var(--cool)"
+        tip="How much of this channel goes to Wedge 2. Doesn't change the PA." />
+
+      <div style={{ display: 'flex', gap: 4 }}>
+        <BP active={ch.mute} onClick={() => set({ mute: !ch.mute })} label="MUTE" color="var(--hot)" width={36} height={18} fontSize={8}
+          tip="Silences this channel everywhere after the preamp: PA and wedges." />
+        <BP active={ch.solo} onClick={() => set({ solo: !ch.solo })} label="PFL" color="var(--amber)" width={30} height={18} fontSize={8}
+          tip="Pre-fade listen. Hear just this channel in your headphones. The room keeps hearing the full mix." />
+      </div>
+    </div>
+  );
+}
+
+function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
+  const [selected, setSelected] = useState(0);
+
+  const updateChannel = (i, ch) => setState(prev => {
+    const channels = [...prev.channels];
+    channels[i] = ch;
+    return { ...prev, channels };
+  });
+  const updateMaster = (m) => setState(prev => ({ ...prev, master: m }));
+  const inspectTo = (dest) => setState(prev => prev.inspect === dest ? prev : { ...prev, inspect: dest });
+
+  // Identical phantom-pop safety logic to the analog Console — turning +48V on
+  // over a live channel still pops the speakers, on either surface.
+  const togglePhantom = (i) => {
+    setState(prev => {
+      const ch = prev.channels[i];
+      if (!ch) return prev;
+      const turningOn = !ch.phantom;
+      const channels = prev.channels.map((c, j) => j === i ? { ...c, phantom: !c.phantom } : c);
+      const next = { ...prev, channels };
+      const mixerOnNow = prev.mixer ? prev.mixer.on !== false : true;
+      if (turningOn && mixerOnNow) {
+        if (ch.solo) {
+          next.phantomPop = { channel: i, at: Date.now(), cause: 'phantom_cans' };
+        } else if (window.wouldPopPhantom && window.wouldPopPhantom(prev, i)) {
+          next.phantomPop = { channel: i, at: Date.now() };
+        }
+      }
+      return next;
+    });
+  };
+
+  const mixerOn = state.mixer ? state.mixer.on !== false : true;
+  const channelLevels = audio.post.map((p) => mixerOn ? p * 1.2 : 0);
+  const pflLevels = audio.chanIn.map(v => mixerOn ? v * 0.95 : 0);
+  const main = audio.mainBus || { L: 0, R: 0 };
+  const masterL = (main.L || 0) * 0.85;
+  const masterR = (main.R || 0) * 0.85;
+
+  const sel = Math.min(Math.max(0, selected), Math.max(0, state.channels.length - 1));
+  const selCh = state.channels[sel];
+  const selSrcKey = audio.chanInSource[sel];
+  const selSrcLabel = selSrcKey ? window.SOURCES[selSrcKey] : null;
+
+  return (
+    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'stretch' }}>
+      {/* FADER BAY — outer row matches the analog Console exactly so the shared
+          I/O chips and cables align. */}
+      <div style={{
+        display: 'flex', gap: 8, padding: '16px 14px 12px',
+        background: 'linear-gradient(180deg, #2a2a2e 0%, #1c1c1f 100%)',
+        border: '1px solid #0a0a0c', borderRadius: 8,
+        boxShadow: 'inset 0 1px 0 #45454d, 0 4px 20px rgba(0,0,0,0.5)',
+        position: 'relative',
+      }}>
+        <div style={{ position: 'absolute', top: -1, left: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: mixerOn ? 'var(--accent)' : '#3a1a1a',
+            boxShadow: mixerOn ? '0 0 6px var(--accent)' : 'inset 0 0 0 1px rgba(90,32,24,0.6)',
+            transition: 'background 0.15s, box-shadow 0.15s',
+          }} />
+          <div className="display" style={{ fontSize: 10, color: mixerOn ? 'var(--ink-2)' : '#5a2018', letterSpacing: 1.5, fontWeight: 700, textTransform: 'uppercase' }}>AU · DX-6</div>
+          <PowerButton on={mixerOn} width={32} height={13}
+            onClick={() => {
+              setState(prev => {
+                const wasOn = prev.mixer ? prev.mixer.on !== false : true;
+                const turningOn = !wasOn;
+                const next = { ...prev, mixer: { ...(prev.mixer || {}), on: !wasOn } };
+                if (turningOn && window.wouldPopOnMixerOn && window.wouldPopOnMixerOn(prev)) {
+                  next.phantomPop = { at: Date.now(), cause: 'mixer_pop' };
+                } else if (!turningOn && window.wouldPopOnMixerOn && window.wouldPopOnMixerOn(prev)) {
+                  next.phantomPop = { at: Date.now(), cause: 'mixer_off_pop' };
+                }
+                return next;
+              });
+            }} />
+        </div>
+
+        {state.channels.map((ch, i) => {
+          const srcKey = audio.chanInSource[i];
+          const srcLabel = srcKey ? window.SOURCES[srcKey] : null;
+          return (
+            <DigitalSelStrip
+              key={i}
+              ch={ch}
+              idx={i}
+              selected={sel}
+              onSelect={setSelected}
+              onMute={() => updateChannel(i, { ...ch, mute: !ch.mute })}
+              onFader={(v) => { updateChannel(i, { ...ch, fader: v }); inspectTo('pa'); }}
+              level={channelLevels[i]}
+              isFaultStrip={faultChannelIdx === i}
+              srcLabel={srcLabel}
+              powered={mixerOn}
+            />
+          );
+        })}
+
+        <div style={{ width: 1, background: '#0a0a0c', boxShadow: '1px 0 0 #3a3a40' }} />
+
+        <MasterSection
+          master={state.master}
+          onChange={updateMaster}
+          paLevel={masterL}
+          paRLevel={masterR}
+          powered={mixerOn}
+          onInspect={inspectTo}
+        />
+      </div>
+
+      {/* SELECTED CHANNEL — the one shared editor that follows SEL. */}
+      {selCh && (
+        <DigitalChannelEditor
+          ch={selCh}
+          idx={sel}
+          srcLabel={selSrcLabel}
+          pflLevel={pflLevels[sel]}
+          onChange={(c) => updateChannel(sel, c)}
+          onPhantomToggle={() => togglePhantom(sel)}
+          onInspect={inspectTo}
+          powered={mixerOn}
+        />
+      )}
+    </div>
+  );
+}
+
+window.DigitalConsole = DigitalConsole;
 </script>
 
 <!-- ============================================================ -->
@@ -2848,7 +3100,10 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   );
 }
 
-function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, fanOutRef, sourceKeys }) {
+function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, fanOutRef, sourceKeys, surface, onSetSurface, canDigital }) {
+  // Effective surface: free tier can never land on digital even if a stale
+  // profile says so (the toggle gates it, this is the belt-and-suspenders).
+  const sfc = (surface === 'digital' && canDigital) ? 'digital' : 'analog';
   return (
     <div style={{
       background: 'linear-gradient(180deg, rgba(40,30,12,0.4) 0%, rgba(20,16,8,0.35) 100%)',
@@ -2861,9 +3116,30 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
       <ZoneHeader
         label="Console (FOH)"
         sublabel="engineer station · the mix desk"
-        badge="MX-6"
+        badge={sfc === 'digital' ? 'DX-6' : 'MX-6'}
         badgeColor="var(--accent)"
       />
+      {/* SURFACE toggle — same scenario, analog strip layout or digital
+          select-then-edit. Digital is a member feature; on the free tier the
+          DIGITAL button opens the member pitch instead of switching. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 1.5, fontWeight: 700 }}>SURFACE</div>
+        <div style={{ display: 'flex', border: '1px solid #38383e', borderRadius: 4, overflow: 'hidden' }}>
+          {[['analog', 'ANALOG'], ['digital', 'DIGITAL']].map(([opt, lbl], i) => {
+            const on = sfc === opt;
+            const locked = opt === 'digital' && !canDigital;
+            return (
+              <button key={opt} onClick={() => onSetSurface && onSetSurface(opt)} className="mono ui-no-select" style={{
+                padding: '3px 11px', fontSize: 8.5, fontWeight: 800, letterSpacing: 0.8, cursor: 'pointer',
+                color: on ? '#0a0a0c' : (locked ? 'var(--ink-3)' : 'var(--ink-2)'),
+                background: on ? 'var(--accent)' : '#141417',
+                border: 'none',
+                borderLeft: i === 0 ? 'none' : '1px solid #38383e',
+              }}>{lbl}{locked ? ' 🔒' : ''}</button>
+            );
+          })}
+        </div>
+      </div>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <FanOutPoint fanOutRef={fanOutRef}/>
       </div>
@@ -2874,8 +3150,11 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
           cable run even when the column is short. */}
       <div style={{ flex: 1, minHeight: 50 }}/>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <ConsoleWithRefs state={state} setState={setState} audio={audio}
-          channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref}/>
+        {sfc === 'digital'
+          ? <DigitalConsoleWithRefs state={state} setState={setState} audio={audio}
+              channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref}/>
+          : <ConsoleWithRefs state={state} setState={setState} audio={audio}
+              channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref}/>}
       </div>
     </div>
   );
@@ -3028,7 +3307,19 @@ function ConsoleWithRefs({ state, setState, audio, channelRefs, masterLRef, mast
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
+// Digital twin of ConsoleWithRefs. Renders the digital surface but reuses the
+// SAME ChannelAnchors, so the input/output chips (and therefore the whole cable
+// overlay measured in Chain) attach to identical positions over the fader bay.
+function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref }) {
+  return (
+    <div style={{ position: 'relative' }}>
+      <window.DigitalConsole state={state} setState={setState} audio={audio} faultChannelIdx={-1}/>
+      <ChannelAnchors state={state} setState={setState} channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref}/>
+    </div>
+  );
+}
+
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital }) {
   const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
   const isMobile = useViewport();
   const containerRef = useR2(null);
@@ -3591,7 +3882,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1 }) {
           <ConsolePanel state={state} setState={setState} audio={audio}
             channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef}
             aux1Ref={aux1Ref} aux2Ref={aux2Ref}
-            fanOutRef={fanOutRef} sourceKeys={sourceKeys}/>
+            fanOutRef={fanOutRef} sourceKeys={sourceKeys}
+            surface={surface} onSetSurface={onSetSurface} canDigital={canDigital}/>
         </div>
       </div>
 
@@ -3997,6 +4289,7 @@ function defaultProfile() {
     email: '',          // free-tier email gate: captured address (sent to Kit)
     emailSkipped: false, // free-tier email gate: chose "skip for now" (soft gate)
     freePractice: 0,    // free-tier Practice taste: reps consumed (gate at FREE_PRACTICE_LIMIT)
+    surface: 'analog',  // member console surface: 'analog' or 'digital' (select-then-edit)
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -4016,6 +4309,7 @@ function normalizeProfile(data) {
   p.completed = c;
   p.reps = (Number.isFinite(data.reps) && data.reps >= 0) ? Math.floor(data.reps) : 0;
   p.freePractice = (Number.isFinite(data.freePractice) && data.freePractice >= 0) ? Math.floor(data.freePractice) : 0;
+  p.surface = (data.surface === 'digital') ? 'digital' : 'analog';
   p.v = PROFILE_VERSION;
   return p;
 }
@@ -5119,6 +5413,16 @@ function App() {
   // listening). Only affects Feedback Mode.
   const [feedbackByEar, setFeedbackByEar] = uS(() => !!profileRef.current.feedbackByEar);
 
+  // Console surface (member feature). Free tier is always analog; clicking
+  // DIGITAL on free opens the member pitch instead of switching. setPitchFor is
+  // declared later in App — fine, this closure only runs on a click.
+  const canDigital = TIER === 'member';
+  const [surface, setSurface] = uS(() => (profileRef.current.surface === 'digital' && canDigital) ? 'digital' : 'analog');
+  const setSurfacePref = (next) => {
+    if (next === 'digital' && !canDigital) { setPitchFor({ title: 'Digital Console Training', isDigital: true }); return; }
+    setSurface(next === 'digital' ? 'digital' : 'analog');
+  };
+
   // Free-tier email gate. emailDone is true once the viewer has either given an
   // email or chosen "skip for now" — both are remembered so the gate never
   // nags twice. Members and shared-link viewers are never gated.
@@ -5147,9 +5451,9 @@ function App() {
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
   // feedbackByEar drive "resume where I left off" on the next load.
   uE(() => {
-    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice };
+    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface };
     saveProfile(profileRef.current);
-  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice]);
+  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface]);
   const practiceInfoRef = uR(null);
 
   // Zero-fault "sign off" state (Practice Mode). signedOff lets a zero-fault
@@ -6521,7 +6825,9 @@ function App() {
             <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700 }}>🔒 MEMBERS ONLY</div>
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-              {pitchFor.isLibrary
+              {pitchFor.isDigital
+                ? 'The digital console surface teaches the part of modern live sound the analog desk cannot: one shared channel section that follows whatever you SELECT, so the real skill is confirming what is selected before you touch a knob. Same signal flow, same faults, a different surface. It is part of the membership.'
+                : pitchFor.isLibrary
                 ? 'The Scenario Library is a growing shelf of real-world situations, each one a specific show that went sideways and the exact board behind it. Members can browse and play the whole library, and it keeps growing. Some land as free links in the videos; the full shelf is part of the membership.'
                 : pitchFor.isFeedbackMode
                 ? 'Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Every rep is a new wedge with a new ring profile.'
@@ -6565,6 +6871,7 @@ function App() {
             <div ref={designRef} style={{ width: DESIGN_W, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={fitScale}
+                surface={surface} onSetSurface={setSurfacePref} canDigital={canDigital}
                 sidebarContent={
                   <StableSlot levelKey={levelIdx}>
                   {solved
