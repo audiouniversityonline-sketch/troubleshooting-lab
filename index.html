@@ -1933,59 +1933,56 @@ window.Console = Console;
 // so the shared ChannelAnchors chips and the whole cable overlay line
 // up with zero changes to Chain.
 // ============================================================
-function DigitalSelStrip({ ch, idx, selected, onSelect, onMute, onFader, level, isFaultStrip, srcLabel, powered, groupMuted }) {
+function DigitalSelStrip({ ch, idx, selected, onSelect, onMute, onSolo, onFader, level, isFaultStrip, srcLabel, powered, groupMuted }) {
   const isSel = idx === selected;
-  const srcDisplay = srcLabel?.label || (ch.label === '—' ? 'EMPTY' : ch.label);
+  const color = srcLabel?.color || '#5a5a64';
+  const name = srcLabel?.short || (ch.label === '—' ? 'EMPTY' : (ch.label || '').toUpperCase());
+  const chNum = ch.stereo ? `${idx + 1}/${idx + 2}` : `${idx + 1}`;
   return (
     <div
       onPointerDownCapture={() => onSelect(idx)}
       style={{
         width: 100, cursor: 'pointer',
-        background: isSel ? 'linear-gradient(180deg,#2c2c34 0%, #202028 100%)' : 'linear-gradient(180deg,#222226 0%, #1a1a1d 8%, #1a1a1d 100%)',
-        border: '1px solid ' + (isSel ? 'var(--accent)' : '#0a0a0c'),
-        borderTop: '1px solid ' + (isSel ? 'var(--accent)' : '#3a3a40'),
-        borderRadius: 4,
-        padding: '8px 5px 10px',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-        position: 'relative',
+        background: isSel ? 'linear-gradient(180deg,#2c2c34 0%, #1d1d22 100%)' : 'linear-gradient(180deg,#1e1e22 0%, #151518 100%)',
+        border: '1px solid ' + (isSel ? color : '#0a0a0c'),
+        borderRadius: 5,
+        display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 5,
+        paddingBottom: 8,
+        position: 'relative', overflow: 'hidden',
         boxShadow: isFaultStrip
           ? '0 0 0 1.5px rgba(255,70,48,0.5), 0 0 20px rgba(255,70,48,0.25)'
-          : (isSel ? '0 0 14px rgba(255,201,58,0.18)' : 'none'),
+          : (isSel ? `0 0 14px ${color}55` : 'none'),
         opacity: powered ? 1 : 0.5,
         filter: powered ? 'none' : 'grayscale(0.75)',
         transition: 'box-shadow 0.15s, border-color 0.15s, background 0.15s, opacity 0.15s, filter 0.15s',
       }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 2px' }}>
-        <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', fontWeight: 600 }}>CH</div>
-        <div className="display" style={{ fontSize: ch.stereo ? 13 : 15, color: 'var(--ink)', fontWeight: 800, lineHeight: 1 }}>{ch.stereo ? `${idx + 1}/${idx + 2}` : idx + 1}</div>
+      {/* SCRIBBLE STRIP — the colored LCD name window above the fader, the single
+          most recognizable cue of a digital desk. Lights up when selected. */}
+      <div style={{ background: color, padding: '3px 4px 4px', boxShadow: isSel ? `0 0 10px ${color}` : 'inset 0 -2px 4px rgba(0,0,0,0.25)' }}>
+        <div className="mono" style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.2, color: '#0a0a0c', textAlign: 'center', lineHeight: 1.05, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 0 rgba(255,255,255,0.25)' }}>{name}</div>
+        <div className="mono" style={{ fontSize: 7, fontWeight: 700, color: 'rgba(0,0,0,0.55)', textAlign: 'center', lineHeight: 1.2 }}>CH {chNum}</div>
       </div>
 
-      {/* SELECT — the defining digital gesture. Highlights the strip and points
-          the shared editor below at this channel. */}
-      <BP active={isSel} onClick={() => onSelect(idx)} label="SEL" color="var(--accent)" width={66} height={16} fontSize={8.5}
-        tip="Select this channel. The SELECTED CHANNEL panel below then controls it (gain, HPF, sends, pan). One shared section for the whole desk, the way a digital console works." />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '0 5px' }}>
+        {/* SELECT — points the channel-view screen at this channel. */}
+        <BP active={isSel} onClick={() => onSelect(idx)} label="SELECT" color="var(--accent)" width={86} height={15} fontSize={7.5}
+          tip="Select this channel into the channel view (the screen below). On a digital desk one shared screen edits whatever is selected, so confirming what's selected is the core skill." />
 
-      <div className="mono" style={{
-        width: 'calc(100% - 4px)', background: '#0e0e10',
-        color: srcLabel ? 'var(--label)' : 'var(--ink-3)',
-        border: '1px solid ' + (srcLabel ? '#38383e' : '#222226'), borderRadius: 2,
-        padding: '2px 3px', fontSize: 8, textAlign: 'center', letterSpacing: 0.3, fontWeight: 600,
-        textTransform: 'uppercase', minHeight: 14, lineHeight: 1.2,
-      }}>{srcDisplay}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
+          <F value={ch.fader} onChange={(v) => onFader(v)} height={150} />
+          <M level={level} height={150} segments={20} />
+        </div>
 
-      <BP active={ch.mute} onClick={() => onMute()} label="MUTE" color="var(--hot)" width={58} height={16} fontSize={8}
-        tip="Silences this channel everywhere after the preamp: PA and wedges." />
+        {/* SOLO + MUTE under the fader, the way a console lays them out. */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <BP active={ch.solo} onClick={() => onSolo()} label="SOLO" color="var(--amber)" width={40} height={15} fontSize={7.5}
+            tip="Pre-fade listen (PFL). Hear just this channel in your headphones; the room keeps the full mix." />
+          <BP active={ch.mute} onClick={() => onMute()} label="MUTE" color="var(--hot)" width={40} height={15} fontSize={7.5}
+            tip="Silence this channel everywhere after the preamp: PA and wedges." />
+        </div>
 
-      {/* Muted by an active mute group: the channel's own MUTE is off but it's
-          silent anyway. The diagnosis the analog desk can't pose. */}
-      <div className="mono" style={{
-        fontSize: 6.5, fontWeight: 800, letterSpacing: 0.4, lineHeight: 1, minHeight: 8,
-        color: groupMuted ? 'var(--hot)' : 'transparent',
-      }}>{groupMuted ? '● GROUP MUTE' : '·'}</div>
-
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
-        <F value={ch.fader} onChange={(v) => onFader(v)} height={166} />
-        <M level={level} height={166} segments={22} />
+        {/* Muted by an active mute group: own MUTE off but silent anyway. */}
+        <div className="mono" style={{ fontSize: 6.5, fontWeight: 800, letterSpacing: 0.4, lineHeight: 1, minHeight: 8, color: groupMuted ? 'var(--hot)' : 'transparent' }}>{groupMuted ? '● GROUP MUTE' : '·'}</div>
       </div>
     </div>
   );
@@ -1995,72 +1992,87 @@ function DigitalChannelEditor({ ch, idx, srcLabel, pflLevel, onChange, onPhantom
   const set = (patch) => onChange({ ...ch, ...patch });
   const insp = (d) => { if (onInspect) onInspect(d); };
   const togglePhantom = onPhantomToggle ? () => onPhantomToggle() : () => set({ phantom: !ch.phantom });
-  const name = srcLabel?.label || (ch.label === '—' ? 'EMPTY' : ch.label);
+  const name = srcLabel?.short || srcLabel?.label || (ch.label === '—' ? 'EMPTY' : ch.label);
+  const color = srcLabel?.color || '#5a5a64';
+  const chNum = ch.stereo ? `${idx + 1}/${idx + 2}` : `${idx + 1}`;
   const inGroups = (muteGroups || []).filter(g => (g.members || []).indexOf(idx) !== -1);
   const inDcas = (dcas || []).filter(d => (d.members || []).indexOf(idx) !== -1);
   const memberText = [
     ...inGroups.map(g => (g.name || 'MG') + (g.active ? ' •' : '')),
     ...inDcas.map(d => 'DCA ' + (d.name || '')),
   ].join('   ') || 'none';
+  // Screen "tile" — each block of the channel's processing reads like a panel
+  // on a real digital console's channel-view screen.
+  const tile = {
+    display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center',
+    background: 'linear-gradient(180deg,#17171b,#121215)', border: '1px solid #2a2a30',
+    borderRadius: 4, padding: '5px 9px 7px',
+  };
+  const tileLabel = { fontSize: 7, fontWeight: 800, letterSpacing: 1.2, color: 'var(--ink-3)' };
   return (
     <div style={{
       marginTop: 8, width: '100%', boxSizing: 'border-box',
-      background: 'linear-gradient(180deg,#26262c 0%, #1b1b20 100%)',
-      border: '1px solid #0a0a0c', borderTop: '1px solid var(--accent)', borderRadius: 6,
-      padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+      background: '#0b0b0d', border: '1px solid #2a2a30', borderRadius: 7, padding: 7,
+      boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.7), 0 1px 0 #3a3a40',
       opacity: powered ? 1 : 0.5, filter: powered ? 'none' : 'grayscale(0.75)',
       transition: 'opacity 0.15s, filter 0.15s',
     }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 86 }}>
-        <div className="mono" style={{ fontSize: 8, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700 }}>SELECTED CHANNEL</div>
-        <div className="display" style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', lineHeight: 1 }}>CH {ch.stereo ? `${idx + 1}/${idx + 2}` : idx + 1}</div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--label)', fontWeight: 700, textTransform: 'uppercase' }}>{name}</div>
+      {/* SCREEN header — colored by the selected channel, the way the channel
+          view is tinted on an X32 / SQ / TF when you SELECT a channel. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: `linear-gradient(90deg, ${color}, ${color}aa)`, borderRadius: 4, padding: '5px 10px', marginBottom: 7 }}>
+        <div className="mono" style={{ fontSize: 7.5, fontWeight: 800, letterSpacing: 1.5, color: 'rgba(0,0,0,0.55)' }}>CHANNEL VIEW</div>
+        <div className="display" style={{ fontSize: 18, fontWeight: 800, color: '#0a0a0c', lineHeight: 1 }}>CH {chNum}</div>
+        <div className="mono" style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.5, color: '#0a0a0c' }}>{(name || '').toUpperCase()}</div>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 5 }}>
+          <BP active={ch.solo} onClick={() => set({ solo: !ch.solo })} label="SOLO" color="var(--amber)" width={42} height={18} fontSize={8}
+            tip="Pre-fade listen. Hear just this channel in your headphones." />
+          <BP active={ch.mute} onClick={() => set({ mute: !ch.mute })} label="MUTE" color="var(--hot)" width={42} height={18} fontSize={8}
+            tip="Silence this channel everywhere after the preamp." />
+        </div>
       </div>
 
-      <div style={{ width: 1, alignSelf: 'stretch', background: '#0a0a0c', boxShadow: '1px 0 0 #3a3a40' }} />
+      {/* PROCESSING ROW — the channel's chain laid out as screen tiles. */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', flexWrap: 'wrap' }}>
+        <div style={tile}>
+          <div className="mono" style={tileLabel}>PREAMP</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <K value={ch.gain} onChange={(v) => set({ gain: v })} label="GAIN" size={40} color="var(--accent)"
+              tip="Input gain. How hard the source hits the preamp. Set it first, watching the input meter or SOLO." />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+              <BP active={ch.phantom} onClick={togglePhantom} label="48V" color="var(--hot)" width={36} height={15} fontSize={7.5}
+                tip={(!ch.mute && ch.fader > 0.05) ? 'Phantom power (+48V). This channel is LIVE: mute it before switching +48V or the pop goes to the speakers.' : 'Phantom power (+48V) for condenser mics and active DIs. Switch it while the channel is muted.'} />
+              <window.MiniMeter level={pflLevel} width={36} segments={9} />
+              <div className="mono" style={{ fontSize: 6.5, color: ch.solo ? 'var(--amber)' : 'var(--ink-3)', fontWeight: 700 }}>{ch.solo ? 'PFL' : 'IN'}</div>
+            </div>
+          </div>
+        </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-        <BP active={ch.phantom} onClick={togglePhantom} label="+48V" color="var(--hot)" width={40} height={16} fontSize={8}
-          tip={(!ch.mute && ch.fader > 0.05)
-            ? 'Phantom power (+48V). This channel is LIVE: mute it before switching +48V, or the pop goes to the speakers.'
-            : 'Phantom power (+48V) for condenser mics and active DIs. Switch it while the channel is muted.'} />
-        <L on={powered && ch.phantom} color="var(--hot)" size={6} />
-      </div>
+        <div style={tile}>
+          <div className="mono" style={tileLabel}>LOW CUT</div>
+          <BP active={ch.highpass} onClick={() => set({ highpass: !ch.highpass })} label={ch.highpass ? 'ON · 80 Hz' : 'OFF'} color="var(--cool)" width={66} height={20} fontSize={8}
+            tip="High-pass filter. Rolls off the low rumble below the useful range of this source." />
+        </div>
 
-      <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={42} color="var(--accent)"
-        tip="Input gain. Sets how strong the source hits the preamp. Set it first, checking in PFL." />
+        <div style={tile}>
+          <div className="mono" style={tileLabel}>BUS SENDS</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="WEDGE 1" size={36} color="var(--aux)"
+              tip="How much of this channel goes to Wedge 1. Does not change the PA." />
+            <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="WEDGE 2" size={36} color="var(--cool)"
+              tip="How much of this channel goes to Wedge 2. Does not change the PA." />
+          </div>
+        </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-        <window.MiniMeter level={pflLevel} width={42} segments={10} />
-        <div className="mono" style={{ fontSize: 6.5, color: ch.solo ? 'var(--amber)' : 'var(--ink-3)', letterSpacing: 0.5, fontWeight: 700 }}>{ch.solo ? 'PFL' : 'INPUT'}</div>
-      </div>
+        <div style={tile}>
+          <div className="mono" style={tileLabel}>{ch.stereo ? 'BALANCE' : 'PAN'}</div>
+          <K value={ch.pan} onChange={(v) => set({ pan: v })} label="" size={42} color="var(--ink)" detentAt={0.5}
+            tip={ch.stereo ? 'Balance for the stereo channel. Double-click to center.' : 'Pan between the left and right PA. Double-click to center.'} />
+        </div>
 
-      <BP active={ch.highpass} onClick={() => set({ highpass: !ch.highpass })} label="HPF" color="var(--cool)" width={40} height={16} fontSize={8}
-        tip="High-pass filter. Cuts the low rumble below the useful range of this source." />
-
-      <K value={ch.pan} onChange={(v) => set({ pan: v })} label={ch.stereo ? 'BAL' : 'PAN'} size={40} color="var(--ink)" detentAt={0.5}
-        tip={ch.stereo ? 'Balance for the stereo channel. Double-click to center.' : 'Pan. Places this channel between the left and right PA speakers. Double-click to center.'} />
-
-      <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={38} color="var(--aux)"
-        tip="How much of this channel goes to Wedge 1 (the monitor mix). Doesn't change the PA." />
-      <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={38} color="var(--cool)"
-        tip="How much of this channel goes to Wedge 2. Doesn't change the PA." />
-
-      <div style={{ display: 'flex', gap: 4 }}>
-        <BP active={ch.mute} onClick={() => set({ mute: !ch.mute })} label="MUTE" color="var(--hot)" width={36} height={18} fontSize={8}
-          tip="Silences this channel everywhere after the preamp: PA and wedges." />
-        <BP active={ch.solo} onClick={() => set({ solo: !ch.solo })} label="PFL" color="var(--amber)" width={30} height={18} fontSize={8}
-          tip="Pre-fade listen. Hear just this channel in your headphones. The room keeps hearing the full mix." />
-      </div>
-
-      <div style={{ width: 1, alignSelf: 'stretch', background: '#0a0a0c', boxShadow: '1px 0 0 #3a3a40' }} />
-
-      {/* Group membership for the selected channel. A '•' marks an active mute
-          group, so a "channel is silent but its MUTE is off" rep is solvable
-          here: see which group it's in and whether that group is lit. */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 78 }}>
-        <span className="mono" style={{ fontSize: 7, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>MEMBER OF</span>
-        <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-2)', fontWeight: 700, lineHeight: 1.3 }}>{memberText}</span>
+        <div style={{ ...tile, flex: 1, minWidth: 96, alignItems: 'flex-start' }}>
+          <div className="mono" style={tileLabel}>ASSIGN</div>
+          <span className="mono" style={{ fontSize: 9, color: 'var(--ink-2)', fontWeight: 700, lineHeight: 1.5 }}>{memberText}</span>
+        </div>
       </div>
     </div>
   );
@@ -2304,6 +2316,7 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
               selected={sel}
               onSelect={setSelected}
               onMute={() => updateChannel(i, { ...ch, mute: !ch.mute })}
+              onSolo={() => updateChannel(i, { ...ch, solo: !ch.solo })}
               onFader={(v) => { updateChannel(i, { ...ch, fader: v }); inspectTo('pa'); }}
               level={channelLevels[i]}
               isFaultStrip={faultChannelIdx === i}
