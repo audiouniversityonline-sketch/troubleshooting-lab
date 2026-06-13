@@ -668,6 +668,24 @@ window.PRACTICE_FAULTS = [
       const di = (rng() < 0.5) ? 0 : 1;
       if (s.dcas && s.dcas[di]) s.dcas[di].fader = 0;
     } },
+  { key: 'scene-recall', label: 'Wrong scene recalled', blurb: 'The wrong scene is loaded, so faders and mutes jumped to the wrong values.', par: 2, digital: true, apply: (s) => {
+      // Snapshot the healthy state as SHOW, build a broken SOUNDCHK, apply it to
+      // the live channels, and leave SOUNDCHK active. Fix = recall SHOW from the
+      // SCENES strip. Only faders/mutes are stored, which is exactly what the
+      // fault touches, so a recall fully restores the rep.
+      const snap = () => ({ channels: s.channels.map(c => ({ fader: c.fader, mute: c.mute })) });
+      const show = snap();
+      const sc = snap();
+      sc.channels[0].mute = true;                       // lead vocal muted in soundcheck
+      if (sc.channels[3]) sc.channels[3].fader = 0;     // keys fader down in soundcheck
+      s.channels = s.channels.map((c, i) => ({ ...c, fader: sc.channels[i].fader, mute: sc.channels[i].mute }));
+      s.scenes = [
+        { name: 'SHOW',     snapshot: show },
+        { name: 'SOUNDCHK', snapshot: sc },
+        { name: 'WALK-IN',  snapshot: null },
+      ];
+      s.currentScene = 1;
+    } },
   // FEEDBACK — a singer's wedge pushed into ringing (hot send + hot wedge).
   // The extra condition keeps her monitor level REQUIRED, so the fix is the
   // Feedback Awareness skill: pull the glowing band down on that wedge's EQ.

@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=37"></script>
+<script src="content.js?v=38"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -328,6 +328,18 @@ function defaultState() {
       { name: 'VOX',  members: [0, 1], fader: 1 },
       { name: 'BAND', members: [2, 3], fader: 1 },
     ],
+    // Console scenes/snapshots (digital surface, Phase 3a). Inert by default:
+    // three named scenes with no stored snapshot, current = SHOW. Recalling an
+    // empty scene is a no-op, and scenes never touch computeAudio, so the analog
+    // surface and every existing scenario are unaffected. A digital-only fault
+    // stores a healthy SHOW snapshot, applies a broken SOUNDCHK snapshot to the
+    // live channels, and leaves SOUNDCHK active; the fix is to recall SHOW.
+    scenes: [
+      { name: 'SHOW',     snapshot: null },
+      { name: 'SOUNDCHK', snapshot: null },
+      { name: 'WALK-IN',  snapshot: null },
+    ],
+    currentScene: 0,
   };
 }
 
@@ -2096,6 +2108,36 @@ function DigitalGroups({ muteGroups, dcas, onToggleMute, onDca, powered }) {
   );
 }
 
+// Scene recall strip (digital surface, Phase 3a). Recalling a scene overwrites
+// the channel faders and mutes with that scene's stored snapshot. The wrong
+// scene loaded mid-show is a classic digital-desk mistake with no analog
+// equivalent; the fix is to recall the right one.
+function DigitalScenes({ scenes, currentScene, onRecall, powered }) {
+  const list = scenes || [];
+  if (!list.length) return null;
+  const activeName = (list[currentScene] && list[currentScene].name) || '—';
+  return (
+    <div style={{
+      marginTop: 8, width: '100%', boxSizing: 'border-box',
+      background: 'linear-gradient(180deg,#202024 0%, #161619 100%)',
+      border: '1px solid #0a0a0c', borderRadius: 6, padding: '8px 14px',
+      display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+      opacity: powered ? 1 : 0.5, filter: powered ? 'none' : 'grayscale(0.75)',
+    }}>
+      <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 1.5, fontWeight: 700 }}>SCENES</div>
+      <div style={{ display: 'flex', gap: 5 }}>
+        {list.map((sc, i) => (
+          <BP key={i} active={currentScene === i} onClick={() => onRecall(i)} label={sc.name || ('SCENE ' + (i + 1))} color="var(--accent)" width={84} height={20} fontSize={8}
+            tip={'Recall the ' + (sc.name || ('scene ' + (i + 1))) + ' scene. Recalling overwrites every channel fader and mute with the values stored in that scene. The wrong scene loaded mid-show is the classic digital-desk mistake.'} />
+        ))}
+      </div>
+      <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5 }}>
+        active: <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{activeName}</span>
+      </div>
+    </div>
+  );
+}
+
 function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
   const [selected, setSelected] = useState(0);
 
@@ -2135,6 +2177,18 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
   const updateDca = (di, v) => setState(prev => {
     const dcas = (prev.dcas || []).map((d, j) => j === di ? { ...d, fader: v } : d);
     return { ...prev, dcas };
+  });
+  const recallScene = (i) => setState(prev => {
+    const scenes = prev.scenes || [];
+    const sc = scenes[i];
+    let channels = prev.channels;
+    if (sc && sc.snapshot && Array.isArray(sc.snapshot.channels)) {
+      channels = prev.channels.map((c, j) => {
+        const snap = sc.snapshot.channels[j];
+        return snap ? { ...c, fader: snap.fader != null ? snap.fader : c.fader, mute: snap.mute != null ? snap.mute : c.mute } : c;
+      });
+    }
+    return { ...prev, channels, currentScene: i };
   });
 
   const mixerOn = state.mixer ? state.mixer.on !== false : true;
@@ -2240,6 +2294,14 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
         dcas={state.dcas}
         onToggleMute={updateMuteGroup}
         onDca={updateDca}
+        powered={mixerOn}
+      />
+
+      {/* SCENES — recall a stored snapshot. The wrong one loaded is a fault. */}
+      <DigitalScenes
+        scenes={state.scenes}
+        currentScene={state.currentScene || 0}
+        onRecall={recallScene}
         powered={mixerOn}
       />
     </div>
