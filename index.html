@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=29"></script>
+<script src="content.js?v=30"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -166,11 +166,11 @@ function nioshExposure(db) {
   if (db < 85) return { text: 'safe all day', zone: 'safe' };
   // hours = 8 * 2^(-(db-85)/3)
   const hours = 8 * Math.pow(2, -(db - 85) / 3);
-  if (hours >= 1) return { text: 'NIOSH limit: ' + Math.round(hours) + ' h/day', zone: hours >= 4 ? 'watch' : 'limit' };
+  if (hours >= 1) return { text: '~' + Math.round(hours) + ' h/day before damage', zone: hours >= 4 ? 'watch' : 'limit' };
   const minutes = hours * 60;
-  if (minutes >= 1) return { text: 'NIOSH limit: ' + Math.round(minutes) + ' min/day', zone: minutes >= 15 ? 'limit' : 'damage' };
+  if (minutes >= 1) return { text: '~' + Math.round(minutes) + ' min/day before damage', zone: minutes >= 15 ? 'limit' : 'damage' };
   const seconds = Math.max(1, Math.round(minutes * 60));
-  return { text: 'NIOSH limit: ' + seconds + ' sec/day', zone: 'damage' };
+  return { text: '~' + seconds + ' sec/day before damage', zone: 'damage' };
 }
 
 const DESTINATIONS = {
@@ -1599,12 +1599,12 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       </div>
 
       <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={40} color="var(--accent)"
-        tip="Input gain. Sets how hot the source hits the preamp. Set it first, checking in PFL." />
+        tip="Input gain. Sets how strong the source hits the preamp. Set it first, checking in PFL." />
 
       <div style={{ width: '94%' }}>
         <PFLBar level={pflLevel} hot={ch.solo}/>
         <div className="mono" style={{ fontSize: 6.5, color: ch.solo ? 'var(--amber)' : 'var(--ink-3)', textAlign: 'center', marginTop: 1, letterSpacing: 0.5, fontWeight: 700 }}>
-          {ch.solo ? 'PFL · CANS' : 'INPUT'}
+          {ch.solo ? 'PFL' : 'INPUT'}
         </div>
       </div>
 
@@ -2234,7 +2234,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge,
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 24 }}>
           <div>
             <div className="display" style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.5 }}>Monitor EQ</div>
-            <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>graphic EQ on the aux sends · pull a band down to cut that frequency</div>
+            <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>graphic EQ on the monitor sends · pull a band down to cut that frequency</div>
           </div>
           <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
         </div>
@@ -3970,33 +3970,104 @@ const DESIGN_W = 1680;
 // already finished (new scenarios just append with new ids). Wrapped in
 // try/catch because some embedded/iframe contexts restrict storage; if it's
 // blocked the app still runs, it just won't remember between visits.
-const PROGRESS_KEY = 'audiou-troubleshooting-lab-progress-v1';
-function loadProgress() {
+// THE PROFILE — one versioned object holds everything the app remembers
+// between visits. Today that's completed lessons and the practice-rep count;
+// as features land it gains a fault ledger, resume state, a Show Day lockout,
+// and so on. The rule that makes this worth doing up front: a new feature adds
+// ONE field to defaultProfile() and it is persisted and carried in the save
+// code automatically, with no change to the envelope or the save-code format.
+// Legacy v1 storage (separate completed + reps keys) and legacy v1 save codes
+// (which only knew completed + reps) are migrated in transparently, so no
+// member loses history across the upgrade.
+const PROFILE_KEY = 'audiou-troubleshooting-lab-profile-v2';
+const PROGRESS_KEY = 'audiou-troubleshooting-lab-progress-v1';        // legacy, migrated in + mirrored
+const REPS_KEY = 'audiou-troubleshooting-lab-practice-reps-v1';      // legacy, migrated in + mirrored
+const PROFILE_VERSION = 2;
+
+function defaultProfile() {
+  return {
+    v: PROFILE_VERSION,
+    completed: {},      // { [lessonId]: true }
+    reps: 0,            // practice reps finished, ever
+    ledger: {},         // per-fault-key stats: { [key]: { reps, clean, overPar, hints, last } }
+    practiceClean: 0,   // practice reps solved clean (no hints, at/under par)
+    lastLevel: 0,       // resume: scenario index last open
+    practiceFaults: 1,  // resume: FAULTS difficulty (1-3)
+    feedbackByEar: false, // resume: Feedback Mode GUIDED(false)/BY EAR(true)
+    // Future fields go here. They round-trip through storage and the save
+    // code for free, because the envelope serializes the whole object.
+  };
+}
+
+// Coerce any loaded/decoded blob into a clean profile. Unknown fields are kept
+// verbatim first (so a newer save code restored on an older build doesn't lose
+// data), then the known fields are sanitized so garbage can't corrupt them.
+function normalizeProfile(data) {
+  const p = defaultProfile();
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return p;
+  for (const k of Object.keys(data)) p[k] = data[k];
+  const c = {};
+  if (data.completed && typeof data.completed === 'object' && !Array.isArray(data.completed)) {
+    for (const k of Object.keys(data.completed)) { if (data.completed[k]) c[k] = true; }
+  }
+  p.completed = c;
+  p.reps = (Number.isFinite(data.reps) && data.reps >= 0) ? Math.floor(data.reps) : 0;
+  p.v = PROFILE_VERSION;
+  return p;
+}
+
+// First run after the upgrade: build a profile from the old v1 keys.
+function migrateLegacyProfile() {
+  const out = defaultProfile();
   try {
     const raw = window.localStorage.getItem(PROGRESS_KEY);
     const data = raw ? JSON.parse(raw) : null;
-    return (data && data.completed && typeof data.completed === 'object') ? data.completed : {};
-  } catch (e) { return {}; }
-}
-function saveProgress(completed) {
-  try { window.localStorage.setItem(PROGRESS_KEY, JSON.stringify({ v: 1, completed })); } catch (e) {}
-}
-
-// Practice Mode rep counter — how many practice reps this student has
-// finished, ever. Stored separately from the completed map (it's a count,
-// not a per-id flag) but carried inside the same save code.
-const REPS_KEY = 'audiou-troubleshooting-lab-practice-reps-v1';
-function loadReps() {
+    if (data && data.completed && typeof data.completed === 'object') {
+      for (const k of Object.keys(data.completed)) { if (data.completed[k]) out.completed[k] = true; }
+    }
+  } catch (e) {}
   try {
     const n = parseInt(window.localStorage.getItem(REPS_KEY) || '0', 10);
-    return Number.isFinite(n) && n > 0 ? n : 0;
-  } catch (e) { return 0; }
+    if (Number.isFinite(n) && n > 0) out.reps = n;
+  } catch (e) {}
+  return out;
+}
+
+// try/catch because some embedded/iframe contexts restrict storage; if it's
+// blocked the app still runs, it just won't remember between visits.
+function loadProfile() {
+  try {
+    const raw = window.localStorage.getItem(PROFILE_KEY);
+    if (raw) return normalizeProfile(JSON.parse(raw));
+  } catch (e) {}
+  const migrated = migrateLegacyProfile();
+  try { window.localStorage.setItem(PROFILE_KEY, JSON.stringify(migrated)); } catch (e) {}
+  return migrated;
+}
+
+function saveProfile(profile) {
+  try {
+    const p = normalizeProfile(profile);
+    window.localStorage.setItem(PROFILE_KEY, JSON.stringify(p));
+    // Mirror the two legacy fields so rolling back to the prior build keeps
+    // completed + reps. Cheap insurance; the old build reads these keys.
+    window.localStorage.setItem(PROGRESS_KEY, JSON.stringify({ v: 1, completed: p.completed }));
+    window.localStorage.setItem(REPS_KEY, String(p.reps));
+  } catch (e) {}
 }
 
 // First-run flags. The tour shows once per browser; the Essentials
-// completion card shows once when the ninth lesson is finished.
+// completion card shows once when The Gig (lesson 9, the final exam) is
+// passed — the emotional peak, before the Power-Down wind-down lesson.
 const TOUR_KEY = 'audiou-troubleshooting-lab-tour-v1';
 const CTA_KEY = 'audiou-troubleshooting-lab-essentials-cta-v1';
+
+// The membership join page. The two highest-intent moments in the app (the
+// completion card after The Gig, and the pitch overlay when a free user
+// clicks a locked member mode) link here. UTM tags are the only attribution
+// a zero-backend product gets, so each link tags where the click came from.
+const JOIN_URL = 'https://audiouniversityonline.com/products-2/join-now-live/';
+const joinUrl = (content) => JOIN_URL + '?utm_source=troubleshooting-lab&utm_medium=app&utm_content=' + content;
 
 // Safely set an AudioParam target with cancel + anchor + ramp.
 // Fixes the "crash when turning sound on" bug from the chat transcript:
@@ -4130,32 +4201,45 @@ function mulberry32(a) {
 // copy it somewhere safe, paste it to restore. encode returns null only if
 // something is deeply wrong; decode returns null for anything that doesn't
 // parse back to a {id: true} map, so garbage input can't corrupt progress.
-function encodeProgressCode(completed, reps) {
-  try { return btoa(JSON.stringify({ v: 1, completed: completed || {}, reps: reps || 0 })); } catch (e) { return null; }
+// The save code is just the whole profile, base64'd. encode takes a profile;
+// decode returns a normalized profile (or null on garbage). A valid code must
+// at least carry a completed map, which both v1 and v2 codes do, so legacy
+// codes restore cleanly and any future fields ride along untouched.
+function encodeProgressCode(profile) {
+  try { return btoa(JSON.stringify(normalizeProfile(profile))); } catch (e) { return null; }
 }
 function decodeProgressCode(code) {
   try {
     const data = JSON.parse(atob((code || '').trim()));
-    if (!data || typeof data.completed !== 'object' || data.completed === null || Array.isArray(data.completed)) return null;
-    const clean = {};
-    for (const k of Object.keys(data.completed)) { if (data.completed[k]) clean[k] = true; }
-    // Older codes have no reps field — null means "leave the count alone".
-    const reps = (Number.isFinite(data.reps) && data.reps >= 0) ? Math.floor(data.reps) : null;
-    return { completed: clean, reps };
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+    if (typeof data.completed !== 'object' || data.completed === null || Array.isArray(data.completed)) return null;
+    return normalizeProfile(data);
   } catch (e) { return null; }
 }
 
 // The save-code modal. Three jobs, in order of how often they're needed:
 // copy your code (backup), paste a code (restore), start over (reset, with a
 // click-again confirm so one stray click can't wipe a member's history).
-function ProgressModal({ open, onClose, completed, reps, onRestore, onResetProgress }) {
+// Human-readable name for a practice fault key, taken from PRACTICE_FAULTS
+// (content.js) so the ledger panel and the future fault catalog share one
+// source of truth. Falls back to the raw key if a label is ever missing.
+function faultLabel(key) {
+  try {
+    const f = (window.PRACTICE_FAULTS || []).find((x) => x.key === key);
+    if (f && f.label) return f.label;
+  } catch (e) {}
+  return key;
+}
+
+function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
   const [paste, setPaste] = uS('');
   const [msg, setMsg] = uS(null);
   const [confirmReset, setConfirmReset] = uS(false);
-  uE(() => { if (open) { setPaste(''); setMsg(null); setConfirmReset(false); } }, [open]);
+  const [tab, setTab] = uS('save'); // 'save' (backup/restore) | 'training' (the ledger)
+  uE(() => { if (open) { setPaste(''); setMsg(null); setConfirmReset(false); setTab('save'); } }, [open]);
   if (!open) return null;
-  const code = encodeProgressCode(completed, reps) || '';
-  const doneCount = Object.keys(completed || {}).length;
+  const code = encodeProgressCode(profile) || '';
+  const doneCount = Object.keys((profile && profile.completed) || {}).length;
   const copy = () => {
     try {
       navigator.clipboard.writeText(code);
@@ -4181,6 +4265,52 @@ function ProgressModal({ open, onClose, completed, reps, onRestore, onResetProgr
     color, background: 'transparent', border: '1px solid ' + color,
     borderRadius: 4, cursor: 'pointer',
   });
+  // YOUR TRAINING tab — the per-fault ledger in plain coach language, no
+  // medals. Weakest fault first, so the member can see what to drill.
+  const trainingView = () => {
+    const ledger = (profile && profile.ledger) || {};
+    const totalReps = (profile && profile.reps) || 0;
+    const cleanReps = (profile && profile.practiceClean) || 0;
+    const entries = Object.keys(ledger)
+      .map((k) => ({ key: k, ...ledger[k] }))
+      .filter((e) => e.reps > 0)
+      .map((e) => ({ ...e, avgOver: e.overPar / e.reps }))
+      .sort((a, b) => b.avgOver - a.avgOver || b.reps - a.reps);
+    if (totalReps === 0) {
+      return (<div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+        Play a few Practice reps and your training record shows up here: which faults you've seen, and which ones still slow you down.
+      </div>);
+    }
+    const overTxt = (avgOver) => {
+      if (avgOver < 0.5) return 'usually right on par';
+      const n = Math.round(avgOver);
+      return 'usually ' + n + ' move' + (n === 1 ? '' : 's') + ' over par';
+    };
+    const cleanPct = Math.round((cleanReps / totalReps) * 100);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.5 }}>
+          You've finished <b>{totalReps}</b> practice rep{totalReps === 1 ? '' : 's'}, <b>{cleanPct}%</b> of them clean (no hints, at or under par).
+        </div>
+        {entries.length === 0 ? (
+          <div style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+            Your earlier reps are counted. New reps from here on break down fault by fault, right here.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>BY FAULT · WEAKEST FIRST</div>
+            {entries.map((e, i) => (
+              <div key={e.key} style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.45 }}>
+                <b style={{ color: 'var(--ink)' }}>{faultLabel(e.key)}</b>: {e.reps} rep{e.reps === 1 ? '' : 's'}, {overTxt(e.avgOver)}.
+                {e.clean > 0 ? ' ' + e.clean + ' clean.' : ''}
+                {i === 0 && entries.length > 1 && e.avgOver >= 1 ? <span style={{ color: 'var(--amber)' }}> Your slowest fault.</span> : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
   return (
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.65)',
@@ -4195,19 +4325,33 @@ function ProgressModal({ open, onClose, completed, reps, onRestore, onResetProgr
           <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>Your progress</div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>{doneCount} complete</div>
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-          Progress saves in this browser automatically. A save code is your backup: copy it somewhere safe, and if this browser ever forgets (a cleared cache, a new computer), paste it back here.
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[['save', 'SAVE CODE'], ['training', 'YOUR TRAINING']].map(([id, lbl]) => (
+            <button key={id} onClick={() => setTab(id)} className="mono ui-no-select" style={{
+              padding: '5px 11px', fontSize: 9, fontWeight: 800, letterSpacing: 0.8, borderRadius: 4, cursor: 'pointer',
+              background: tab === id ? 'rgba(106,169,255,0.16)' : 'transparent',
+              color: tab === id ? 'var(--cool)' : 'var(--ink-3)',
+              border: '1px solid ' + (tab === id ? 'var(--cool)' : '#38383e'),
+            }}>{lbl}</button>
+          ))}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>YOUR SAVE CODE</div>
-          <textarea readOnly value={code} rows={2} style={{ ...inputStyle, resize: 'none' }} onFocus={(e) => e.target.select()}/>
-          <button onClick={copy} className="mono ui-no-select" style={{ ...smallBtn('var(--cool)'), alignSelf: 'flex-start' }}>COPY CODE</button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--amber)', letterSpacing: 1.4, fontWeight: 700 }}>RESTORE FROM A CODE</div>
-          <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={2} placeholder="Paste a save code here" style={{ ...inputStyle, resize: 'none' }}/>
-          <button onClick={restore} disabled={!paste.trim()} className="mono ui-no-select" style={{ ...smallBtn('var(--amber)'), alignSelf: 'flex-start', opacity: paste.trim() ? 1 : 0.4 }}>RESTORE</button>
-        </div>
+        {tab === 'training' ? trainingView() : (
+          <>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+              Progress saves in this browser automatically. A save code is your backup: copy it somewhere safe, and if this browser ever forgets (a cleared cache, a new computer), paste it back here.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="mono" style={{ fontSize: 8.5, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>YOUR SAVE CODE</div>
+              <textarea readOnly value={code} rows={2} style={{ ...inputStyle, resize: 'none' }} onFocus={(e) => e.target.select()}/>
+              <button onClick={copy} className="mono ui-no-select" style={{ ...smallBtn('var(--cool)'), alignSelf: 'flex-start' }}>COPY CODE</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="mono" style={{ fontSize: 8.5, color: 'var(--amber)', letterSpacing: 1.4, fontWeight: 700 }}>RESTORE FROM A CODE</div>
+              <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={2} placeholder="Paste a save code here" style={{ ...inputStyle, resize: 'none' }}/>
+              <button onClick={restore} disabled={!paste.trim()} className="mono ui-no-select" style={{ ...smallBtn('var(--amber)'), alignSelf: 'flex-start', opacity: paste.trim() ? 1 : 0.4 }}>RESTORE</button>
+            </div>
+          </>
+        )}
         {msg && (
           <div style={{ fontSize: 11, lineHeight: 1.4, color: msg.ok ? 'var(--green)' : 'var(--hot)' }}>{msg.text}</div>
         )}
@@ -4282,10 +4426,10 @@ function TourOverlay({ open, onClose }) {
             <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 2 }}>Four things before you start</div>
           </div>
         </div>
-        {row('🎤', 'THE STAGE', 'The top half is the stage: the band\'s sources, the speakers, and every cable. Click a speaker to listen to it. Grab a cable end to repatch it.')}
+        {row('🎤', 'THE STAGE', 'The top half is the stage: the band\'s sources, the speakers, and every cable. Click a speaker to listen to it. Grab a cable end to move it.')}
         {row('🎛', 'THE CONSOLE', 'The right side is the mixing console. Every knob, fader and button works like the real thing, and mistakes have real consequences, just like a gig. Hover any control for a quick description.')}
         {row('🔊', 'TURN ON SOUND', 'This lab makes sound. Hit the SOUND button in the top bar so you can hear what you\'re doing. The bar at the bottom shows which speaker your ears are on.')}
-        {row('📋', 'THE WORK ORDER', 'The card next to the stage tells you the task or the symptom, tracks your objectives, and offers a hint. Green checks mean you\'re done.')}
+        {row('📋', 'THE BRIEF', 'The card next to the stage tells you the task or the symptom, tracks your objectives, and offers a hint. Green checks mean you\'re done.')}
         <button onClick={onClose} className="mono ui-no-select" style={{
           alignSelf: 'flex-start', padding: '9px 18px', fontSize: 11, fontWeight: 800, letterSpacing: 1,
           background: 'linear-gradient(180deg, var(--accent), #c79a1f)', color: '#0a0a0c',
@@ -4313,10 +4457,10 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 16px 48px rgba(0,0,0,0.8)',
         display: 'flex', flexDirection: 'column', gap: 12,
       }}>
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>🎓 THE ESSENTIALS · COMPLETE</div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>🎓 FINAL EXAM · PASSED</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You can run a system now.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          Power-on to power-down, you did the whole job: set input levels, tested every speaker, brought in mics and DIs, built a monitor mix, handled feedback, and shut it all down safely.
+          You just ran a full show from a cold system: powered on in order, set your levels, tested every speaker, brought in the mics and DIs, built a monitor mix, and kept it clean through feedback. That's the job.
         </div>
         {tier === 'member' ? (
           <>
@@ -4334,11 +4478,18 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
               Members keep going in Practice Mode: the band is up, something is broken, and every rep hides a new fault in a new place, for as long as you want to train. It's part of the Audio University membership.
             </div>
-            <button onClick={onClose} className="mono ui-no-select" style={{
-              alignSelf: 'flex-start', padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
-              background: '#1a1a1d', color: 'var(--ink-2)', border: '1px solid #38383e',
-              borderRadius: 5, cursor: 'pointer',
-            }}>KEEP PLAYING</button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <a href={joinUrl('completion-card')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
+                padding: '9px 18px', fontSize: 11, fontWeight: 800, letterSpacing: 1,
+                background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+                border: '1px solid #2c9d52', borderRadius: 5, cursor: 'pointer', textDecoration: 'none',
+              }}>JOIN AUDIO UNIVERSITY →</a>
+              <button onClick={onClose} className="mono ui-no-select" style={{
+                padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
+                background: '#1a1a1d', color: 'var(--ink-2)', border: '1px solid #38383e',
+                borderRadius: 5, cursor: 'pointer',
+              }}>KEEP PLAYING</button>
+            </div>
           </>
         )}
       </div>
@@ -4393,7 +4544,7 @@ function IoListPanel({ open, onClose }) {
             <tr><td style={td}>2</td><td style={td}>Vocal Mic 2</td><td style={td}>Condenser mic</td><td style={td}>+48V</td><td style={td}>{dot(2)}</td><td style={td}>CH 2</td></tr>
             <tr><td style={td}>3</td><td style={td}>Bass</td><td style={td}>Active DI</td><td style={td}>+48V</td><td style={td}>{dot(3)}</td><td style={td}>CH 3</td></tr>
             <tr><td style={td}>4</td><td style={td}>Keyboard</td><td style={td}>Passive DI</td><td style={td}>—</td><td style={td}>{dot(4)}</td><td style={td}>CH 4</td></tr>
-            <tr><td style={td}>5/6</td><td style={td}>Playback</td><td style={td}>Line, stereo</td><td style={td}>—</td><td style={td}>FOH direct</td><td style={td}>CH 5/6</td></tr>
+            <tr><td style={td}>5/6</td><td style={td}>Playback</td><td style={td}>Line, stereo</td><td style={td}>—</td><td style={td}>Direct (no snake)</td><td style={td}>CH 5/6</td></tr>
           </tbody>
         </table>
         {sectionTitle('OUTPUT LIST · SNAKE 5-8 (RETURNS)')}
@@ -4444,7 +4595,7 @@ function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset,
 
   if (phantomPop) {
     const cause = phantomPop.cause;
-    tag = cause === 'amp_loud' ? '⚠ BLASTED' : '⚠ POPPED';
+    tag = cause === 'amp_loud' ? '⚠ TOO LOUD' : '⚠ POPPED';
     const desc = cause === 'plug' ? (
       <>You plugged a cable into a <b style={{ color: 'var(--hot)' }}>live channel</b>. Plugging in makes a loud pop, and the channel was on, so the pop went through the PA. In a real venue that can damage speakers.</>
     ) : cause === 'patch_live' ? (
@@ -4575,24 +4726,76 @@ function App() {
     const w = prev.outputs[key]; const eq = (w.eq || [0, 0, 0, 0, 0]).slice(); eq[band] = v;
     return { ...prev, outputs: { ...prev.outputs, [key]: { ...w, eq } }, inspect: key };
   });
-  const [completed, setCompleted] = uS(loadProgress);
-  // Persist completion whenever it changes, so progress survives refreshes.
-  uE(() => { saveProgress(completed); }, [completed]);
+  // All durable state lives in one profile, loaded once. completed and reps
+  // are React state (they drive UI); other profile fields that aren't UI state
+  // ride on profileRef and are saved by the same effect after they mutate.
+  const profileRef = uR(null);
+  if (!profileRef.current) profileRef.current = loadProfile();
+  // Capture the resume target ONCE, before the persist effect overwrites
+  // lastLevel with the initial level 0. A mount effect (after loadLevel is
+  // defined) loads it. Only resume to a valid, unlocked scenario.
+  const resumeTargetRef = uR(undefined);
+  if (resumeTargetRef.current === undefined) {
+    const li = profileRef.current.lastLevel;
+    resumeTargetRef.current = (Number.isInteger(li) && li > 0 && li < SCENARIOS.length && !isLocked(SCENARIOS[li])) ? li : 0;
+  }
+  const [completed, setCompleted] = uS(() => profileRef.current.completed);
 
-  // Practice Mode state. reps counts finished practice reps (persisted and
-  // carried in the save code); practiceFaults is the FAULTS difficulty
-  // selector (1-3 faults per rep, ref-mirrored so loadLevel never reads a
-  // stale value); practiceInfoRef holds the par + fault list of the current
-  // rep, written by the practice sabotage at load time, read by the debrief.
-  const [reps, setReps] = uS(loadReps);
-  uE(() => { try { window.localStorage.setItem(REPS_KEY, String(reps)); } catch (e) {} }, [reps]);
-  const [practiceFaults, setPracticeFaultsState] = uS(1);
-  const practiceFaultsRef = uR(1);
+  // Practice Mode state. reps counts finished practice reps (persisted in the
+  // profile and carried in the save code); practiceFaults is the FAULTS
+  // difficulty selector (1-3 faults per rep, ref-mirrored so loadLevel never
+  // reads a stale value); practiceInfoRef holds the par + fault list of the
+  // current rep, written by the practice sabotage at load time, read by the
+  // debrief.
+  const [reps, setReps] = uS(() => profileRef.current.reps);
+
+  const [practiceFaults, setPracticeFaultsState] = uS(() => {
+    const n = profileRef.current.practiceFaults;
+    return (n === 1 || n === 2 || n === 3) ? n : 1;
+  });
+  const practiceFaultsRef = uR(practiceFaults);
   // Feedback Mode difficulty: false = guided (the ringing band glows red),
   // true = by ear (no glow; the engineer finds the ringing frequency by
   // listening). Only affects Feedback Mode.
-  const [feedbackByEar, setFeedbackByEar] = uS(false);
+  const [feedbackByEar, setFeedbackByEar] = uS(() => !!profileRef.current.feedbackByEar);
+
+  // Persist the whole profile whenever a React-state field changes. Survives
+  // refreshes; the save code is this same object. lastLevel / practiceFaults /
+  // feedbackByEar drive "resume where I left off" on the next load.
+  uE(() => {
+    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar };
+    saveProfile(profileRef.current);
+  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar]);
   const practiceInfoRef = uR(null);
+
+  // Record a finished practice rep into the per-fault ledger. Rep-level moves,
+  // hints, and over-par are attributed to every fault the rep contained (the
+  // honest approximation: "your crosspatch reps usually run 3 over par"). A
+  // rep is "clean" when it was solved with no hints, at or under par. Writes
+  // straight to the profile and saves; the persist effect preserves it.
+  const recordPracticeLedger = () => {
+    const info = practiceInfoRef.current;
+    if (!info || !Array.isArray(info.faults) || info.faults.length === 0) return;
+    const par = Number.isFinite(info.par) ? info.par : 0;
+    const moves = movesRef.current || 0;
+    const hints = hintsUsedRef.current || 0;
+    const overPar = Math.max(0, moves - par);
+    const clean = par > 0 && hints === 0 && moves <= par;
+    const prof = profileRef.current || defaultProfile();
+    const ledger = { ...(prof.ledger || {}) };
+    const now = Date.now();
+    for (const key of info.faults) {
+      const e = ledger[key] ? { ...ledger[key] } : { reps: 0, clean: 0, overPar: 0, hints: 0, last: 0 };
+      e.reps += 1;
+      if (clean) e.clean += 1;
+      e.overPar += overPar;
+      e.hints += hints;
+      e.last = now;
+      ledger[key] = e;
+    }
+    profileRef.current = { ...prof, ledger, practiceClean: (prof.practiceClean || 0) + (clean ? 1 : 0) };
+    saveProfile(profileRef.current);
+  };
 
   // First-run tour: shows once per browser, before anything else.
   const [tourOpen, setTourOpen] = uS(() => {
@@ -4603,13 +4806,15 @@ function App() {
     setTourOpen(false);
   };
 
-  // Essentials completion card: fires once, the first time every free
-  // lesson is complete.
+  // Essentials completion card: fires once, the moment The Gig (lesson 9,
+  // the final exam) is passed. That's the emotional peak of the free arc;
+  // Power-Down (lesson 10) is a wind-down the student can still finish after.
+  // Stable ids are append-only, so completed[9] is The Gig for good.
   const [ctaOpen, setCtaOpen] = uS(false);
   uE(() => {
     try {
       if (window.localStorage.getItem(CTA_KEY)) return;
-      if (!window.LEVELS.every(l => completed[l.id])) return;
+      if (!completed[9]) return;
       window.localStorage.setItem(CTA_KEY, '1');
       setCtaOpen(true);
     } catch (e) {}
@@ -4848,8 +5053,9 @@ function App() {
           setSolved(true);
           setCompleted(c => ({ ...c, [level.id]: true }));
           // A finished practice rep counts, every time — that's the metric
-          // the debrief celebrates.
-          if (level.isPractice) setReps(r => r + 1);
+          // the debrief celebrates. Record it into the per-fault ledger first
+          // (reads this rep's moves/hints/par), then bump the counter.
+          if (level.isPractice) { recordPracticeLedger(); setReps(r => r + 1); }
         }, 900);
       }
     } else if (stableRef.current) {
@@ -5438,6 +5644,15 @@ function App() {
     lastMoveRef.current = { key: null, at: 0 };
   };
 
+  // Resume where I left off: on mount, jump to the saved scenario (captured at
+  // init, before any persist overwrote it). Fires once; only when the target
+  // is a real, unlocked level other than the default. Difficulty (FAULTS and
+  // GUIDED/BY EAR) is already restored from the profile into state above, so
+  // loadLevel picks up the resumed fault count automatically.
+  uE(() => {
+    if (resumeTargetRef.current > 0) loadLevel(resumeTargetRef.current);
+  }, []);
+
   // Gesture-level move counting. Diff consecutive states and attribute the
   // change to a control key; repeated changes to the SAME control inside a
   // short window are one gesture (a fader drag), a different control or a
@@ -5710,9 +5925,9 @@ function App() {
       />
 
       <ProgressModal open={saveModalOpen} onClose={() => setSaveModalOpen(false)}
-        completed={completed} reps={reps}
-        onRestore={(d) => { setCompleted(d.completed); if (d.reps != null) setReps(d.reps); }}
-        onResetProgress={() => { setCompleted({}); setReps(0); }}/>
+        profile={{ ...profileRef.current, completed, reps }}
+        onRestore={(p) => { profileRef.current = p; setCompleted(p.completed); setReps(p.reps); }}
+        onResetProgress={() => { profileRef.current = defaultProfile(); setCompleted({}); setReps(0); }}/>
 
       {/* Member pitch — shown on the free tier when locked Practice Mode is
           clicked. Short and honest; the locked entry does the selling. */}
@@ -5738,11 +5953,18 @@ function App() {
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
               {pitchFor.title} is part of the Audio University membership.
             </div>
-            <button onClick={() => setPitchFor(null)} className="mono ui-no-select" style={{
-              alignSelf: 'flex-start', padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
-              background: '#1a1a1d', color: 'var(--ink-2)', border: '1px solid #38383e',
-              borderRadius: 4, cursor: 'pointer',
-            }}>BACK TO THE LESSONS</button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <a href={joinUrl('pitch-overlay')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
+                padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
+                background: 'linear-gradient(180deg, var(--accent), #c79a1f)', color: '#0a0a0c',
+                border: '1px solid #c79a1f', borderRadius: 4, cursor: 'pointer', textDecoration: 'none',
+              }}>JOIN AUDIO UNIVERSITY →</a>
+              <button onClick={() => setPitchFor(null)} className="mono ui-no-select" style={{
+                padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
+                background: '#1a1a1d', color: 'var(--ink-2)', border: '1px solid #38383e',
+                borderRadius: 4, cursor: 'pointer',
+              }}>BACK TO THE LESSONS</button>
+            </div>
           </div>
         </div>
       )}
@@ -5814,7 +6036,7 @@ function App() {
             { id: 'pa',     label: 'MAIN PA' },
             { id: 'wedge',  label: 'WEDGE 1' },
             { id: 'wedge2', label: 'WEDGE 2' },
-            { id: 'pfl',    label: 'CANS (PFL)' },
+            { id: 'pfl',    label: 'HEADPHONES (PFL)' },
           ];
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -6137,7 +6359,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
     const clipPillText = audienceLive ? '⚠ DISTORTING' : '⚠ PEAKING';
     const balancing = !!paBalanceIssue;
     const ringing = !!feedback;
-    const popPillText = phantomPop && phantomPop.cause === 'amp_loud' ? '⚠ BLASTED' : '⚠ POPPED';
+    const popPillText = phantomPop && phantomPop.cause === 'amp_loud' ? '⚠ TOO LOUD' : '⚠ POPPED';
     const pillText = phantomPop ? popPillText
                   : ringing ? '⚠ RINGING'
                   : clipping ? clipPillText
@@ -6156,7 +6378,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   })();
   const workChip = (
     <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-      {level.isPractice ? 'PRACTICE REP' : 'WORK ORDER · ' + String(level.id).padStart(2, '0')}
+      {level.isPractice ? 'PRACTICE REP' : level.isFeedbackMode ? 'RING-OUT REP' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
     </div>
   );
 
@@ -6299,7 +6521,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
             {level.isFeedbackMode
               ? 'The method: push, cut the band that rings by a few dB, push again. A few small cuts, then stop at the target.'
-              : 'The method: walk the signal path from source to speaker, and check the cheap things first.'}
+              : 'The method: walk the signal path from source to speaker, and check the quick things first.'}
           </div>
         </div>
       ) : (

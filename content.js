@@ -199,7 +199,7 @@ window.LEVELS = [
     // down (the zeroed console start). Without it, deriveInvolves defaults to
     // [1] to avoid an accidentally-dead desk, which would leave channel 1 live.
     involves: [],
-    symptom: 'Everything is connected and the console is zeroed out. Power the system up, and mind the order: bring it up the wrong way and you pop the speakers.',
+    symptom: 'Everything is connected, and the console is zeroed out: every channel is back at its starting position. Power the system up, and mind the order: bring it up the wrong way and you pop the speakers.',
     hint: 'Power on from the console end first, then the powered speakers last. If you turn a PA speaker or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the wedges and the PA speakers.',
     hints: [
       { text: 'Console on first, so its switch-on pop never reaches a powered speaker.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
@@ -244,13 +244,13 @@ window.LEVELS = [
     conditions: [
       { source: 'playback', dest: 'pa', min: 0.30, max: 0.50 },
     ],
-    symptom: 'The system is on and the console is fully zeroed, with your playback connected. Set your gain structure the right way: check it in PFL, set the gain, bring the faders to unity, then set the room level on the PA.',
+    symptom: 'The system is on and the console is fully zeroed, with your playback connected. Set your levels the right way, start to finish (this is your gain structure): check it in PFL, set the gain, bring the faders to unity, then set how loud the room is with the PA.',
     hint: 'Press PFL on the playback to hear it in your headphones. Set the GAIN so the meter sits in the healthy zone. Release PFL, unmute the playback and the master, and bring both faders up to unity. Then bring up the PA speaker volume until the room sits at a good level on the loudness meter.',
     hints: [
       { text: 'PFL the playback so you can set it in your headphones first.', done: (ctx) => ctx.pflChecked || (ctx.state.channels[4] && ctx.state.channels[4].solo) },
       { text: 'Set the GAIN so the input meter sits in the healthy zone.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.input },
       { text: 'Release PFL, unmute the playback and the master, and bring both faders up to unity.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.fader && ctx.gainStatus.master },
-      { text: 'Set the room level with the PA volume, watching the loudness meter.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.50; } },
+      { text: 'Set how loud the room is with the PA volume, watching the loudness meter.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.50; } },
     ],
     sabotage: (s) => {
       // Continuous with Power-On: rig on, console fully zeroed. Channel muted,
@@ -571,7 +571,7 @@ window.LEVELS = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, volume: 0.6, mute: false };
       return s;
     },
-    solution: 'Console zeroed, master down and muted, speakers off, console off last. The next engineer powers on into a safe, predictable desk.',
+    solution: 'Console zeroed, master down and muted, speakers off, console off last. The next engineer powers on into a safe, predictable console.',
     defaultInspect: 'pa',
   },
 ];
@@ -643,23 +643,23 @@ const POWERED_IDX = [1, 2];
 // STAY UP, so pulling the send to zero isn't a fix; ringing the wedge out on
 // its EQ band is.
 window.PRACTICE_FAULTS = [
-  { key: 'cable',        par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
-  { key: 'gain',         par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].gain = 0; } },
-  { key: 'fader',        par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].fader = 0; } },
-  { key: 'mute',         par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].mute = true; } },
-  { key: 'pan',          par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].pan = rng() < 0.5 ? 0 : 1; } },
-  { key: 'phantom',      par: 3, apply: (s, rng) => { s.channels[POWERED_IDX[Math.floor(rng() * 2)]].phantom = false; } },
-  { key: 'master-mute',  par: 1, apply: (s)      => { s.master.mute = true; } },
-  { key: 'master-fader', par: 1, apply: (s)      => { s.master.fader = 0; } },
-  { key: 'pa-volume',    par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].volume = 0; } },
-  { key: 'pa-mute',      par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].mute = true; } },
+  { key: 'cable',        label: 'Cable unplugged',          par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
+  { key: 'gain',         label: 'Gain at zero',             par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].gain = 0; } },
+  { key: 'fader',        label: 'Fader down',               par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].fader = 0; } },
+  { key: 'mute',         label: 'Channel muted',            par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].mute = true; } },
+  { key: 'pan',          label: 'Hard pan',                 par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].pan = rng() < 0.5 ? 0 : 1; } },
+  { key: 'phantom',      label: 'Phantom power off',        par: 3, apply: (s, rng) => { s.channels[POWERED_IDX[Math.floor(rng() * 2)]].phantom = false; } },
+  { key: 'master-mute',  label: 'Master muted',             par: 1, apply: (s)      => { s.master.mute = true; } },
+  { key: 'master-fader', label: 'Master fader down',        par: 1, apply: (s)      => { s.master.fader = 0; } },
+  { key: 'pa-volume',    label: 'PA volume down',           par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].volume = 0; } },
+  { key: 'pa-mute',      label: 'PA muted',                 par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].mute = true; } },
   // FEEDBACK — a singer's wedge pushed into ringing (hot send + hot wedge).
   // The extra condition keeps her monitor level REQUIRED, so the fix is the
   // Feedback Awareness skill: pull the glowing band down on that wedge's EQ.
   // Numbers: chanIn 0.79 x send 1.0 x aux master 0.75 x vol 0.8 x 1.6 =
   // 0.758 at the wedge -> rings (threshold 0.55). A full -12 dB band cut
   // drops the loop to ~0.19 (clear) while the monitor level stays 0.758.
-  { key: 'feedback', par: 2, weight: 2, apply: (s, rng) => {
+  { key: 'feedback', label: 'Wedge feeding back', par: 2, weight: 2, apply: (s, rng) => {
     if (rng() < 0.5) {
       s.channels[0].aux1 = 1.0;
       s.outputs.wedge.volume = 0.8;
@@ -677,13 +677,13 @@ window.PRACTICE_FAULTS = [
   // both swapped channels happen to stay audible. Par 3 because changing a
   // patch on a live channel POPS: the safe fix is master down (one move,
   // covers both channels) -> swap -> master back up.
-  { key: 'crosspatch-stage', par: 3, apply: (s, rng) => {
+  { key: 'crosspatch-stage', label: 'Crosspatch at the stage box', par: 3, apply: (s, rng) => {
     const i = Math.floor(rng() * 4);
     let j = Math.floor(rng() * 3); if (j >= i) j += 1;
     const a = BAND_SOURCES[i], b = BAND_SOURCES[j];
     const t = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = t;
   } },
-  { key: 'crosspatch-snake', par: 3, apply: (s, rng) => {
+  { key: 'crosspatch-snake', label: 'Crosspatch at the snake', par: 3, apply: (s, rng) => {
     const i = Math.floor(rng() * 4);
     let j = Math.floor(rng() * 3); if (j >= i) j += 1;
     const t = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = t;
@@ -701,7 +701,7 @@ window.PRACTICE = {
   id: 'practice',
   title: 'Practice Mode',
   symptom: 'The band is mid-show and something is wrong with the sound. Find what is broken and fix it, without popping anything. The FAULTS selector in the top bar sets how many things are broken at once.',
-  hint: 'Walk the signal path one stage at a time: source, cable, gain, mute, fader, master, speaker. The meters tell you where the signal stops. Check the cheap things first (a mute button before a cable run), and close the path before you change any cable or switch +48V: mute the channel, or pull the master down when the change touches two channels at once. If the patch row is unchecked, compare the console against the input list: Vocal 1 belongs on channel 1, Vocal 2 on 2, Bass on 3, Keys on 4. If a wedge is ringing, pull the glowing band down on its monitor EQ; the singer still needs her level.',
+  hint: 'Walk the signal path and watch where the meters stop: source, cable, gain, mute, fader, master, speaker. Check the quick things first, and close the path before you touch a cable or +48V (mute the channel, or pull the master down). If a wedge rings, cut the glowing band on its monitor EQ.',
   conditions: PRACTICE_CONDITIONS,
   involves: [1, 2, 3, 4],
   // Every practice rep also requires the patch to match the input list —
@@ -774,7 +774,7 @@ window.FEEDBACK_MODE = {
   toneGate: 0.92,
   involves: [1],
   symptom: 'Ring-out training. Bring the singer\'s vocal up to the target level in her wedge. As you push, a frequency will start to ring. Back the send off a touch, find the glowing band on the wedge\'s graphic EQ, and cut it a few dB, just enough that the ring stays gone. Then keep climbing. A real ring-out only takes a few cuts, so keep them small and stop when you reach the target.',
-  hint: 'Raise the send a little at a time. When a band glows on the MONITOR EQ, pull it down a few dB, just past where the ringing stops. Expect three or four problem frequencies on the way up. Keep every cut small: cuts take real level and tone out of the wedge, and the TONE readout fails the rep if you chop too much. Once the vocal hits the target, stop. More cuts past that point buy nothing. Too much mic gain still clips the preamp.',
+  hint: 'Raise the send a little at a time. When a frequency rings, find it on the monitor EQ and pull that band down a few dB, just past where the ring stops. Expect three or four on the way up, and keep every cut small. Once the vocal hits the target, stop.',
   sabotage: (s, rng) => {
     const r = rng || (() => 0.5);
     // The singer's vocal live at a healthy gain, her wedge on, the send low.
