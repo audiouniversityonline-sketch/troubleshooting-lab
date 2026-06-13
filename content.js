@@ -697,6 +697,80 @@ for (const src of BAND_SOURCES) {
   PRACTICE_CONDITIONS.push({ source: src, dest: 'pa_r', min: 0.2 });
 }
 
+// PRACTICE GOALS — the dynamic part. A practice rep isn't always "something is
+// broken, restore the full mix". Sometimes the call is a positive task: build a
+// monitor mix, fix the gain structure, run a line check. Each goal sets up its
+// own start state and returns a `winSpec` — the win conditions plus the prompt
+// text — which the app merges over the base Practice scenario, so the same
+// engine that wins the lessons wins these. `apply(s, r)` mutates the band-up
+// start state and returns the winSpec. The custom-scenario author (a later
+// feature) writes a winSpec the same way.
+//
+// These read like the real job: a real engineer spends as much time building
+// monitor mixes and setting gain as chasing faults, so weaving them in makes
+// Practice train the whole role, not just diagnosis.
+window.PRACTICE_GOALS = [
+  {
+    key: 'monitor-mix', label: 'Build a monitor mix', par: 2,
+    apply: (s) => {
+      // Band up and playing in the PA. Both wedges are on and turned up, but
+      // nobody is in the monitors yet — every send starts closed. Build it.
+      s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.7 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, mute: false, volume: 0.7 };
+      for (let i = 0; i < 4; i++) { s.channels[i].aux1 = 0; s.channels[i].aux2 = 0; }
+      return {
+        conditions: [
+          { source: 'vocal2', dest: 'wedge2', min: 0.35 },
+          { source: 'vocal2', dest: 'wedge',  min: 0.30 },
+        ],
+        symptom: 'Monitor mix request. Vocalist 2 wants to hear themselves in their own wedge, and Vocalist 1 wants Vocal 2 in their wedge too. Build it: their sends are closed right now.',
+        title: 'Monitor Mix Request',
+        hint: "It's all aux sends on the Vocal 2 channel. AUX 2 feeds Wedge 2 (their own monitor); AUX 1 feeds Wedge 1 (Vocal 1's monitor). Bring both up until each wedge has them.",
+        solution: 'AUX 2 and AUX 1 up on the Vocal 2 channel, so Vocal 2 is in both wedges.',
+      };
+    },
+  },
+  {
+    key: 'gain-stage', label: 'Fix the gain structure', par: 2,
+    apply: (s) => {
+      // The bass came in weak: its gain got cracked way down and the fader was
+      // ridden up to compensate. Set the gain healthy and the fader to unity.
+      s.channels[2].gain = 0.12; s.channels[2].fader = 0.45;
+      return {
+        conditions: [{ source: 'guitar', dest: 'pa', min: 0.3 }],
+        gainStructure: { refChannel: 3, unity: 0.75, faderTol: 0.08, inputBand: [0.75, 1.0] },
+        symptom: 'The bass is weak and thin. Someone cracked its gain right down and rode the fader up to make up for it, which is backwards. Set the gain structure properly: gain healthy on the meter, fader back at unity.',
+        title: 'Fix the Gain Structure',
+        hint: 'PFL the bass (channel 3) and bring its GAIN up until the input meter sits in the healthy zone, then drop the fader back to the unity mark.',
+        solution: "Bass gain set healthy in PFL, fader at unity. That's proper gain structure, level set at the top of the chain, not the bottom.",
+      };
+    },
+  },
+  {
+    key: 'line-check', label: 'Run a line check', par: 3,
+    apply: (s) => {
+      // Quiet stage before the band: use the playback to prove every speaker is
+      // passing signal, the PA and both wedges, one at a time.
+      for (let i = 0; i < 4; i++) { s.channels[i].mute = true; }
+      s.channels[4].mute = false; s.channels[4].gain = 0.5; s.channels[4].fader = 0.75; s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
+      s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.6 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, mute: false, volume: 0.6 };
+      return {
+        conditions: [],
+        verifyEach: [
+          { source: 'playback', dest: 'pa',     min: 0.30, label: 'PA passes signal' },
+          { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 passes signal' },
+          { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 passes signal' },
+        ],
+        symptom: 'Line check before the band loads in. Use the playback to prove every speaker is passing signal: the PA and both wedges. Each one checks off the moment it plays.',
+        title: 'Line Check',
+        hint: 'Send the playback to the PA on its fader, then open AUX 1 for Wedge 1 and AUX 2 for Wedge 2. Each speaker checks off once it plays, so you can move on.',
+        solution: 'Playback sent to the PA and both wedges: every speaker proven to pass signal. That is a line check.',
+      };
+    },
+  },
+];
+
 window.PRACTICE = {
   id: 'practice',
   title: 'Practice Mode',
@@ -711,6 +785,28 @@ window.PRACTICE = {
   sabotage: (s, rng) => {
     bandUp(s);
     const r = rng || (() => 0);
+    // Sometimes nothing is broken. The band is playing and the system is
+    // healthy; the call is to recognize that and sign off, not to invent a
+    // fault and start fiddling with a working mix. Knowing when to leave it
+    // alone is half of real troubleshooting judgment, and no other sim trains
+    // it. Seeded like everything else, so Reset replays the same clean rep.
+    // Drawn before the fault loop so the seed stays deterministic.
+    const ZERO_FAULT_CHANCE = 0.12;
+    if (r() < ZERO_FAULT_CHANCE) {
+      window.PRACTICE_LAST = { par: 0, faults: [], zeroFault: true, extraConditions: [] };
+      return s; // bandUp() already left it healthy
+    }
+    // Sometimes the call is a positive task, not a fault: build a monitor mix,
+    // fix the gain, run a line check. These ignore the FAULTS count (a task is
+    // a task), carry their own win conditions + prompt text (winSpec), and make
+    // Practice train the whole job instead of only diagnosis.
+    const GOAL_TASK_CHANCE = 0.25;
+    if (window.PRACTICE_GOALS && window.PRACTICE_GOALS.length && r() < GOAL_TASK_CHANCE) {
+      const g = window.PRACTICE_GOALS[Math.floor(r() * window.PRACTICE_GOALS.length)];
+      const winSpec = g.apply(s, r);
+      window.PRACTICE_LAST = { par: g.par, faults: [], goalKey: g.key, goalLabel: g.label, winSpec: winSpec, extraConditions: [] };
+      return s;
+    }
     const n = Math.max(1, Math.min(3, window.PRACTICE_FAULT_COUNT || 1));
     // Distinct fault TYPES per rep (weighted entries appear more often, but
     // never twice). Two faults can still land on the same channel — that

@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=31"></script>
+<script src="content.js?v=33"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -4169,6 +4169,26 @@ const TIER = (() => {
   } catch (e) { return 'free'; }
 })();
 
+// Shared-rep deep link: ?rep=SEED (optionally &faults=N) loads the exact same
+// Practice rep for anyone who opens it — reps are already seeded, so the seed
+// reproduces the scenario bit-for-bit. Kyle hands a rep to a YouTube audience
+// or drops one in a coaching thread; everyone gets the identical fault(s).
+// The link bypasses the member lock for that one rep (it's a curated taste);
+// on the free tier, finishing it points at the membership instead of rolling
+// a fresh one.
+const REP_PARAM = (() => {
+  try {
+    const u = new URLSearchParams(window.location.search);
+    const r = u.get('rep');
+    if (r == null) return null;
+    const seed = parseInt(r, 10);
+    if (!Number.isFinite(seed) || seed < 0) return null;
+    let faults = parseInt(u.get('faults') || '1', 10);
+    if (!(faults === 1 || faults === 2 || faults === 3)) faults = 1;
+    return { seed: seed >>> 0, faults };
+  } catch (e) { return null; }
+})();
+
 // The picker runs off one combined list: the free Essentials in order, then
 // Practice Mode. isChallenge switches the test presentation (hint behind a
 // button, debrief instead of an answer key, seeded random faults);
@@ -4188,12 +4208,10 @@ const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
 // when that mode ships.
 const SCENARIO_BANDS = [
   { id: 'LEARN', label: 'LEARN · THE ESSENTIALS', member: false },
-  { id: 'DRILL', label: 'DRILL · DIAGNOSIS',      member: true },
-  { id: 'EARS',  label: 'EARS · RING-OUT',        member: true },
+  { id: 'DRILL', label: 'DRILL · ENDLESS REPS',   member: true },
 ];
 function bandOf(l) {
-  if (l.isFeedbackMode) return 'EARS';
-  if (l.isChallenge) return 'DRILL';   // Practice Mode + any future packs
+  if (l.isChallenge) return 'DRILL';   // Practice + Feedback Mode + any future packs
   return 'LEARN';
 }
 
@@ -4240,6 +4258,15 @@ function decodeProgressCode(code) {
 // (content.js) so the ledger panel and the future fault catalog share one
 // source of truth. Falls back to the raw key if a label is ever missing.
 function faultLabel(key) {
+  if (key === '__signoff') return 'Healthy sign-off'; // the zero-fault rep
+  if (key && key.indexOf('__goal:') === 0) { // a positive task, not a fault
+    const gk = key.slice(7);
+    try {
+      const g = (window.PRACTICE_GOALS || []).find((x) => x.key === gk);
+      if (g && g.label) return g.label;
+    } catch (e) {}
+    return gk;
+  }
   try {
     const f = (window.PRACTICE_FAULTS || []).find((x) => x.key === key);
     if (f && f.label) return f.label;
@@ -4616,7 +4643,7 @@ function FaultCatalog({ open, onClose, tier }) {
           <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
         </div>
 
-        {sectionTitle('var(--ink-3)', 'LEARN · THE ESSENTIALS · FREE')}
+        {sectionTitle('var(--ink-3)', 'THE ESSENTIALS · FREE')}
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 5 }}>
           Ten guided lessons that build one full show, start to finish.
         </div>
@@ -4628,7 +4655,7 @@ function FaultCatalog({ open, onClose, tier }) {
           ))}
         </div>
 
-        {sectionTitle('var(--accent)', 'DRILL · PRACTICE MODE · MEMBERS')}
+        {sectionTitle('var(--accent)', 'PRACTICE MODE · MEMBERS')}
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 6 }}>
           The band is playing and something is wrong. You find it and fix it, without popping anything. Every rep hides 1 to 3 of these, drawn at random, so no two are the same:
         </div>
@@ -4640,7 +4667,7 @@ function FaultCatalog({ open, onClose, tier }) {
           ))}
         </div>
 
-        {sectionTitle('var(--aux)', 'EARS · FEEDBACK MODE · MEMBERS')}
+        {sectionTitle('var(--aux)', 'FEEDBACK MODE · MEMBERS')}
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5 }}>
           Ring-out training: push a wedge toward a target level, and when a frequency starts to ring, find it on the graphic EQ and cut it by ear. Every rep is a new wedge with a new set of problem frequencies.
         </div>
@@ -4865,6 +4892,27 @@ function App() {
   }, [completed, reps, levelIdx, practiceFaults, feedbackByEar]);
   const practiceInfoRef = uR(null);
 
+  // Zero-fault "sign off" state (Practice Mode). signedOff lets a zero-fault
+  // rep complete (a healthy system meets the win conditions from the start, so
+  // auto-win is suppressed until the engineer actively declares it healthy).
+  // wonRef mirrors the live win state so the sign-off handler can tell a
+  // correct call from a premature one. signoffMsg is the "not yet" nudge;
+  // falseSignoffRef counts premature sign-offs for the debrief/ledger.
+  const [signedOff, setSignedOff] = uS(false);
+  const [signoffMsg, setSignoffMsg] = uS(null);
+  const wonRef = uR(false);
+  const falseSignoffRef = uR(0);
+  const attemptSignOff = () => {
+    if (!level.isPractice || solved) return;
+    if (wonRef.current) {
+      setSignoffMsg(null);
+      setSignedOff(true); // the win effect re-runs and completes the rep
+    } else {
+      falseSignoffRef.current += 1;
+      setSignoffMsg("Not yet — something's still off. Walk the signal path again.");
+    }
+  };
+
   // Record a finished practice rep into the per-fault ledger. Rep-level moves,
   // hints, and over-par are attributed to every fault the rep contained (the
   // honest approximation: "your crosspatch reps usually run 3 over par"). A
@@ -4872,16 +4920,26 @@ function App() {
   // straight to the profile and saves; the persist effect preserves it.
   const recordPracticeLedger = () => {
     const info = practiceInfoRef.current;
-    if (!info || !Array.isArray(info.faults) || info.faults.length === 0) return;
+    if (!info) return;
+    // A zero-fault rep (nothing was broken) records under a synthetic key so
+    // the stats panel shows "Healthy sign-off" and tracks restraint: touching a
+    // working system, or a false sign-off, shows up as over-par there.
+    const keys = (Array.isArray(info.faults) && info.faults.length) ? info.faults
+               : (info.zeroFault ? ['__signoff'] : (info.goalKey ? ['__goal:' + info.goalKey] : null));
+    if (!keys) return;
     const par = Number.isFinite(info.par) ? info.par : 0;
     const moves = movesRef.current || 0;
     const hints = hintsUsedRef.current || 0;
+    const falseSignoffs = falseSignoffRef.current || 0;
     const overPar = Math.max(0, moves - par);
-    const clean = par > 0 && hints === 0 && moves <= par;
+    // Clean = solved at/under par, no hints, no premature sign-off. For a
+    // zero-fault rep par is 0, so clean means you touched nothing and signed
+    // off once, correctly.
+    const clean = hints === 0 && moves <= par && falseSignoffs === 0;
     const prof = profileRef.current || defaultProfile();
     const ledger = { ...(prof.ledger || {}) };
     const now = Date.now();
-    for (const key of info.faults) {
+    for (const key of keys) {
       const e = ledger[key] ? { ...ledger[key] } : { reps: 0, clean: 0, overPar: 0, hints: 0, last: 0 };
       e.reps += 1;
       if (clean) e.clean += 1;
@@ -4917,7 +4975,16 @@ function App() {
     } catch (e) {}
   }, [completed]);
 
-  const level = SCENARIOS[levelIdx];
+  // The active scenario. A Practice rep can carry a per-rep GOAL (its win
+  // conditions + prompt text) in PRACTICE_LAST.winSpec — that's how Practice
+  // does varied goals (build a monitor mix, gain-stage, line check) instead of
+  // always "restore the full mix", and how a custom authored scenario sets its
+  // own goal. Merging winSpec over the base level means every downstream read
+  // (win checks, objective list, brief text) picks it up with no other change.
+  const baseLevel = SCENARIOS[levelIdx];
+  const level = (baseLevel.isPractice && practiceInfoRef.current && practiceInfoRef.current.winSpec)
+    ? { ...baseLevel, ...practiceInfoRef.current.winSpec }
+    : baseLevel;
 
   // Tracks whether the engineer engaged PFL on a relevant channel at any
   // point during this level. Reset on level change. Used by Level 7
@@ -5144,7 +5211,15 @@ function App() {
       return cablesOk && fanOutOk && outFanOk && outOk;
     })();
     const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk;
-    if (won && !blocked) {
+    // Mirror the live, truly-winnable state so the sign-off button can tell a
+    // correct "system is healthy" call from a premature one.
+    wonRef.current = won && !blocked;
+    // A zero-fault practice rep is healthy from the start, so auto-win is
+    // suppressed: the engineer has to recognize it and sign off. Every other
+    // rep still auto-wins the moment the fix lands.
+    const isZeroFault = level.isPractice && practiceInfoRef.current && practiceInfoRef.current.zeroFault;
+    const effWon = won && (!isZeroFault || signedOff);
+    if (effWon && !blocked) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
           setSolved(true);
@@ -5160,7 +5235,7 @@ function App() {
       stableRef.current = null;
     }
     return () => { if (stableRef.current) { clearTimeout(stableRef.current); stableRef.current = null; } };
-  }, [state, solved]);
+  }, [state, solved, signedOff]);
 
   // Brief red flash whenever a new phantomPop event lands. The persistent
   // warning chip (in BriefCard) sticks around until the next reset; the
@@ -5707,9 +5782,9 @@ function App() {
   // Load a scenario. reuseSeed replays the same attempt (Reset); omitting it
   // rolls a fresh seed (level change, Practice Again), which is what makes a
   // challenge replay a new rep instead of a memory test.
-  const loadLevel = (i, reuseSeed) => {
+  const loadLevel = (i, reuseSeed, bypassLock) => {
     const lv = SCENARIOS[i];
-    if (!lv || isLocked(lv)) { if (lv) setPitchFor(lv); return; }
+    if (!lv || (isLocked(lv) && !bypassLock)) { if (lv) setPitchFor(lv); return; }
     const base = window.defaultState();
     base.topology = { ...base.topology, ...(lv.topology || {}) };
     base.channels = normalizeChannels(base.channels, deriveInvolves(lv));
@@ -5726,6 +5801,11 @@ function App() {
     setLevelIdx(i);
     setSolved(false);
     setEqPanelOpen(false);
+    // Fresh rep: clear the sign-off state so a zero-fault rep starts un-signed.
+    setSignedOff(false);
+    setSignoffMsg(null);
+    falseSignoffRef.current = 0;
+    wonRef.current = false;
     // Reset the procedural PFL tracker so each level scores its own
     // workflow rather than counting an earlier solo as a check.
     pflCheckedRef.current = false;
@@ -5747,8 +5827,36 @@ function App() {
   // GUIDED/BY EAR) is already restored from the profile into state above, so
   // loadLevel picks up the resumed fault count automatically.
   uE(() => {
+    // A shared-rep link wins over resume: load that exact Practice rep,
+    // bypassing the member lock, at the link's fault count.
+    if (REP_PARAM) {
+      practiceFaultsRef.current = REP_PARAM.faults;
+      setPracticeFaultsState(REP_PARAM.faults);
+      loadLevel(window.LEVELS.length, REP_PARAM.seed, true);
+      return;
+    }
     if (resumeTargetRef.current > 0) loadLevel(resumeTargetRef.current);
   }, []);
+
+  // Copy a shareable link to the current rep (the standalone page URL + the
+  // rep's seed + fault count). Built from location so it works whether the app
+  // is opened directly or embedded; tier is intentionally NOT carried, so a
+  // shared link is a one-rep taste, not a key to the whole member tier.
+  const [repCopied, setRepCopied] = uS(false);
+  const repCopiedTimerRef = uR(null);
+  const copyRepLink = () => {
+    const seed = seedRef.current;
+    if (seed == null) return;
+    const n = practiceFaultsRef.current || 1;
+    const url = location.origin + location.pathname + '?rep=' + (seed >>> 0) + (n > 1 ? '&faults=' + n : '');
+    try { navigator.clipboard.writeText(url); } catch (e) {}
+    setRepCopied(true);
+    if (repCopiedTimerRef.current) clearTimeout(repCopiedTimerRef.current);
+    repCopiedTimerRef.current = setTimeout(() => setRepCopied(false), 1600);
+  };
+  // Free users who arrived via a shared rep get one taste, then the pitch
+  // instead of a fresh rep (the endless mode is the paid value).
+  const repShareFree = !!REP_PARAM && TIER !== 'member';
 
   // Gesture-level move counting. Diff consecutive states and attribute the
   // change to a control key; repeated changes to the SAME control inside a
@@ -5812,9 +5920,16 @@ function App() {
     }
   }, [state.channels, state.mixer ? state.mixer.on : true]);
   // Reset replays the same attempt: same seed, same fault placement.
-  const restart = () => loadLevel(levelIdx, seedRef.current);
+  // Reset replays the current level (already accessible), so it bypasses the
+  // lock — needed so a free shared-rep session can retry its rep.
+  const restart = () => loadLevel(levelIdx, seedRef.current, true);
   // Practice Again rolls a new seed — same scenario, fresh fault placement.
-  const practiceAgain = () => loadLevel(levelIdx);
+  // A free shared-rep session has had its one taste, so it gets the pitch
+  // instead of an endless fresh rep.
+  const practiceAgain = () => {
+    if (repShareFree) { setPitchFor(SCENARIOS[window.LEVELS.length]); return; }
+    loadLevel(levelIdx);
+  };
   // FAULTS difficulty change re-rolls the current rep at the new count.
   const setPracticeFaults = (n) => {
     practiceFaultsRef.current = n;
@@ -5996,7 +6111,7 @@ function App() {
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
-        practiceFaults={practiceFaults} onSetPracticeFaults={setPracticeFaults}
+        practiceFaults={practiceFaults} onSetPracticeFaults={repShareFree ? null : setPracticeFaults}
         feedbackByEar={feedbackByEar} onSetFeedbackByEar={setFeedbackByEar}
       />
 
@@ -6090,19 +6205,25 @@ function App() {
                   {solved
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < SCENARIOS.length && !isLocked(SCENARIOS[levelIdx + 1])}
                         onPracticeAgain={level.isChallenge ? practiceAgain : null}
+                        onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}
                         debrief={level.isChallenge ? {
                           moves: movesRef.current,
                           par: level.isPractice ? (practiceInfoRef.current ? practiceInfoRef.current.par : null) : level.par,
                           hints: hintsUsedRef.current,
                           faults: level.isPractice ? (practiceInfoRef.current && practiceInfoRef.current.faults ? practiceInfoRef.current.faults.length : practiceFaults) : null,
                           rep: level.isPractice ? reps : null,
+                          zeroFault: !!(level.isPractice && practiceInfoRef.current && practiceInfoRef.current.zeroFault),
+                          goalLabel: (level.isPractice && practiceInfoRef.current && practiceInfoRef.current.goalKey) ? practiceInfoRef.current.goalLabel : null,
+                          falseSignoffs: falseSignoffRef.current,
                         } : null}
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={effConditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
                         pendingHints={pendingHints} hintCount={hintCount} onRevealHint={() => { hintsUsedRef.current += 1; setHintCount(c => c + 1); }}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
                         verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus} patchStatus={patchStatus}
-                        powerStatus={powerStatus}/>}
+                        powerStatus={powerStatus}
+                        onSignOff={(level.isPractice && !(practiceInfoRef.current && practiceInfoRef.current.goalKey)) ? attemptSignOff : null} signoffMsg={signoffMsg}
+                        onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}/>}
                   </StableSlot>
                 }
               />
@@ -6384,7 +6505,7 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, patchStatus, pendingHints, hintCount, onRevealHint }) {
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, patchStatus, pendingHints, hintCount, onRevealHint, onSignOff, signoffMsg, onCopyRepLink, repCopied }) {
   // Compute per-condition pass / level, and whether all conditions pass.
   const condStates = (conditions || []).map(c => {
     const cont = audio.contributions[c.source];
@@ -6602,11 +6723,47 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
           )}
         </div>
       )}
+
+      {/* SIGN-OFF + SHARE zone (Practice Mode). Sign-off is the "I believe this
+          system is healthy" call — present on every fault-diagnosis rep so it
+          never leaks which reps are clean (the only way to win a zero-fault
+          rep). It's hidden on goal tasks (build a monitor mix etc.), where
+          there's a clear objective instead. The share button is on every
+          Practice rep. */}
+      {(onSignOff || onCopyRepLink) && (
+        <div style={zoneStyle('var(--green)', 'rgba(74,222,128,0.05)')}>
+          {zoneLabel('var(--green)', onSignOff ? '✓ SIGN OFF' : '⎘ SHARE')}
+          {onSignOff && (
+            <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+              Checked the whole path and it's all healthy? Sign off. Not every call is a fault.
+            </div>
+          )}
+          {onSignOff && signoffMsg && (
+            <div style={{ fontSize: 10.5, color: 'var(--hot)', lineHeight: 1.4 }}>{signoffMsg}</div>
+          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {onSignOff && (
+              <button onClick={onSignOff} className="mono ui-no-select" style={{
+                padding: '6px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+                color: 'var(--green)', background: 'rgba(74,222,128,0.08)', border: '1px solid var(--green)',
+                borderRadius: 4, cursor: 'pointer',
+              }}>SYSTEM IS HEALTHY</button>
+            )}
+            {onCopyRepLink && (
+              <button onClick={onCopyRepLink} className="mono ui-no-select" title="Copy a link that loads this exact rep for anyone" style={{
+                padding: '6px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
+                color: repCopied ? 'var(--green)' : 'var(--ink-3)', background: 'transparent', border: '1px solid #38383e',
+                borderRadius: 4, cursor: 'pointer',
+              }}>{repCopied ? '✓ COPIED' : '⎘ COPY REP LINK'}</button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain }) {
+function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain, onCopyRepLink, repCopied }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -6615,7 +6772,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
       boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 4px 14px rgba(0,0,0,0.5), 0 0 30px rgba(74,222,128,0.15)',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>{level.task ? '✓ TASK COMPLETE' : '✓ MIX RESTORED'}</div>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>{(debrief && debrief.zeroFault) ? '✓ GOOD CALL · NOTHING BROKEN' : (debrief && debrief.goalLabel) ? '✓ DONE' : level.task ? '✓ TASK COMPLETE' : '✓ MIX RESTORED'}</div>
         <div className="display" style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.1 }}>{level.title}</div>
       </div>
       {/* Challenges get a DEBRIEF instead of the answer key: how many moves
@@ -6623,6 +6780,44 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           used. The comparison is the coaching — no grades, no medals.
           Essentials keep showing the solution, because they're lessons. */}
       {debrief ? (
+        debrief.goalLabel ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div className="mono" style={{ fontSize: 8, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>◎ DEBRIEF</div>
+            <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+              <b style={{ color: 'var(--ink)' }}>{debrief.goalLabel}</b>, done in <b style={{ color: 'var(--ink)' }}>{debrief.moves} move{debrief.moves === 1 ? '' : 's'}</b>{debrief.par != null && <>. A clean approach takes about <b style={{ color: 'var(--ink)' }}>{debrief.par}</b></>}.
+            </div>
+            <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+              Hints: {debrief.hints > 0 ? <b style={{ color: 'var(--amber)' }}>{debrief.hints} used</b> : <b style={{ color: 'var(--green)' }}>none</b>}.
+              {debrief.rep != null && <> That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} rep{debrief.rep === 1 ? '' : 's'}</b> finished.</>}
+            </div>
+            <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
+              Building monitor mixes, setting gain, running line checks: the job is a lot more than chasing faults.
+            </div>
+          </div>
+        ) : debrief.zeroFault ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div className="mono" style={{ fontSize: 8, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>◎ DEBRIEF</div>
+            <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+              Nothing was broken. You checked it and signed off
+              {debrief.moves === 0
+                ? <> without touching a thing. <b style={{ color: 'var(--green)' }}>That's the call.</b></>
+                : <> after <b style={{ color: 'var(--ink)' }}>{debrief.moves} move{debrief.moves === 1 ? '' : 's'}</b>. A healthy system doesn't need them, so the clean call is zero.</>}
+            </div>
+            {debrief.falseSignoffs > 0 && (
+              <div style={{ fontSize: 9.5, color: 'var(--amber)', lineHeight: 1.4 }}>
+                You signed off <b>{debrief.falseSignoffs}</b> time{debrief.falseSignoffs === 1 ? '' : 's'} before it was ready — worth a second look next time.
+              </div>
+            )}
+            {debrief.rep != null && (
+              <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+                That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} rep{debrief.rep === 1 ? '' : 's'}</b> finished.
+              </div>
+            )}
+            <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
+              Knowing when to leave a healthy system alone is half the job. Not every call is a fault.
+            </div>
+          </div>
+        ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <div className="mono" style={{ fontSize: 8, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>◎ DEBRIEF</div>
           <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
@@ -6640,6 +6835,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
               : 'The method: walk the signal path from source to speaker, and check the quick things first.'}
           </div>
         </div>
+        )
       ) : (
         <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
           <span style={{ color: 'var(--green)', fontWeight: 600 }}>{level.task ? 'Recap: ' : 'Fix: '}</span>{level.solution}
@@ -6670,6 +6866,13 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
         }}>NEXT LEVEL →</button>
       ) : (
         <div className="mono" style={{ width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1, background: '#0a0a0c', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, textAlign: 'center' }}>🎓 ALL LEVELS COMPLETE</div>
+      )}
+      {onCopyRepLink && (
+        <button onClick={onCopyRepLink} className="mono ui-no-select" title="Copy a link that loads this exact rep for anyone" style={{
+          width: '100%', padding: '5px 10px', fontSize: 9, fontWeight: 700, letterSpacing: 0.8,
+          background: 'transparent', color: repCopied ? 'var(--green)' : 'var(--ink-3)', border: '1px solid #38383e',
+          borderRadius: 3, cursor: 'pointer',
+        }}>{repCopied ? '✓ LINK COPIED' : '⎘ COPY A LINK TO THIS REP'}</button>
       )}
     </div>
   );
