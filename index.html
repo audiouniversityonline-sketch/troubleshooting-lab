@@ -4679,8 +4679,9 @@ function defaultProfile() {
     emailSkipped: false, // free-tier email gate: chose "skip for now" (soft gate)
     freePractice: 0,    // free-tier Practice taste: reps consumed (gate at FREE_PRACTICE_LIMIT)
     surface: 'analog',  // member console surface: 'analog' or 'digital' (select-then-edit)
-    rank: 1,            // drill ladder: highest rung reached (1-6; 1-4 live today)
+    rank: 1,            // drill ladder: highest rung reached
     rankClean: 0,       // drill ladder: clean solves banked toward the next rung
+    liveShow: false,    // Practice: "the room is listening" mode (charges destructive diagnosis)
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -4703,6 +4704,7 @@ function normalizeProfile(data) {
   p.surface = (data.surface === 'digital') ? 'digital' : 'analog';
   p.rank = (Number.isFinite(data.rank) && data.rank >= 1) ? Math.min(6, Math.floor(data.rank)) : 1;
   p.rankClean = (Number.isFinite(data.rankClean) && data.rankClean >= 0) ? Math.floor(data.rankClean) : 0;
+  p.liveShow = !!data.liveShow;
   p.v = PROFILE_VERSION;
   return p;
 }
@@ -5058,19 +5060,19 @@ function bandOf(l) {
 // FAULTS selector — members keep their free choice — it just tracks the highest
 // rung reached and points at the next. need(d) takes a solved rep's difficulty
 // { faults, zeroFault } and returns whether that clean solve counts here.
-// Ranks 1-4 are live and cap progression (HIGHEST_LIVE_RANK). Higher rungs are
-// a future direction, NOT by-ear: Kyle 2026-06-13, the meters are a primary
-// diagnostic tool, so blanking them would train a worse habit. The likely top
-// rung is the live-show "cost to diagnose" / PFL-discipline idea instead. The
-// whole thing rides the profile envelope: rank + rankClean persist and travel
-// in the save code.
+// Ranks 1-5 are live and cap progression (HIGHEST_LIVE_RANK). need(d) takes a
+// solved rep's difficulty { faults, zeroFault, liveShow, dropouts } and returns
+// whether that clean solve counts toward leaving this rung. The whole thing
+// rides the profile envelope: rank + rankClean persist and travel in the save
+// code. (By-ear rungs were removed 2026-06-13: the meters are a primary tool.)
 const RANK_GATE = 3;
-const HIGHEST_LIVE_RANK = 4;
+const HIGHEST_LIVE_RANK = 5;
 const RANKS = [
-  { n: 1, label: 'Find one',   blurb: 'Spot a single hidden fault.',        faults: 1, need: (d) => d.faults >= 1 },
+  { n: 1, label: 'Find one',   blurb: 'Spot a single hidden fault.',       faults: 1, need: (d) => d.faults >= 1 },
   { n: 2, label: 'Find two',   blurb: 'Two faults at once, no answer key.', faults: 2, need: (d) => d.faults >= 2 },
-  { n: 3, label: 'Find three', blurb: 'A full stack of three.',             faults: 3, need: (d) => d.faults >= 3 },
-  { n: 4, label: 'Sign-off',   blurb: 'Know when nothing is broken.',       faults: 1, signoff: true, need: (d) => d.zeroFault },
+  { n: 3, label: 'Find three', blurb: 'A full stack of three.',            faults: 3, need: (d) => d.faults >= 3 },
+  { n: 4, label: 'Sign-off',   blurb: 'Know when nothing is broken.',      faults: 1, signoff: true,  need: (d) => d.zeroFault },
+  { n: 5, label: 'Live show',  blurb: 'Diagnose without the room paying.', faults: 2, liveShow: true, need: (d) => d.liveShow && d.faults >= 1 && d.dropouts === 0 },
 ];
 const rankByN = (n) => RANKS.find((r) => r.n === n) || RANKS[0];
 
@@ -5884,9 +5886,9 @@ function App() {
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
   // feedbackByEar drive "resume where I left off" on the next load.
   uE(() => {
-    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface };
+    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow };
     saveProfile(profileRef.current);
-  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface]);
+  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow]);
 
   // Keep the fault-draw's surface global in sync. Digital-only faults (mute
   // groups, DCA) carry digital:true and are skipped by the draw unless this is
@@ -5903,6 +5905,16 @@ function App() {
   const [rankClean, setRankCleanState] = uS(() => Math.max(0, profileRef.current.rankClean || 0));
   const [rankUp, setRankUp] = uS(null);
   const drillFocusRef = uR(null);
+
+  // Live Show mode: "the room is listening." When on, destructive diagnosis
+  // (muting or pulling a healthy channel, or pulling the master) charges a
+  // dropout the audience heard; PFL and the meters stay free. dropouts mirrors
+  // the ref for the live tally; liveShowRef lets the move-diff effect read the
+  // current value without re-subscribing.
+  const [liveShow, setLiveShowState] = uS(() => !!profileRef.current.liveShow);
+  const liveShowRef = uR(liveShow);
+  const [dropouts, setDropouts] = uS(0);
+  const dropoutsRef = uR(0);
 
   // Zero-fault "sign off" state (Practice Mode). signedOff lets a zero-fault
   // rep complete (a healthy system meets the win conditions from the start, so
@@ -5968,7 +5980,7 @@ function App() {
     let rankCleanN = Math.max(0, prof.rankClean || 0);
     let rankedUpTo = null;
     if (!info.goalKey && clean) {
-      const d = { faults: (Array.isArray(info.faults) ? info.faults.length : 0), zeroFault: !!info.zeroFault };
+      const d = { faults: (Array.isArray(info.faults) ? info.faults.length : 0), zeroFault: !!info.zeroFault, liveShow: !!liveShowRef.current, dropouts: dropoutsRef.current || 0 };
       if (rankByN(rankN).need(d)) {
         rankCleanN += 1;
         if (rankCleanN >= RANK_GATE) {
@@ -6866,6 +6878,8 @@ function App() {
     // Fresh attempt: move counter and hint state restart, and the diff
     // baseline jumps to the new start state so the load itself isn't a move.
     movesRef.current = 0;
+    dropoutsRef.current = 0;
+    setDropouts(0);
     hintsUsedRef.current = 0;
     setHintCount(0);
     prevStateRef.current = sab;
@@ -6992,6 +7006,29 @@ function App() {
     const prev = prevStateRef.current;
     prevStateRef.current = state;
     if (!prev || prev === state || solved) return;
+    // Live Show: charge the room for destructive diagnosis. Silencing a channel
+    // the audience was hearing (mute, or fader to the floor) or pulling the
+    // master is a dropout they heard. Touching a FAULTED channel doesn't count
+    // (you're allowed to work on the broken thing); PFL and meters stay free.
+    if (liveShowRef.current && level.isPractice) {
+      // A dropout counts only when you silence a channel the room was actually
+      // hearing (post-fader signal before the action) or pull the master. A
+      // channel that's already dead from its own fault costs nothing to mute, so
+      // working on the broken thing is free; PFL and the meters are always free.
+      let pa = null;
+      try { pa = window.computeAudio ? window.computeAudio(prev) : null; } catch (e) { pa = null; }
+      const wasHeard = (i) => (!pa || !pa.post || pa.post[i] == null) ? true : pa.post[i] > 0.05;
+      let dropped = 0;
+      for (let i = 0; i < state.channels.length; i++) {
+        const a = prev.channels[i], b = state.channels[i];
+        if (a === b) continue;
+        const silenced = (!a.mute && b.mute) || (a.fader > 0.05 && b.fader <= 0.05);
+        if (silenced && wasHeard(i)) dropped += 1;
+      }
+      const mA = prev.master, mB = state.master;
+      if ((!mA.mute && mB.mute) || (mA.fader > 0.05 && mB.fader <= 0.05)) dropped += 1;
+      if (dropped > 0) { dropoutsRef.current += dropped; setDropouts((d) => d + dropped); }
+    }
     const key = (() => {
       for (let i = 0; i < state.channels.length; i++) {
         const a = prev.channels[i], b = state.channels[i];
@@ -7067,12 +7104,27 @@ function App() {
     setPracticeFaultsState(n);
     if (SCENARIOS[levelIdx] && SCENARIOS[levelIdx].isPractice) loadLevel(levelIdx);
   };
+  // Live Show toggle (Practice, members): flip "the room is listening" on/off
+  // and reset the dropout tally. Persisted so it resumes.
+  const setLiveShow = (on) => {
+    liveShowRef.current = !!on;
+    setLiveShowState(!!on);
+    dropoutsRef.current = 0;
+    setDropouts(0);
+  };
+  // From the top-bar toggle: flip Live Show and re-roll a fresh rep so the
+  // tally starts clean.
+  const toggleLiveShow = (on) => {
+    setLiveShow(on);
+    if (SCENARIOS[levelIdx] && SCENARIOS[levelIdx].isPractice) loadLevel(levelIdx);
+  };
   // Train this rank: set the rep up for the member's current rung and roll a
   // fresh one. Ranks 1-3 set the fault count; the sign-off rung turns on the
-  // healthy-system bias so the member actually faces "nothing is broken" reps.
+  // healthy-system bias; the live-show rung turns on "the room is listening."
   const trainRank = () => {
     const r = rankByN(Math.min(HIGHEST_LIVE_RANK, rank));
     drillFocusRef.current = r.signoff ? 4 : null;
+    setLiveShow(!!r.liveShow);
     practiceFaultsRef.current = r.faults;
     setPracticeFaultsState(r.faults);
     if (SCENARIOS[levelIdx] && SCENARIOS[levelIdx].isPractice) loadLevel(levelIdx);
@@ -7256,6 +7308,7 @@ function App() {
         feedbackByEar={feedbackByEar} onSetFeedbackByEar={setFeedbackByEar}
         practiceFreeLeft={TIER === 'member' ? null : freeRepsLeft}
         rank={rank} rankClean={rankClean} onTrainRank={(TIER === 'member' && !repShareFree) ? trainRank : null}
+        liveShow={liveShow} onSetLiveShow={(TIER === 'member' && !repShareFree) ? toggleLiveShow : null}
       />
 
       <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
@@ -7370,6 +7423,7 @@ function App() {
                         practiceFreeLeft={(level.isPractice && TIER !== 'member') ? freeRepsLeft : null}
                         onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}
                         rank={rank} rankClean={rankClean} rankUp={rankUp}
+                        liveShow={TIER === 'member' && liveShow} dropouts={dropouts}
                         debrief={(level.isChallenge && !level.isCustom && !level.isLibrary) ? {
                           moves: movesRef.current,
                           par: level.isPractice ? (practiceInfoRef.current ? practiceInfoRef.current.par : null) : level.par,
@@ -7382,6 +7436,7 @@ function App() {
                         } : null}
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : <BriefCard level={level} conditions={effConditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
+                        liveShow={TIER === 'member' && liveShow} dropouts={dropouts}
                         pendingHints={pendingHints} hintCount={hintCount} onRevealHint={() => { hintsUsedRef.current += 1; setHintCount(c => c + 1); }}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
                         verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus} patchStatus={patchStatus}
@@ -7506,7 +7561,7 @@ function App() {
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow }) {
   const [picker, setPicker] = uS(false);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
   // column width, so this is the reliable "use my whole screen" path: it puts
@@ -7647,6 +7702,18 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             ))}
           </div>
         )}
+        {/* LIVE SHOW — Practice Mode, members. "The room is listening": muting a
+            channel or pulling the master is a dropout the audience hears, so the
+            engineer has to diagnose with PFL and the meters instead. */}
+        {level.isPractice && onSetLiveShow && (
+          <button onClick={() => onSetLiveShow(!liveShow)} className="mono ui-no-select"
+            title="Live Show: the audience is listening. Muting a channel or pulling the master is a dropout the room hears. PFL into the cans stays free." style={{
+            ...navBtn, padding: '6px 10px', fontWeight: 800, marginRight: 4,
+            background: liveShow ? 'linear-gradient(180deg, #d8473f, #a8322b)' : '#1a1a1d',
+            color: liveShow ? '#fff' : 'var(--ink-2)',
+            borderColor: liveShow ? '#a8322b' : '#38383e',
+          }}>{liveShow ? '🔴 LIVE SHOW' : 'LIVE SHOW'}</button>
+        )}
         {/* Ring-out difficulty — Feedback Mode only. Guided glows the ringing
             band; By Ear hides it so the engineer finds the frequency by ear. */}
         {level.isFeedbackMode && onSetFeedbackByEar && (
@@ -7698,7 +7765,7 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, patchStatus, pendingHints, hintCount, onRevealHint, onSignOff, signoffMsg, onCopyRepLink, repCopied }) {
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, patchStatus, pendingHints, hintCount, onRevealHint, onSignOff, signoffMsg, onCopyRepLink, repCopied, liveShow, dropouts }) {
   // Free Play has no objective and never solves, so it gets its own calm card
   // instead of the symptom/objective machinery below.
   if (level.isSandbox) {
@@ -7852,11 +7919,21 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           {zoneLabel(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? '▸ TASK' : '⚠ SYMPTOM')}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {liveShow && level.isPractice && (
+              <div className="mono" title="The audience is listening. Muting a channel or pulling the master is a dropout the room hears. PFL into the cans is free." style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 1, padding: '3px 7px', borderRadius: 12, background: 'rgba(216,71,63,0.16)', color: '#ff6a5e', border: '1px solid #a8322b' }}>🔴 LIVE · ROOM IS LISTENING</div>
+            )}
             {statusPill}
             {workChip}
           </div>
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.4 }}>{level.symptom}</div>
+        {liveShow && level.isPractice && (
+          <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.3, lineHeight: 1.4, color: dropouts > 0 ? 'var(--hot)' : 'var(--ink-3)' }}>
+            {dropouts > 0
+              ? '⚠ ' + dropouts + ' dropout' + (dropouts === 1 ? '' : 's') + ' the room heard. PFL a channel to check it instead of muting it; leave the master alone.'
+              : 'No dropouts yet. Find it with PFL and the meters, not by cutting the room.'}
+          </div>
+        )}
       </div>
 
       {/* OBJECTIVE zone — progress bars for signal-flow conditions and any
@@ -7977,7 +8054,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp }) {
+function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -8065,6 +8142,18 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           ))}
         </div>
       )}
+      {/* Live Show debrief — did the audience hear you diagnosing? PFL'd checks
+          never show here, which is the whole point. */}
+      {level.isPractice && practiceFreeLeft == null && liveShow && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, borderTop: '1px solid rgba(216,71,63,0.25)', paddingTop: 5 }}>
+          <div className="mono" style={{ fontSize: 8, color: dropouts > 0 ? 'var(--hot)' : 'var(--green)', letterSpacing: 1.2, fontWeight: 700 }}>🔴 LIVE SHOW</div>
+          <div style={{ fontSize: 9, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+            {dropouts > 0
+              ? <>The room heard <b style={{ color: 'var(--hot)' }}>{dropouts} dropout{dropouts === 1 ? '' : 's'}</b> while you worked. PFL lets you check a channel in the cans without the audience hearing it, and the master never needs to move.</>
+              : <>The room <b style={{ color: 'var(--green)' }}>never heard you working</b>. You found it with PFL and the meters. That's the live-show standard.</>}
+          </div>
+        </div>
+      )}
       {/* Drill ladder — Practice, members only. The rung just earned (a one-rep
           RANK UP banner) or steady progress toward the next. Honest counter, no
           medals: the same ethos as the move-count debrief. */}
@@ -8081,7 +8170,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
               {atTop
                 ? 'Top of the live ladder. More rungs are coming.'
                 : rank >= HIGHEST_LIVE_RANK
-                ? <>{rankClean} of {RANK_GATE} clean to master Sign-off. Train this rank to face more healthy systems.</>
+                ? <>{rankClean} of {RANK_GATE} clean to master {cur.label}.{cur.signoff ? ' Train this rank to face more healthy systems.' : ''}{cur.liveShow ? ' Diagnose with PFL and the meters, not by muting the room.' : ''}</>
                 : <>{rankClean} of {RANK_GATE} clean toward Rank {nxt.n}: {nxt.label}.</>}
             </div>
           </div>
