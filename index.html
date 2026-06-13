@@ -3996,6 +3996,7 @@ function defaultProfile() {
     feedbackByEar: false, // resume: Feedback Mode GUIDED(false)/BY EAR(true)
     email: '',          // free-tier email gate: captured address (sent to Kit)
     emailSkipped: false, // free-tier email gate: chose "skip for now" (soft gate)
+    freePractice: 0,    // free-tier Practice taste: reps consumed (gate at FREE_PRACTICE_LIMIT)
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -4014,6 +4015,7 @@ function normalizeProfile(data) {
   }
   p.completed = c;
   p.reps = (Number.isFinite(data.reps) && data.reps >= 0) ? Math.floor(data.reps) : 0;
+  p.freePractice = (Number.isFinite(data.freePractice) && data.freePractice >= 0) ? Math.floor(data.freePractice) : 0;
   p.v = PROFILE_VERSION;
   return p;
 }
@@ -4296,6 +4298,13 @@ if (SCENARIO_PARAM) {
   });
 }
 const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
+
+// Free-tier Practice taste: a free viewer gets this many real Practice reps
+// before the membership gate. The point is to let the endless-mastery value be
+// FELT (a door walked through and pulled back from), not just described behind
+// a lock. Feedback Mode and custom authoring stay fully member-gated; only
+// Practice Mode is soft-gated by this budget. Members are never counted.
+const FREE_PRACTICE_LIMIT = 3;
 
 // Picker bands — the member journey, in order. The picker emits a band header
 // whenever the band changes, so the curriculum reads as a path (and the locked
@@ -5085,6 +5094,14 @@ function App() {
   // Free-tier email gate. emailDone is true once the viewer has either given an
   // email or chosen "skip for now" — both are remembered so the gate never
   // nags twice. Members and shared-link viewers are never gated.
+  // Free-tier Practice taste budget. freePractice counts reps a free viewer has
+  // finished; once it hits FREE_PRACTICE_LIMIT the gate (member pitch) takes
+  // over. practiceSoftOpen is the live "can a free viewer still start a Practice
+  // rep" answer used by loadLevel, the picker, and Practice Again.
+  const [freePractice, setFreePractice] = uS(() => profileRef.current.freePractice || 0);
+  const freeRepsLeft = TIER === 'member' ? Infinity : Math.max(0, FREE_PRACTICE_LIMIT - freePractice);
+  const practiceSoftOpen = TIER === 'member' || freeRepsLeft > 0;
+
   const [emailDone, setEmailDone] = uS(() => !!(profileRef.current.email || profileRef.current.emailSkipped));
   const captureEmail = (email) => {
     profileRef.current = { ...profileRef.current, email };
@@ -5102,9 +5119,9 @@ function App() {
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
   // feedbackByEar drive "resume where I left off" on the next load.
   uE(() => {
-    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar };
+    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice };
     saveProfile(profileRef.current);
-  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar]);
+  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice]);
   const practiceInfoRef = uR(null);
 
   // Zero-fault "sign off" state (Practice Mode). signedOff lets a zero-fault
@@ -5442,7 +5459,12 @@ function App() {
           // A finished practice rep counts, every time — that's the metric
           // the debrief celebrates. Record it into the per-fault ledger first
           // (reads this rep's moves/hints/par), then bump the counter.
-          if (level.isPractice) { recordPracticeLedger(); setReps(r => r + 1); }
+          if (level.isPractice) {
+            recordPracticeLedger(); setReps(r => r + 1);
+            // Free tier: a finished rep spends one of the free-taste budget.
+            // Members are never counted (their reps are unlimited anyway).
+            if (TIER !== 'member') setFreePractice(n => n + 1);
+          }
         }, 900);
       }
     } else if (stableRef.current) {
@@ -5999,7 +6021,12 @@ function App() {
   // challenge replay a new rep instead of a memory test.
   const loadLevel = (i, reuseSeed, bypassLock) => {
     const lv = SCENARIOS[i];
-    if (!lv || (isLocked(lv) && !bypassLock)) { if (lv) setPitchFor(lv); return; }
+    // Practice Mode is soft-gated for the free tier: playable while the taste
+    // budget lasts, then it shows the pitch like any locked mode. Feedback Mode
+    // and custom scenarios use the hard lock (the latter is always bypassed via
+    // its share link).
+    const hardLocked = isLocked(lv) && !(lv && lv.isPractice && practiceSoftOpen);
+    if (!lv || (hardLocked && !bypassLock)) { if (lv) setPitchFor(lv); return; }
     const base = window.defaultState();
     base.topology = { ...base.topology, ...(lv.topology || {}) };
     base.channels = normalizeChannels(base.channels, deriveInvolves(lv));
@@ -6192,7 +6219,10 @@ function App() {
   // A free shared-rep session has had its one taste, so it gets the pitch
   // instead of an endless fresh rep.
   const practiceAgain = () => {
-    if (repShareFree) { setPitchFor(SCENARIOS[window.LEVELS.length]); return; }
+    // Free tier, Practice: each "next rep" spends the taste budget; once it's
+    // gone, the next tap shows the membership pitch instead of a fresh rep.
+    // (A shared-rep link's curated rep counts as one of those free reps.)
+    if (level.isPractice && !practiceSoftOpen) { setPitchFor(SCENARIOS[window.LEVELS.length]); return; }
     // Bypass the lock: this replays the current scenario (already accessible),
     // which is also how a free viewer retries a custom or shared scenario.
     loadLevel(levelIdx, undefined, true);
@@ -6380,6 +6410,7 @@ function App() {
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
         practiceFaults={practiceFaults} onSetPracticeFaults={repShareFree ? null : setPracticeFaults}
         feedbackByEar={feedbackByEar} onSetFeedbackByEar={setFeedbackByEar}
+        practiceFreeLeft={TIER === 'member' ? null : freeRepsLeft}
       />
 
       <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
@@ -6440,6 +6471,8 @@ function App() {
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
               {pitchFor.isFeedbackMode
                 ? 'Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Every rep is a new wedge with a new ring profile.'
+                : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
+                ? 'That\'s your ' + FREE_PRACTICE_LIMIT + ' free reps. You felt it: the band is playing, something is broken, and every rep hides a new fault in a new place. Members keep going with no limit, stack two or three faults at once, and train until troubleshooting is reflex. There\'s always a next rep.'
                 : 'The free lessons taught you to set up and run the system. Practice Mode trains you to troubleshoot it: the band is playing, something is broken, and every rep hides a new fault in a new place. Turn the difficulty up and it stacks two or three faults at once. Play as long as you want. There\'s always a next rep.'}
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
@@ -6484,6 +6517,7 @@ function App() {
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < SCENARIOS.length && !isLocked(SCENARIOS[levelIdx + 1])}
                         onPracticeAgain={level.isChallenge ? practiceAgain : null}
                         onGoEssentials={(level.isCustom && TIER !== 'member') ? () => loadLevel(0) : null}
+                        practiceFreeLeft={(level.isPractice && TIER !== 'member') ? freeRepsLeft : null}
                         onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}
                         debrief={(level.isChallenge && !level.isCustom) ? {
                           moves: movesRef.current,
@@ -6621,7 +6655,7 @@ function App() {
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft }) {
   const [picker, setPicker] = uS(false);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
   // column width, so this is the reliable "use my whole screen" path: it puts
@@ -6663,7 +6697,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         <div onClick={() => setPicker(p => !p)} style={{ position: 'relative', cursor: 'pointer', minWidth: 320, textAlign: 'center' }} className="ui-no-select">
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5 }}>
             {level.isPractice
-              ? 'PRACTICE MODE · MEMBERS'
+              ? (practiceFreeLeft != null ? 'PRACTICE MODE · FREE PREVIEW' : 'PRACTICE MODE · MEMBERS')
               : level.isFeedbackMode
               ? 'FEEDBACK MODE · MEMBERS'
               : `LEVEL ${String(levelIdx + 1).padStart(2, '0')} / ${String(window.LEVELS.length).padStart(2, '0')}`}
@@ -6676,7 +6710,11 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8, background: '#16161a', border: '1px solid #38383e', borderRadius: 6, padding: 6, zIndex: 50, minWidth: 340, boxShadow: '0 12px 32px rgba(0,0,0,0.6)', maxHeight: '70vh', overflow: 'auto' }}>
               {(() => { window.__pickerPrevBand = null; return null; })()}
               {SCENARIOS.map((l, i) => {
-                const locked = isLocked(l);
+                // Practice Mode is soft-gated: while free reps remain it shows a
+                // "N FREE" badge and is playable; once spent it locks like the
+                // rest of the member band.
+                const softFree = l.isPractice && practiceFreeLeft != null && practiceFreeLeft > 0;
+                const locked = isLocked(l) && !softFree;
                 const band = bandOf(l);
                 const newBand = band !== window.__pickerPrevBand;
                 window.__pickerPrevBand = band;
@@ -6699,7 +6737,9 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                       <div style={{ flex: 1, fontSize: 12, textAlign: 'left' }}>
                         {l.isPractice ? l.title + ' · endless reps' : l.isFeedbackMode ? l.title + ' · ring-out training' : l.title}
                       </div>
-                      {locked ? <div style={{ fontSize: 11 }}>🔒</div> : (completed[l.id] && <div style={{ color: 'var(--green)', fontSize: 12 }}>✓</div>)}
+                      {locked ? <div style={{ fontSize: 11 }}>🔒</div>
+                        : softFree ? <div className="mono" style={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.6, color: 'var(--green)', border: '1px solid var(--green)', borderRadius: 3, padding: '1px 4px' }}>{practiceFreeLeft} FREE</div>
+                        : (completed[l.id] && <div style={{ color: 'var(--green)', fontSize: 12 }}>✓</div>)}
                     </div>
                   </React.Fragment>
                 );
@@ -7042,7 +7082,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain, onGoEssentials, onCopyRepLink, repCopied }) {
+function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -7150,12 +7190,25 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           }}>↻ RUN IT AGAIN</button>
         </>
       ) : (level.isPractice || level.isFeedbackMode) ? (
-        /* The training modes never end — the primary action is the next rep. */
-        <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
-          width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
-          background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
-          border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-        }}>{level.isFeedbackMode ? 'NEXT REP · NEW WEDGE →' : 'NEXT REP · NEW FAULT →'}</button>
+        /* The training modes never end — the primary action is the next rep.
+           On the free tier, Practice shows how many taste reps remain so the
+           membership wall is foreseen, not sprung. */
+        <>
+          {practiceFreeLeft != null && (
+            <div className="mono" style={{ fontSize: 8.5, letterSpacing: 0.6, textAlign: 'center', fontWeight: 700, color: practiceFreeLeft > 0 ? 'var(--green)' : 'var(--accent)' }}>
+              {practiceFreeLeft > 0
+                ? ('FREE PREVIEW · ' + practiceFreeLeft + ' REP' + (practiceFreeLeft === 1 ? '' : 'S') + ' LEFT')
+                : 'FREE PREVIEW USED'}
+            </div>
+          )}
+          <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
+            width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+            background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+            border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
+          }}>{level.isFeedbackMode ? 'NEXT REP · NEW WEDGE →'
+              : (practiceFreeLeft === 0) ? 'JOIN TO KEEP TRAINING →'
+              : 'NEXT REP · NEW FAULT →'}</button>
+        </>
       ) : hasNext ? (
         <button onClick={onNext} className="mono ui-no-select" style={{
           width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
