@@ -972,10 +972,15 @@ function wouldPopOnMixerOn(s) {
   // snake channel AND that channel plugged into a desk output at FOH (a
   // wedge riding the WRONG output still gets the transient).
   const fed = (spk) => !!(op[spk] && ofan[op[spk]]);
+  // A MUTED powered speaker cuts its own input ahead of the driver, so the
+  // desk's switch transient has nothing to reproduce — muting the speakers
+  // makes a console power toggle safe (you don't have to power them down).
+  // In amp+passive mode the passive PAs have no mute of their own (the external
+  // amp gates them), so there the amp-on state is what matters.
   const mainLive = topo.paRig === 'amp+passive'
     ? !!(o.amp && o.amp.on && (fed('pa_l') || fed('pa_r')))
-    : !!((o.pa_l && o.pa_l.on && fed('pa_l')) || (o.pa_r && o.pa_r.on && fed('pa_r')));
-  const wedgeLive = !!((o.wedge && o.wedge.on && fed('wedge')) || (o.wedge2 && o.wedge2.on && fed('wedge2')));
+    : !!((o.pa_l && o.pa_l.on && !o.pa_l.mute && fed('pa_l')) || (o.pa_r && o.pa_r.on && !o.pa_r.mute && fed('pa_r')));
+  const wedgeLive = !!((o.wedge && o.wedge.on && !o.wedge.mute && fed('wedge')) || (o.wedge2 && o.wedge2.on && !o.wedge2.mute && fed('wedge2')));
   return mainLive || wedgeLive;
 }
 
