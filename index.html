@@ -7616,6 +7616,44 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           </div>
           {picker && (
             <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8, background: '#16161a', border: '1px solid #38383e', borderRadius: 6, padding: 6, zIndex: 50, minWidth: 340, boxShadow: '0 12px 32px rgba(0,0,0,0.6)', maxHeight: '70vh', overflow: 'auto' }}>
+              {/* YOUR TRAINING PATH — the drill ladder pinned at the top so the
+                  spine (where you are, what's next) is the first thing a member
+                  sees when choosing what to do. Click drops into Practice. */}
+              {TIER === 'member' && rank != null && (() => {
+                const practiceIdx = SCENARIOS.findIndex(s => s.isPractice);
+                const cur = rankByN(Math.min(HIGHEST_LIVE_RANK, rank));
+                const atTop = rank >= HIGHEST_LIVE_RANK && rankClean >= RANK_GATE;
+                const nxt = rankByN(Math.min(HIGHEST_LIVE_RANK, rank + 1));
+                const rungs = RANKS.filter(r => r.n <= HIGHEST_LIVE_RANK);
+                return (
+                  <div onClick={(e) => { e.stopPropagation(); if (practiceIdx >= 0) onPick(practiceIdx); setPicker(false); }} className="ui-no-select"
+                    style={{ padding: '8px 10px 9px', borderRadius: 4, cursor: 'pointer', borderBottom: '1px solid #2a2a2e', marginBottom: 2 }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                    <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700, marginBottom: 7, textAlign: 'left' }}>YOUR TRAINING PATH</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 7 }}>
+                      {rungs.map((r, idx) => {
+                        const done = r.n < rank || atTop;
+                        const current = r.n === rank && !atTop;
+                        return (
+                          <React.Fragment key={r.n}>
+                            {idx > 0 && <div style={{ flex: 1, height: 2, background: (r.n <= rank ? 'var(--green)' : '#38383e') }}/>}
+                            <div title={r.label} className="mono" style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800,
+                              background: current ? 'var(--accent)' : done ? 'var(--green)' : '#1a1a1d',
+                              color: (current || done) ? '#0a0a0c' : 'var(--ink-3)',
+                              border: '1px solid ' + (current ? 'var(--accent)' : done ? 'var(--green)' : '#38383e') }}>{r.n}</div>
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: 'var(--ink-2)', lineHeight: 1.3, textAlign: 'left' }}>
+                      {atTop
+                        ? <>Top of the ladder, <b style={{ color: 'var(--ink)' }}>{cur.label}</b>. Keep your reps sharp.</>
+                        : <><b style={{ color: 'var(--ink)' }}>Rank {cur.n}: {cur.label}</b> · {rankClean} of {RANK_GATE} clean to Rank {nxt.n} →</>}
+                    </div>
+                  </div>
+                );
+              })()}
               {(() => { window.__pickerPrevBand = null; return null; })()}
               {SCENARIOS.map((l, i) => {
                 // Practice Mode is soft-gated: while free reps remain it shows a
