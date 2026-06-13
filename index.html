@@ -3994,6 +3994,8 @@ function defaultProfile() {
     lastLevel: 0,       // resume: scenario index last open
     practiceFaults: 1,  // resume: FAULTS difficulty (1-3)
     feedbackByEar: false, // resume: Feedback Mode GUIDED(false)/BY EAR(true)
+    email: '',          // free-tier email gate: captured address (sent to Kit)
+    emailSkipped: false, // free-tier email gate: chose "skip for now" (soft gate)
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -4068,6 +4070,36 @@ const CTA_KEY = 'audiou-troubleshooting-lab-essentials-cta-v1';
 // a zero-backend product gets, so each link tags where the click came from.
 const JOIN_URL = 'https://audiouniversityonline.com/products-2/join-now-live/';
 const joinUrl = (content) => JOIN_URL + '?utm_source=troubleshooting-lab&utm_medium=app&utm_content=' + content;
+
+// ── Email gate (free tier) ──────────────────────────────────────────────
+// Before a free viewer starts the 10-lesson Essentials, ask for an email so it
+// can feed the Kit (ConvertKit) list. Soft gate: a "skip for now" link lets
+// them through, and the choice is remembered so they're never asked twice.
+// Shared scenario/rep links and the member tier never see it.
+//
+// Kit form 9560384 (account upbeat-creator-1556, embed uid 204509d6fc). This is
+// the NUMERIC submission id from the form's action endpoint, not the uid in the
+// share URL. To repoint at a different Kit form, open its embed and read the
+// number in https://app.kit.com/forms/<THIS-NUMBER>/subscriptions. Blank it to
+// disable sending: the gate still works (remembers locally, lets people in),
+// it just stops posting to Kit, so the funnel never breaks.
+const KIT_FORM_ID = '9560384';
+
+const isValidEmail = (s) => typeof s === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+
+// Fire-and-forget POST to Kit's public form-subscription endpoint. Designed for
+// browser embedding (CORS open), so no backend is needed. Entry never waits on
+// this; a network/Kit failure must not trap a viewer behind the gate.
+function submitToKit(email) {
+  if (!KIT_FORM_ID) return Promise.resolve(false);
+  try {
+    return fetch('https://app.kit.com/forms/' + KIT_FORM_ID + '/subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ email_address: String(email).trim() }),
+    }).then(() => true).catch(() => false);
+  } catch (e) { return Promise.resolve(false); }
+}
 
 // Safely set an AudioParam target with cancel + anchor + ramp.
 // Fixes the "crash when turning sound on" bug from the chat transcript:
@@ -4604,6 +4636,63 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
   );
 }
 
+// Free-tier email gate, shown before the first Essentials lesson. Friendly
+// (green, "let's start"), not a lock: there's a "skip for now" link. Sends the
+// address to Kit on submit and lets the viewer straight in either way.
+function EmailGate({ open, onSubmit, onSkip }) {
+  const [val, setVal] = uS('');
+  const [err, setErr] = uS(false);
+  if (!open) return null;
+  const go = () => {
+    if (!isValidEmail(val)) { setErr(true); return; }
+    onSubmit(val.trim());
+  };
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(0,0,0,0.78)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div style={{
+        width: 460, maxWidth: '92vw', background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
+        border: '1px solid var(--green)', borderRadius: 10, padding: '22px 24px',
+        boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 16px 48px rgba(0,0,0,0.8)',
+        display: 'flex', flexDirection: 'column', gap: 13,
+      }}>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>🎧 FREE · 10 LESSONS</div>
+        <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Learn to run a live show.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+          Ten hands-on lessons take you from a cold, silent system to a full show: power up in order, set your gain, check every speaker, build a monitor mix, and keep it clean through feedback. Drop your email and start now.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input
+            type="email" inputMode="email" autoComplete="email" placeholder="you@email.com"
+            value={val}
+            onChange={(e) => { setVal(e.target.value); if (err) setErr(false); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '11px 13px', fontSize: 13,
+              background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6,
+              border: '1px solid ' + (err ? '#e05a5a' : '#2c9d52'), outline: 'none',
+            }}/>
+          {err && <div style={{ fontSize: 10.5, color: '#e98a8a' }}>That doesn't look like an email. Mind checking it?</div>}
+        </div>
+        <button onClick={go} className="mono ui-no-select" style={{
+          width: '100%', padding: '11px 18px', fontSize: 12, fontWeight: 800, letterSpacing: 1,
+          background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+          border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer',
+        }}>START THE LESSONS →</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <span style={{ fontSize: 10, color: 'var(--ink-3)', lineHeight: 1.4 }}>No spam. Tips and new lessons, unsubscribe anytime.</span>
+          <button onClick={onSkip} className="ui-no-select" style={{
+            background: 'transparent', border: 'none', color: 'var(--ink-3)', cursor: 'pointer',
+            fontSize: 10.5, textDecoration: 'underline', whiteSpace: 'nowrap', padding: 0,
+          }}>Skip for now</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // The show's paperwork: an industry-style input list + output list, openable
 // from the top bar on every level. Industry input lists carry the channel,
 // the source/instrument, the mic or DI type, phantom, the snake channel, and
@@ -4992,6 +5081,22 @@ function App() {
   // true = by ear (no glow; the engineer finds the ringing frequency by
   // listening). Only affects Feedback Mode.
   const [feedbackByEar, setFeedbackByEar] = uS(() => !!profileRef.current.feedbackByEar);
+
+  // Free-tier email gate. emailDone is true once the viewer has either given an
+  // email or chosen "skip for now" — both are remembered so the gate never
+  // nags twice. Members and shared-link viewers are never gated.
+  const [emailDone, setEmailDone] = uS(() => !!(profileRef.current.email || profileRef.current.emailSkipped));
+  const captureEmail = (email) => {
+    profileRef.current = { ...profileRef.current, email };
+    saveProfile(profileRef.current);
+    submitToKit(email);
+    setEmailDone(true);
+  };
+  const skipEmail = () => {
+    profileRef.current = { ...profileRef.current, emailSkipped: true };
+    saveProfile(profileRef.current);
+    setEmailDone(true);
+  };
 
   // Persist the whole profile whenever a React-state field changes. Survives
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
@@ -6286,6 +6391,13 @@ function App() {
       <TourOverlay open={tourOpen} onClose={dismissTour}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
+      {/* Free-tier email gate: blocks the board only while the viewer is on an
+          Essentials lesson and hasn't yet given/skipped an email. Shared
+          scenario/rep links load a higher index so they're never gated; the
+          tour shows first. Members never see it. */}
+      <EmailGate
+        open={TIER !== 'member' && !emailDone && !tourOpen && levelIdx >= 0 && levelIdx < window.LEVELS.length}
+        onSubmit={captureEmail} onSkip={skipEmail}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
         wedge={state.outputs.wedge} wedge2={state.outputs.wedge2}
@@ -6371,6 +6483,7 @@ function App() {
                   {solved
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < SCENARIOS.length && !isLocked(SCENARIOS[levelIdx + 1])}
                         onPracticeAgain={level.isChallenge ? practiceAgain : null}
+                        onGoEssentials={(level.isCustom && TIER !== 'member') ? () => loadLevel(0) : null}
                         onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}
                         debrief={(level.isChallenge && !level.isCustom) ? {
                           moves: movesRef.current,
@@ -6929,7 +7042,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain, onCopyRepLink, repCopied }) {
+function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain, onGoEssentials, onCopyRepLink, repCopied }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -7018,12 +7131,24 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
         </div>
       )}
       {level.isCustom ? (
-        /* A custom scenario has no "next" — the action is to run it again. */
-        <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
-          width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
-          background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
-          border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-        }}>↻ RUN IT AGAIN</button>
+        /* A custom scenario has no "next". For a free viewer who arrived from a
+           YouTube link, the real next step is the full Essentials course, so
+           that's the primary button; running it again is secondary. */
+        <>
+          {onGoEssentials && (
+            <button onClick={onGoEssentials} className="mono ui-no-select" style={{
+              width: '100%', padding: '7px 10px', fontSize: 10, fontWeight: 800, letterSpacing: 1,
+              background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+              border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
+            }}>🎧 RUN THE FULL 10 LESSONS →</button>
+          )}
+          <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
+            width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+            background: onGoEssentials ? 'transparent' : 'linear-gradient(180deg, var(--green), #2c9d52)',
+            color: onGoEssentials ? 'var(--ink-2)' : '#0a0a0c',
+            border: '1px solid ' + (onGoEssentials ? '#38383e' : '#2c9d52'), borderRadius: 3, cursor: 'pointer',
+          }}>↻ RUN IT AGAIN</button>
+        </>
       ) : (level.isPractice || level.isFeedbackMode) ? (
         /* The training modes never end — the primary action is the next rep. */
         <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
