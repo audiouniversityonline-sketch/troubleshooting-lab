@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=30"></script>
+<script src="content.js?v=31"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -4181,6 +4181,22 @@ const SCENARIOS = [
 ];
 const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
 
+// Picker bands — the member journey, in order. The picker emits a band header
+// whenever the band changes, so the curriculum reads as a path (and the locked
+// bands do quiet sales work). Adding a pack or a lesson track later means
+// pointing bandOf() at it; the header shows up on its own. SHOW DAY lands here
+// when that mode ships.
+const SCENARIO_BANDS = [
+  { id: 'LEARN', label: 'LEARN · THE ESSENTIALS', member: false },
+  { id: 'DRILL', label: 'DRILL · DIAGNOSIS',      member: true },
+  { id: 'EARS',  label: 'EARS · RING-OUT',        member: true },
+];
+function bandOf(l) {
+  if (l.isFeedbackMode) return 'EARS';
+  if (l.isChallenge) return 'DRILL';   // Practice Mode + any future packs
+  return 'LEARN';
+}
+
 // Small fast seeded PRNG (mulberry32). Challenge sabotages take (s, rng) and
 // place the fault with it, so replaying a challenge is a fresh rep instead
 // of a memory test. The seed lives in a ref: Reset replays the SAME attempt
@@ -4567,6 +4583,85 @@ function IoListPanel({ open, onClose }) {
   );
 }
 
+// "What this trains" catalog — the curriculum and the fault pool in plain
+// words, so the depth behind the locked rows is visible to anyone browsing.
+// Built from data (lesson titles + each fault's label/blurb), so it grows on
+// its own as the pool grows. Static description only; never the active rep.
+function FaultCatalog({ open, onClose, tier }) {
+  if (!open) return null;
+  const lessons = window.LEVELS || [];
+  const faults = window.PRACTICE_FAULTS || [];
+  const seen = {};
+  const faultList = [];
+  for (const f of faults) { if (f.label && !seen[f.label]) { seen[f.label] = 1; faultList.push(f); } }
+  const sectionTitle = (color, txt) => (
+    <div className="mono" style={{ fontSize: 9, color, letterSpacing: 1.6, fontWeight: 700, margin: '12px 0 5px' }}>{txt}</div>
+  );
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: 540, maxWidth: '94vw', maxHeight: '86vh', overflow: 'auto',
+        background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
+        border: '1px solid #38383e', borderRadius: 8, padding: '16px 18px',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div>
+            <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>What this trains</div>
+            <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>set up a system, then keep it running when something breaks</div>
+          </div>
+          <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
+        </div>
+
+        {sectionTitle('var(--ink-3)', 'LEARN · THE ESSENTIALS · FREE')}
+        <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 5 }}>
+          Ten guided lessons that build one full show, start to finish.
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px 14px' }}>
+          {lessons.map((l, i) => (
+            <div key={l.id} style={{ fontSize: 10.5, color: 'var(--ink-2)', width: '46%' }}>
+              <span className="mono" style={{ color: 'var(--ink-3)' }}>{String(i + 1).padStart(2, '0')}</span> {l.title}
+            </div>
+          ))}
+        </div>
+
+        {sectionTitle('var(--accent)', 'DRILL · PRACTICE MODE · MEMBERS')}
+        <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 6 }}>
+          The band is playing and something is wrong. You find it and fix it, without popping anything. Every rep hides 1 to 3 of these, drawn at random, so no two are the same:
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {faultList.map((f) => (
+            <div key={f.key} style={{ fontSize: 10.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+              <b style={{ color: 'var(--ink)' }}>{f.label}</b>{f.blurb ? ' — ' + f.blurb : ''}
+            </div>
+          ))}
+        </div>
+
+        {sectionTitle('var(--aux)', 'EARS · FEEDBACK MODE · MEMBERS')}
+        <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+          Ring-out training: push a wedge toward a target level, and when a frequency starts to ring, find it on the graphic EQ and cut it by ear. Every rep is a new wedge with a new set of problem frequencies.
+        </div>
+
+        {tier !== 'member' && (
+          <div style={{ marginTop: 14, borderTop: '1px solid #2a2a2e', paddingTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 11, color: 'var(--ink)', lineHeight: 1.5, flex: 1, minWidth: 180 }}>
+              The Essentials are free. Practice Mode and Feedback Mode are part of the Audio University membership.
+            </div>
+            <a href={joinUrl('catalog')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
+              padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
+              background: 'linear-gradient(180deg, var(--accent), #c79a1f)', color: '#0a0a0c',
+              border: '1px solid #c79a1f', borderRadius: 4, cursor: 'pointer', textDecoration: 'none',
+            }}>JOIN AUDIO UNIVERSITY →</a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Shared red "take action" button used inside the WarningModal.
 const hotBtn = {
   alignSelf: 'flex-start',
@@ -4708,6 +4803,8 @@ function App() {
   const [saveModalOpen, setSaveModalOpen] = uS(false);
   // The I/O list panel — the show's paperwork, available on every level.
   const [ioListOpen, setIoListOpen] = uS(false);
+  // "What this trains" catalog — the curriculum + fault pool in plain words.
+  const [catalogOpen, setCatalogOpen] = uS(false);
   // Challenge presentation state. hintRevealed gates the hint zone behind a
   // button on challenges (Essentials keep their always-visible hints);
   // using the hint is counted into the debrief, not punished.
@@ -5897,12 +5994,14 @@ function App() {
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
         onOpenProgress={() => setSaveModalOpen(true)}
         onOpenIoList={() => setIoListOpen(true)}
+        onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
         practiceFaults={practiceFaults} onSetPracticeFaults={setPracticeFaults}
         feedbackByEar={feedbackByEar} onSetFeedbackByEar={setFeedbackByEar}
       />
 
       <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
+      <FaultCatalog open={catalogOpen} onClose={() => setCatalogOpen(false)} tier={TIER}/>
       <TourOverlay open={tourOpen} onClose={dismissTour}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
@@ -5959,6 +6058,11 @@ function App() {
                 background: 'linear-gradient(180deg, var(--accent), #c79a1f)', color: '#0a0a0c',
                 border: '1px solid #c79a1f', borderRadius: 4, cursor: 'pointer', textDecoration: 'none',
               }}>JOIN AUDIO UNIVERSITY →</a>
+              <button onClick={() => { setPitchFor(null); setCatalogOpen(true); }} className="mono ui-no-select" style={{
+                padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
+                background: '#1a1a1d', color: 'var(--cool)', border: '1px solid #38383e',
+                borderRadius: 4, cursor: 'pointer',
+              }}>WHAT THIS TRAINS</button>
               <button onClick={() => setPitchFor(null)} className="mono ui-no-select" style={{
                 padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
                 background: '#1a1a1d', color: 'var(--ink-2)', border: '1px solid #38383e',
@@ -6117,7 +6221,7 @@ function App() {
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar }) {
   const [picker, setPicker] = uS(false);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
   // column width, so this is the reliable "use my whole screen" path: it puts
@@ -6170,15 +6274,19 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           </div>
           {picker && (
             <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8, background: '#16161a', border: '1px solid #38383e', borderRadius: 6, padding: 6, zIndex: 50, minWidth: 340, boxShadow: '0 12px 32px rgba(0,0,0,0.6)', maxHeight: '70vh', overflow: 'auto' }}>
-              <div className="mono" style={{ padding: '5px 10px 3px', fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left' }}>THE ESSENTIALS · FREE</div>
+              {(() => { window.__pickerPrevBand = null; return null; })()}
               {SCENARIOS.map((l, i) => {
                 const locked = isLocked(l);
-                const isFirstChallenge = l.isChallenge && i === window.LEVELS.length;
+                const band = bandOf(l);
+                const newBand = band !== window.__pickerPrevBand;
+                window.__pickerPrevBand = band;
+                const bandMeta = SCENARIO_BANDS.find(b => b.id === band) || { label: band, member: false };
+                const first = i === 0;
                 return (
                   <React.Fragment key={l.id}>
-                    {isFirstChallenge && (
-                      <div className="mono" style={{ padding: '8px 10px 3px', fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left', borderTop: '1px solid #2a2a2e', marginTop: 4 }}>
-                        TRAINING MODES · MEMBERS{TIER !== 'member' ? ' · 🔒' : ''}
+                    {newBand && (
+                      <div className="mono" style={{ padding: first ? '5px 10px 3px' : '8px 10px 3px', fontSize: 8.5, color: bandMeta.member ? 'var(--accent)' : 'var(--ink-3)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left', borderTop: first ? 'none' : '1px solid #2a2a2e', marginTop: first ? 0 : 4 }}>
+                        {bandMeta.label}{bandMeta.member ? (TIER !== 'member' ? ' · MEMBERS · 🔒' : ' · MEMBERS') : ' · FREE'}
                       </div>
                     )}
                     <div onClick={(e) => { e.stopPropagation(); onPick(i); setPicker(false); }} className="ui-no-select"
@@ -6196,6 +6304,14 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                   </React.Fragment>
                 );
               })}
+              {onOpenCatalog && (
+                <div onClick={(e) => { e.stopPropagation(); setPicker(false); onOpenCatalog(); }} className="mono ui-no-select"
+                  style={{ marginTop: 4, padding: '7px 10px', borderTop: '1px solid #2a2a2e', fontSize: 9, color: 'var(--cool)', letterSpacing: 0.8, fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                  ◎ WHAT THIS TRAINS
+                </div>
+              )}
             </div>
           )}
         </div>

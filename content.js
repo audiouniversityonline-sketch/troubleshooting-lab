@@ -643,23 +643,23 @@ const POWERED_IDX = [1, 2];
 // STAY UP, so pulling the send to zero isn't a fix; ringing the wedge out on
 // its EQ band is.
 window.PRACTICE_FAULTS = [
-  { key: 'cable',        label: 'Cable unplugged',          par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
-  { key: 'gain',         label: 'Gain at zero',             par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].gain = 0; } },
-  { key: 'fader',        label: 'Fader down',               par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].fader = 0; } },
-  { key: 'mute',         label: 'Channel muted',            par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].mute = true; } },
-  { key: 'pan',          label: 'Hard pan',                 par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].pan = rng() < 0.5 ? 0 : 1; } },
-  { key: 'phantom',      label: 'Phantom power off',        par: 3, apply: (s, rng) => { s.channels[POWERED_IDX[Math.floor(rng() * 2)]].phantom = false; } },
-  { key: 'master-mute',  label: 'Master muted',             par: 1, apply: (s)      => { s.master.mute = true; } },
-  { key: 'master-fader', label: 'Master fader down',        par: 1, apply: (s)      => { s.master.fader = 0; } },
-  { key: 'pa-volume',    label: 'PA volume down',           par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].volume = 0; } },
-  { key: 'pa-mute',      label: 'PA muted',                 par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].mute = true; } },
+  { key: 'cable',        label: 'Cable unplugged',   blurb: 'A cable gets pulled and a channel goes dead.',           par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
+  { key: 'gain',         label: 'Gain at zero',      blurb: "A channel's gain is at zero, so its meter never moves.",  par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].gain = 0; } },
+  { key: 'fader',        label: 'Fader down',        blurb: 'A channel fader is all the way down.',                    par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].fader = 0; } },
+  { key: 'mute',         label: 'Channel muted',     blurb: 'A channel is muted and nobody catches it.',               par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].mute = true; } },
+  { key: 'pan',          label: 'Hard pan',          blurb: 'A channel is panned hard to one side.',                   par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].pan = rng() < 0.5 ? 0 : 1; } },
+  { key: 'phantom',      label: 'Phantom power off', blurb: 'Phantom power is off, so a condenser or active DI is silent.', par: 3, apply: (s, rng) => { s.channels[POWERED_IDX[Math.floor(rng() * 2)]].phantom = false; } },
+  { key: 'master-mute',  label: 'Master muted',      blurb: 'The master is muted and the whole room goes quiet.',      par: 1, apply: (s)      => { s.master.mute = true; } },
+  { key: 'master-fader', label: 'Master fader down', blurb: 'The master fader is down.',                               par: 1, apply: (s)      => { s.master.fader = 0; } },
+  { key: 'pa-volume',    label: 'PA volume down',    blurb: 'One PA speaker is turned down.',                          par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].volume = 0; } },
+  { key: 'pa-mute',      label: 'PA muted',          blurb: 'One PA speaker is muted, so the room sounds lopsided.',   par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].mute = true; } },
   // FEEDBACK — a singer's wedge pushed into ringing (hot send + hot wedge).
   // The extra condition keeps her monitor level REQUIRED, so the fix is the
   // Feedback Awareness skill: pull the glowing band down on that wedge's EQ.
   // Numbers: chanIn 0.79 x send 1.0 x aux master 0.75 x vol 0.8 x 1.6 =
   // 0.758 at the wedge -> rings (threshold 0.55). A full -12 dB band cut
   // drops the loop to ~0.19 (clear) while the monitor level stays 0.758.
-  { key: 'feedback', label: 'Wedge feeding back', par: 2, weight: 2, apply: (s, rng) => {
+  { key: 'feedback', label: 'Wedge feeding back', blurb: 'A wedge starts ringing and only an EQ cut fixes it.', par: 2, weight: 2, apply: (s, rng) => {
     if (rng() < 0.5) {
       s.channels[0].aux1 = 1.0;
       s.outputs.wedge.volume = 0.8;
@@ -677,13 +677,13 @@ window.PRACTICE_FAULTS = [
   // both swapped channels happen to stay audible. Par 3 because changing a
   // patch on a live channel POPS: the safe fix is master down (one move,
   // covers both channels) -> swap -> master back up.
-  { key: 'crosspatch-stage', label: 'Crosspatch at the stage box', par: 3, apply: (s, rng) => {
+  { key: 'crosspatch-stage', label: 'Crosspatch at the stage box', blurb: 'Two inputs are swapped at the stage box.', par: 3, apply: (s, rng) => {
     const i = Math.floor(rng() * 4);
     let j = Math.floor(rng() * 3); if (j >= i) j += 1;
     const a = BAND_SOURCES[i], b = BAND_SOURCES[j];
     const t = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = t;
   } },
-  { key: 'crosspatch-snake', label: 'Crosspatch at the snake', par: 3, apply: (s, rng) => {
+  { key: 'crosspatch-snake', label: 'Crosspatch at the snake', blurb: 'Two channels are swapped at the snake.', par: 3, apply: (s, rng) => {
     const i = Math.floor(rng() * 4);
     let j = Math.floor(rng() * 3); if (j >= i) j += 1;
     const t = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = t;
