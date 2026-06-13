@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=36"></script>
+<script src="content.js?v=37"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -312,6 +312,22 @@ function defaultState() {
     // solved (the lesson is: do it the safe way, not just any way that
     // ends with phantom on).
     phantomPop: null,
+    // DIGITAL-SURFACE groups (Phase 2). Fixed assignments, all inactive / at
+    // unity by default, so they have ZERO effect on the analog surface and on
+    // every existing scenario. A digital-only Practice fault activates a mute
+    // group or pulls a DCA down; computeAudio treats a channel as muted if any
+    // ACTIVE mute group lists it, and scales its main-mix (post-fader) level by
+    // the product of the DCA faders it belongs to.
+    muteGroups: [
+      { name: 'VOX',  members: [0, 1],          active: false },
+      { name: 'BAND', members: [2, 3],          active: false },
+      { name: 'ALL',  members: [0, 1, 2, 3, 4], active: false },
+      { name: 'FX',   members: [4],             active: false },
+    ],
+    dcas: [
+      { name: 'VOX',  members: [0, 1], fader: 1 },
+      { name: 'BAND', members: [2, 3], fader: 1 },
+    ],
   };
 }
 
@@ -352,6 +368,28 @@ function panGains(pan) {
     L: pan <= 0.5 ? 1.0 : 1.0 - (pan - 0.5) * 2,
     R: pan >= 0.5 ? 1.0 : pan * 2,
   };
+}
+
+// Digital-surface group helpers (Phase 2). With the default state (no active
+// mute group, every DCA at unity) these return the no-op answer for every
+// channel, so the analog surface and all existing scenarios compute exactly as
+// before. A digital-only fault flips a mute group active or a DCA to zero.
+function chMutedByGroup(s, i) {
+  const mg = s.muteGroups;
+  if (!Array.isArray(mg)) return false;
+  for (const grp of mg) {
+    if (grp && grp.active && Array.isArray(grp.members) && grp.members.indexOf(i) !== -1) return true;
+  }
+  return false;
+}
+function dcaGainFor(s, i) {
+  const dcas = s.dcas;
+  if (!Array.isArray(dcas)) return 1;
+  let g = 1;
+  for (const d of dcas) {
+    if (d && Array.isArray(d.members) && d.members.indexOf(i) !== -1) g *= (d.fader != null ? d.fader : 1);
+  }
+  return g;
 }
 
 function computeAudio(s, envelope) {
@@ -395,8 +433,8 @@ function computeAudio(s, envelope) {
   });
 
   const post = s.channels.map((ch, i) => {
-    if (ch.mute) return 0;
-    return chanIn[i].level * ch.fader;
+    if (ch.mute || chMutedByGroup(s, i)) return 0;
+    return chanIn[i].level * ch.fader * dcaGainFor(s, i);
   });
 
   // POWER SUMMING. Different sources (a voice, a bass, a keyboard) are
@@ -454,9 +492,11 @@ function computeAudio(s, envelope) {
   const aux2MasterGain = s.master.aux2 != null ? s.master.aux2 : 1;
 
   const aux1 = s.channels.map((ch, i) => {
-    if (ch.mute) return 0;
+    if (ch.mute || chMutedByGroup(s, i)) return 0;
     // PFL does NOT gate aux sends — the band's monitor mix keeps playing
-    // regardless of what the engineer is listening to in their cans.
+    // regardless of what the engineer is listening to in their cans. (A DCA
+    // does NOT scale the aux send: monitor sends are pre-fader, so the DCA's
+    // fader only rides the main-mix path.)
     return chanIn[i].level * ch.aux1;
   });
   // AUX 1 / AUX 2 SEND BUSES — sum of all channels' aux send levels through
@@ -469,7 +509,7 @@ function computeAudio(s, envelope) {
   const wedgeMix = Math.sqrt(aux1.reduce((a, b) => a + b * b, 0)) * aux1MasterGain * (mixerOn ? 1 : 0);
 
   const aux2 = s.channels.map((ch, i) => {
-    if (ch.mute) return 0;
+    if (ch.mute || chMutedByGroup(s, i)) return 0;
     // PFL does NOT gate aux 2 either.
     return chanIn[i].level * ch.aux2;
   });
@@ -1872,7 +1912,7 @@ window.Console = Console;
 // so the shared ChannelAnchors chips and the whole cable overlay line
 // up with zero changes to Chain.
 // ============================================================
-function DigitalSelStrip({ ch, idx, selected, onSelect, onMute, onFader, level, isFaultStrip, srcLabel, powered }) {
+function DigitalSelStrip({ ch, idx, selected, onSelect, onMute, onFader, level, isFaultStrip, srcLabel, powered, groupMuted }) {
   const isSel = idx === selected;
   const srcDisplay = srcLabel?.label || (ch.label === '—' ? 'EMPTY' : ch.label);
   return (
@@ -1915,19 +1955,32 @@ function DigitalSelStrip({ ch, idx, selected, onSelect, onMute, onFader, level, 
       <BP active={ch.mute} onClick={() => onMute()} label="MUTE" color="var(--hot)" width={58} height={16} fontSize={8}
         tip="Silences this channel everywhere after the preamp: PA and wedges." />
 
+      {/* Muted by an active mute group: the channel's own MUTE is off but it's
+          silent anyway. The diagnosis the analog desk can't pose. */}
+      <div className="mono" style={{
+        fontSize: 6.5, fontWeight: 800, letterSpacing: 0.4, lineHeight: 1, minHeight: 8,
+        color: groupMuted ? 'var(--hot)' : 'transparent',
+      }}>{groupMuted ? '● GROUP MUTE' : '·'}</div>
+
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
-        <F value={ch.fader} onChange={(v) => onFader(v)} height={172} />
-        <M level={level} height={172} segments={22} />
+        <F value={ch.fader} onChange={(v) => onFader(v)} height={166} />
+        <M level={level} height={166} segments={22} />
       </div>
     </div>
   );
 }
 
-function DigitalChannelEditor({ ch, idx, srcLabel, pflLevel, onChange, onPhantomToggle, onInspect, powered }) {
+function DigitalChannelEditor({ ch, idx, srcLabel, pflLevel, onChange, onPhantomToggle, onInspect, powered, muteGroups, dcas }) {
   const set = (patch) => onChange({ ...ch, ...patch });
   const insp = (d) => { if (onInspect) onInspect(d); };
   const togglePhantom = onPhantomToggle ? () => onPhantomToggle() : () => set({ phantom: !ch.phantom });
   const name = srcLabel?.label || (ch.label === '—' ? 'EMPTY' : ch.label);
+  const inGroups = (muteGroups || []).filter(g => (g.members || []).indexOf(idx) !== -1);
+  const inDcas = (dcas || []).filter(d => (d.members || []).indexOf(idx) !== -1);
+  const memberText = [
+    ...inGroups.map(g => (g.name || 'MG') + (g.active ? ' •' : '')),
+    ...inDcas.map(d => 'DCA ' + (d.name || '')),
+  ].join('   ') || 'none';
   return (
     <div style={{
       marginTop: 8, width: '100%', boxSizing: 'border-box',
@@ -1978,6 +2031,67 @@ function DigitalChannelEditor({ ch, idx, srcLabel, pflLevel, onChange, onPhantom
         <BP active={ch.solo} onClick={() => set({ solo: !ch.solo })} label="PFL" color="var(--amber)" width={30} height={18} fontSize={8}
           tip="Pre-fade listen. Hear just this channel in your headphones. The room keeps hearing the full mix." />
       </div>
+
+      <div style={{ width: 1, alignSelf: 'stretch', background: '#0a0a0c', boxShadow: '1px 0 0 #3a3a40' }} />
+
+      {/* Group membership for the selected channel. A '•' marks an active mute
+          group, so a "channel is silent but its MUTE is off" rep is solvable
+          here: see which group it's in and whether that group is lit. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 78 }}>
+        <span className="mono" style={{ fontSize: 7, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>MEMBER OF</span>
+        <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-2)', fontWeight: 700, lineHeight: 1.3 }}>{memberText}</span>
+      </div>
+    </div>
+  );
+}
+
+// The mute-group buttons and DCA faders for the digital surface. A digital-only
+// fault lights a mute group (silencing its members) or pulls a DCA to zero;
+// the fix is to clear the group or bring the DCA back up.
+function DigitalGroups({ muteGroups, dcas, onToggleMute, onDca, powered }) {
+  const groups = muteGroups || [];
+  const fads = dcas || [];
+  if (!groups.length && !fads.length) return null;
+  return (
+    <div style={{
+      marginTop: 8, width: '100%', boxSizing: 'border-box',
+      background: 'linear-gradient(180deg,#202024 0%, #161619 100%)',
+      border: '1px solid #0a0a0c', borderRadius: 6, padding: '8px 14px',
+      display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
+      opacity: powered ? 1 : 0.5, filter: powered ? 'none' : 'grayscale(0.75)',
+    }}>
+      {groups.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 1.5, fontWeight: 700 }}>MUTE GROUPS</div>
+          <div style={{ display: 'flex', gap: 5 }}>
+            {groups.map((g, i) => (
+              <BP key={i} active={!!g.active} onClick={() => onToggleMute(i)} label={g.name || ('MG' + (i + 1))} color="var(--hot)" width={44} height={20} fontSize={8}
+                tip={'Mute group ' + (g.name || (i + 1)) + '. When lit, every channel assigned to it is silenced even if the channel MUTE is off. Members: ' + (g.members || []).map(m => 'CH' + (m + 1)).join(', ')} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {groups.length > 0 && fads.length > 0 && (
+        <div style={{ width: 1, alignSelf: 'stretch', background: '#0a0a0c', boxShadow: '1px 0 0 #3a3a40' }} />
+      )}
+
+      {fads.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 1.5, fontWeight: 700 }}>DCA</div>
+          <div style={{ display: 'flex', gap: 16 }}>
+            {fads.map((d, i) => {
+              const v = d.fader != null ? d.fader : 1;
+              return (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <F value={v} onChange={(nv) => onDca(i, nv)} height={64} tickLabels={false} />
+                  <div className="mono" style={{ fontSize: 7.5, color: v < 0.02 ? 'var(--hot)' : 'var(--ink-2)', fontWeight: 700 }}>{d.name || ('DCA' + (i + 1))}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2014,12 +2128,22 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
     });
   };
 
+  const updateMuteGroup = (gi) => setState(prev => {
+    const mg = (prev.muteGroups || []).map((g, j) => j === gi ? { ...g, active: !g.active } : g);
+    return { ...prev, muteGroups: mg };
+  });
+  const updateDca = (di, v) => setState(prev => {
+    const dcas = (prev.dcas || []).map((d, j) => j === di ? { ...d, fader: v } : d);
+    return { ...prev, dcas };
+  });
+
   const mixerOn = state.mixer ? state.mixer.on !== false : true;
   const channelLevels = audio.post.map((p) => mixerOn ? p * 1.2 : 0);
   const pflLevels = audio.chanIn.map(v => mixerOn ? v * 0.95 : 0);
   const main = audio.mainBus || { L: 0, R: 0 };
   const masterL = (main.L || 0) * 0.85;
   const masterR = (main.R || 0) * 0.85;
+  const groupMutedArr = state.channels.map((ch, i) => (state.muteGroups || []).some(g => g.active && (g.members || []).indexOf(i) !== -1));
 
   const sel = Math.min(Math.max(0, selected), Math.max(0, state.channels.length - 1));
   const selCh = state.channels[sel];
@@ -2077,6 +2201,7 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
               isFaultStrip={faultChannelIdx === i}
               srcLabel={srcLabel}
               powered={mixerOn}
+              groupMuted={groupMutedArr[i]}
             />
           );
         })}
@@ -2104,8 +2229,19 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
           onPhantomToggle={() => togglePhantom(sel)}
           onInspect={inspectTo}
           powered={mixerOn}
+          muteGroups={state.muteGroups}
+          dcas={state.dcas}
         />
       )}
+
+      {/* MUTE GROUPS + DCA — the controls a digital-only fault lives in. */}
+      <DigitalGroups
+        muteGroups={state.muteGroups}
+        dcas={state.dcas}
+        onToggleMute={updateMuteGroup}
+        onDca={updateDca}
+        powered={mixerOn}
+      />
     </div>
   );
 }
@@ -5454,6 +5590,11 @@ function App() {
     profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface };
     saveProfile(profileRef.current);
   }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface]);
+
+  // Keep the fault-draw's surface global in sync. Digital-only faults (mute
+  // groups, DCA) carry digital:true and are skipped by the draw unless this is
+  // 'digital', so an analog player never gets a fault they can't reach.
+  uE(() => { window.PRACTICE_SURFACE = surface; }, [surface]);
   const practiceInfoRef = uR(null);
 
   // Zero-fault "sign off" state (Practice Mode). signedOff lets a zero-fault

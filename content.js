@@ -654,6 +654,20 @@ window.PRACTICE_FAULTS = [
   { key: 'master-fader', label: 'Master fader down', blurb: 'The master fader is down.',                               par: 1, apply: (s)      => { s.master.fader = 0; } },
   { key: 'pa-volume',    label: 'PA volume down',    blurb: 'One PA speaker is turned down.',                          par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].volume = 0; } },
   { key: 'pa-mute',      label: 'PA muted',          blurb: 'One PA speaker is muted, so the room sounds lopsided.',   par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].mute = true; } },
+  // DIGITAL-ONLY faults (digital: true). They live in the mute-group buttons and
+  // DCA faders on the digital surface and have no analog equivalent, so the draw
+  // skips them unless window.PRACTICE_SURFACE === 'digital'.
+  { key: 'mute-group',   label: 'Mute group engaged', blurb: 'A mute group is silencing channels even though their own MUTE is off.', par: 2, digital: true, apply: (s, rng) => {
+      // Light a group carrying band-critical channels (VOX or BAND, not ALL/FX).
+      // The members read silent with their MUTE button off; the fix is to find
+      // the lit group and clear it.
+      const gi = (rng() < 0.5) ? 0 : 1;
+      if (s.muteGroups && s.muteGroups[gi]) s.muteGroups[gi].active = true;
+    } },
+  { key: 'dca-down',     label: 'DCA pulled down',    blurb: 'A DCA fader is down, so its channels are silent in the mains while their channel faders look fine.', par: 1, digital: true, apply: (s, rng) => {
+      const di = (rng() < 0.5) ? 0 : 1;
+      if (s.dcas && s.dcas[di]) s.dcas[di].fader = 0;
+    } },
   // FEEDBACK — a singer's wedge pushed into ringing (hot send + hot wedge).
   // The extra condition keeps her monitor level REQUIRED, so the fix is the
   // Feedback Awareness skill: pull the glowing band down on that wedge's EQ.
@@ -817,6 +831,11 @@ window.PRACTICE = {
     // just makes the diagnosis honest work.
     let pool = [];
     for (const f of window.PRACTICE_FAULTS) {
+      // Digital-only faults (mute group, DCA) live on the digital surface, where
+      // the controls to fix them exist. The app sets window.PRACTICE_SURFACE; on
+      // analog (or before it's set), these are skipped so a player is never
+      // handed a fault they have no way to reach.
+      if (f.digital && window.PRACTICE_SURFACE !== 'digital') continue;
       const w = f.weight || 1;
       for (let i = 0; i < w; i++) pool.push(f);
     }
