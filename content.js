@@ -668,6 +668,11 @@ window.PRACTICE_FAULTS = [
       const di = (rng() < 0.5) ? 0 : 1;
       if (s.dcas && s.dcas[di]) s.dcas[di].fader = 0;
     } },
+  { key: 'soft-patch',   label: 'Input not patched', blurb: 'A channel is dead because its input is unassigned in the soft patch, even though the cable is fine.', par: 2, digital: true, apply: (s, rng) => {
+      if (!s.inputPatch) s.inputPatch = [1, 2, 3, 4, 5];
+      const ci = Math.floor((rng ? rng() : 0) * 4); // a band channel (0-3)
+      s.inputPatch[ci] = 0;
+    } },
   { key: 'scene-recall', label: 'Wrong scene recalled', blurb: 'The wrong scene is loaded, so faders and mutes jumped to the wrong values.', par: 2, digital: true, apply: (s) => {
       // Snapshot the healthy state as SHOW, build a broken SOUNDCHK, apply it to
       // the live channels, and leave SOUNDCHK active. Fix = recall SHOW from the

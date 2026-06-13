@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=38"></script>
+<script src="content.js?v=39"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -340,6 +340,12 @@ function defaultState() {
       { name: 'WALK-IN',  snapshot: null },
     ],
     currentScene: 0,
+    // Soft input patch (digital surface, Phase 3b): channel index -> the physical
+    // input number feeding it, identity by default (CH1<-IN1 ...). 0 means the
+    // channel's input is unassigned in the routing screen, so it's dead even
+    // with the cable fine. A digital-only fault unassigns a band channel; the
+    // fix is to re-patch it in the PATCH strip. All-assigned default is inert.
+    inputPatch: [1, 2, 3, 4, 5],
   };
 }
 
@@ -425,6 +431,9 @@ function computeAudio(s, envelope) {
   const baselineChanIn = s.channels.map((ch, i) => {
     const srcKey = sourceFor(s, i);
     if (!srcKey) return { level: 0, srcKey: null };
+    // Soft input patch: a channel whose input is unassigned in the routing
+    // screen is dead even with the cable fine. Identity default never gates.
+    if (s.inputPatch && s.inputPatch[i] === 0) return { level: 0, srcKey };
     if (s.sourceMute[srcKey]) return { level: 0, srcKey };
     const srcDef = SOURCES[srcKey];
     // Condensers and ACTIVE DIs need +48V phantom to pass signal. Dynamics and
@@ -2138,6 +2147,46 @@ function DigitalScenes({ scenes, currentScene, onRecall, powered }) {
   );
 }
 
+// Input patch view (digital surface, Phase 3b). On a digital desk the routing
+// of physical inputs to channels lives in a screen, not on the faders, so a
+// channel can be dead with a perfect-looking strip. Each chip shows the channel
+// and the input feeding it; an unassigned channel reads UNPATCHED in red.
+// Clicking re-patches it to its own input (or unassigns an assigned one).
+function DigitalPatch({ channels, inputPatch, onRepatch, powered }) {
+  const chs = channels || [];
+  if (!chs.length) return null;
+  const ip = inputPatch || [];
+  return (
+    <div style={{
+      marginTop: 8, width: '100%', boxSizing: 'border-box',
+      background: 'linear-gradient(180deg,#202024 0%, #161619 100%)',
+      border: '1px solid #0a0a0c', borderRadius: 6, padding: '8px 14px',
+      display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+      opacity: powered ? 1 : 0.5, filter: powered ? 'none' : 'grayscale(0.75)',
+    }}>
+      <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 1.5, fontWeight: 700 }}>INPUT PATCH</div>
+      <div style={{ display: 'flex', gap: 5 }}>
+        {chs.map((c, i) => {
+          const inNum = ip[i] != null ? ip[i] : (i + 1);
+          const assigned = inNum !== 0;
+          return (
+            <div key={i} onClick={() => onRepatch(i)} className="mono ui-no-select" style={{
+              cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+              background: assigned ? '#0e0e10' : 'rgba(255,70,48,0.12)',
+              border: '1px solid ' + (assigned ? '#38383e' : 'var(--hot)'), borderRadius: 3,
+              padding: '3px 7px', minWidth: 44,
+            }}
+              title={assigned ? ('Channel ' + (i + 1) + ' is patched to physical input ' + inNum + '. Click to unassign.') : ('Channel ' + (i + 1) + ' has no input assigned, so it is dead even though the cable is fine. Click to re-patch it.')}>
+              <span style={{ fontSize: 8, fontWeight: 800, color: assigned ? 'var(--ink-2)' : 'var(--hot)' }}>CH {c.stereo ? (i + 1) + '/' + (i + 2) : (i + 1)}</span>
+              <span style={{ fontSize: 7.5, fontWeight: 700, color: assigned ? 'var(--label)' : 'var(--hot)' }}>{assigned ? ('IN ' + inNum) : '— NONE'}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
   const [selected, setSelected] = useState(0);
 
@@ -2189,6 +2238,11 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
       });
     }
     return { ...prev, channels, currentScene: i };
+  });
+  const repatch = (ci) => setState(prev => {
+    const ip = (prev.inputPatch || [1, 2, 3, 4, 5]).slice();
+    ip[ci] = (ip[ci] === 0) ? (ci + 1) : 0; // re-patch to its own input, or unassign
+    return { ...prev, inputPatch: ip };
   });
 
   const mixerOn = state.mixer ? state.mixer.on !== false : true;
@@ -2302,6 +2356,14 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx }) {
         scenes={state.scenes}
         currentScene={state.currentScene || 0}
         onRecall={recallScene}
+        powered={mixerOn}
+      />
+
+      {/* INPUT PATCH — software input routing. An unassigned channel is a fault. */}
+      <DigitalPatch
+        channels={state.channels}
+        inputPatch={state.inputPatch}
+        onRepatch={repatch}
         powered={mixerOn}
       />
     </div>
