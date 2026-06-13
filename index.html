@@ -4189,6 +4189,48 @@ const REP_PARAM = (() => {
   } catch (e) { return null; }
 })();
 
+// Author mode (?author=1): Kyle's scenario builder. Sets the board to anything,
+// captures the goal, writes the prompt text, and copies a ?scenario= link.
+const AUTHOR_MODE = (() => {
+  try { return new URLSearchParams(window.location.search).get('author') === '1'; } catch (e) { return false; }
+})();
+
+// A custom scenario, opened from a ?scenario=<base64> link. Carries the exact
+// board state the author set (the student's starting point), the win conditions
+// (the goal), and the four text fields. Decoded once at load; everyone who opens
+// the link gets the identical scenario, members or YouTube viewers alike.
+const SCENARIO_PARAM = (() => {
+  try {
+    const code = new URLSearchParams(window.location.search).get('scenario');
+    if (!code) return null;
+    const json = decodeURIComponent(escape(window.atob(code)));
+    const data = JSON.parse(json);
+    if (!data || typeof data.s !== 'object' || data.s === null) return null;
+    return data; // { s: startState, c: [conditions], t: {title, symptom, hint, solution} }
+  } catch (e) { return null; }
+})();
+
+// The default goal when an author doesn't capture one: restore the full mix,
+// every band source audible on both sides of the PA (the diagnose-and-fix win).
+const RESTORE_CONDITIONS = [];
+['vocal', 'vocal2', 'guitar', 'laptop'].forEach((src) => {
+  RESTORE_CONDITIONS.push({ source: src, dest: 'pa_l', min: 0.2 });
+  RESTORE_CONDITIONS.push({ source: src, dest: 'pa_r', min: 0.2 });
+});
+
+// Overwrite a fresh state with an authored/captured board state. The captured
+// blob came from a live state so it has the right shape; we drop transient
+// fields (a captured pop would fire on load) and keep the rest.
+function applyCapturedState(s, captured) {
+  if (!captured || typeof captured !== 'object') return s;
+  Object.keys(captured).forEach((k) => {
+    if (k === 'phantomPop') return;
+    s[k] = captured[k];
+  });
+  s.phantomPop = null;
+  return s;
+}
+
 // The picker runs off one combined list: the free Essentials in order, then
 // Practice Mode. isChallenge switches the test presentation (hint behind a
 // button, debrief instead of an answer key, seeded random faults);
@@ -4199,6 +4241,28 @@ const SCENARIOS = [
   ...(window.PRACTICE ? [{ ...window.PRACTICE, isChallenge: true, isPractice: true }] : []),
   ...(window.FEEDBACK_MODE ? [{ ...window.FEEDBACK_MODE, isChallenge: true, isFeedbackMode: true }] : []),
 ];
+
+// A custom scenario opened from a ?scenario= link gets appended as its own
+// scenario. It behaves like a challenge (hint behind a button, a debrief, no
+// answer key), wins on the authored conditions, and its sabotage just lays down
+// the authored start state. The lock is bypassed at load so a YouTube viewer
+// can play it.
+const CUSTOM_INDEX = SCENARIO_PARAM ? SCENARIOS.length : -1;
+if (SCENARIO_PARAM) {
+  const sp = SCENARIO_PARAM;
+  const t = sp.t || {};
+  SCENARIOS.push({
+    id: 'custom', isChallenge: true, isCustom: true,
+    title: t.title || 'Custom Scenario',
+    symptom: t.symptom || 'Sort out the system.',
+    hint: t.hint || '',
+    solution: t.solution || 'Scenario complete.',
+    conditions: (Array.isArray(sp.c) && sp.c.length) ? sp.c : RESTORE_CONDITIONS,
+    involves: [1, 2, 3, 4],
+    defaultInspect: 'pa',
+    sabotage: (s) => applyCapturedState(s, sp.s),
+  });
+}
 const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
 
 // Picker bands — the member journey, in order. The picker emits a band header
@@ -4684,6 +4748,52 @@ function FaultCatalog({ open, onClose, tier }) {
             }}>JOIN AUDIO UNIVERSITY →</a>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// AUTHOR MODE panel (?author=1). A floating builder pinned to the bottom of the
+// screen so Kyle can work the board above it. Four text fields, a goal capture
+// (snapshot the current signal as the win), and copy a ?scenario= link. The
+// board as it stands when he copies IS the student's starting point.
+function AuthorPanel({ text, setText, goal, onCapture, onClearGoal, onCopy, msg }) {
+  const fld = (key, label, ph, rows) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 110 }}>
+      <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>{label}</div>
+      <textarea value={text[key]} onChange={(e) => setText({ ...text, [key]: e.target.value })} rows={rows || 1} placeholder={ph}
+        style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', fontSize: 10, lineHeight: 1.35, background: '#0a0a0c', color: 'var(--ink)', border: '1px solid #38383e', borderRadius: 3, resize: 'none', fontFamily: 'inherit' }}/>
+    </div>
+  );
+  const btn = (color, solid) => ({
+    padding: '6px 11px', fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6, borderRadius: 4, cursor: 'pointer',
+    color: solid ? '#0a0a0c' : color, background: solid ? color : 'transparent', border: '1px solid ' + color,
+  });
+  return (
+    <div className="ui-no-select" style={{
+      position: 'fixed', left: 8, right: 8, bottom: 8, zIndex: 120,
+      background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
+      border: '1px solid var(--accent)', borderRadius: 8, padding: '8px 12px',
+      boxShadow: '0 8px 30px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 6,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.4, fontWeight: 800 }}>✎ AUTHOR</div>
+        <div style={{ fontSize: 9, color: 'var(--ink-3)' }}>Set the board, capture the goal, write the prompt, copy the link.</div>
+        {msg && <div style={{ marginLeft: 'auto', fontSize: 9.5, color: 'var(--green)', fontWeight: 600 }}>{msg}</div>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        {fld('title', 'TITLE', 'Festival changeover')}
+        {fld('symptom', 'PROMPT (what the student reads)', 'The band is mid-set and...', 2)}
+        {fld('hint', 'HINT (optional)', 'A nudge if stuck')}
+        {fld('solution', 'RECAP (after they solve)', "What they just did")}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button onClick={onCapture} className="mono ui-no-select" style={btn('var(--cool)')}>📷 CAPTURE GOAL FROM THIS STATE</button>
+        <div className="mono" style={{ fontSize: 9, color: goal ? 'var(--green)' : 'var(--ink-3)', fontWeight: 700 }}>
+          {goal ? ('GOAL: ' + goal.length + ' target' + (goal.length === 1 ? '' : 's') + ' captured') : 'GOAL: restore the full mix (default)'}
+        </div>
+        {goal && <button onClick={onClearGoal} className="mono ui-no-select" style={btn('var(--ink-3)')}>CLEAR GOAL</button>}
+        <button onClick={onCopy} className="mono ui-no-select" style={{ ...btn('var(--accent)', true), marginLeft: 'auto' }}>⎘ COPY SCENARIO LINK</button>
       </div>
     </div>
   );
@@ -5827,6 +5937,12 @@ function App() {
   // GUIDED/BY EAR) is already restored from the profile into state above, so
   // loadLevel picks up the resumed fault count automatically.
   uE(() => {
+    // A custom-scenario link wins over everything: load the authored scenario,
+    // bypassing the lock so anyone with the link can play it.
+    if (SCENARIO_PARAM && CUSTOM_INDEX >= 0) {
+      loadLevel(CUSTOM_INDEX, undefined, true);
+      return;
+    }
     // A shared-rep link wins over resume: load that exact Practice rep,
     // bypassing the member lock, at the link's fault count.
     if (REP_PARAM) {
@@ -5857,6 +5973,50 @@ function App() {
   // Free users who arrived via a shared rep get one taste, then the pitch
   // instead of a fresh rep (the endless mode is the paid value).
   const repShareFree = !!REP_PARAM && TIER !== 'member';
+
+  // ---- AUTHOR MODE (?author=1): Kyle's custom-scenario builder ----
+  // He arranges the board, optionally captures a goal from the current signal
+  // (so the student has to reach what he set up), writes the four text fields,
+  // and copies a ?scenario= link. The board IS the start state in the link.
+  const [authorText, setAuthorText] = uS({ title: '', symptom: '', hint: '', solution: '' });
+  const [authorGoal, setAuthorGoal] = uS(null); // [{source,dest,min}] or null = restore-the-mix
+  const [authorMsg, setAuthorMsg] = uS(null);
+  const authorMsgTimerRef = uR(null);
+  const flashAuthorMsg = (m) => {
+    setAuthorMsg(m);
+    if (authorMsgTimerRef.current) clearTimeout(authorMsgTimerRef.current);
+    authorMsgTimerRef.current = setTimeout(() => setAuthorMsg(null), 2200);
+  };
+  // Capture the goal from the board as it stands now: every source that's
+  // reaching a destination at a real level becomes a win condition (require 80%
+  // of what's demonstrated). So the author sets up the SOLVED state, captures,
+  // then breaks it back to the start the student sees.
+  const captureGoal = () => {
+    const a = window.computeAudio(state);
+    const conds = [];
+    ['vocal', 'vocal2', 'guitar', 'laptop', 'playback'].forEach((src) => {
+      const c = a.contributions && a.contributions[src];
+      if (!c) return;
+      ['pa_l', 'pa_r', 'wedge', 'wedge2'].forEach((d) => {
+        const lvl = c[d] || 0;
+        if (lvl >= 0.18) conds.push({ source: src, dest: d, min: Math.round(lvl * 0.8 * 100) / 100 });
+      });
+    });
+    if (!conds.length) { flashAuthorMsg('Nothing is reaching a speaker right now. Set up the solved state first, then capture.'); return; }
+    setAuthorGoal(conds);
+    flashAuthorMsg('Goal captured: ' + conds.length + ' target' + (conds.length === 1 ? '' : 's') + '. Now set the start the student sees.');
+  };
+  const copyScenarioLink = () => {
+    try {
+      const start = JSON.parse(JSON.stringify(state));
+      delete start.phantomPop;
+      const payload = { s: start, c: authorGoal || [], t: authorText };
+      const code = window.btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+      const url = location.origin + location.pathname + '?scenario=' + code;
+      try { navigator.clipboard.writeText(url); } catch (e) {}
+      flashAuthorMsg('Scenario link copied (' + url.length + ' chars). Goal: ' + (authorGoal ? authorGoal.length + ' targets' : 'restore the full mix') + '.');
+    } catch (e) { flashAuthorMsg('Could not build the link.'); }
+  };
 
   // Gesture-level move counting. Diff consecutive states and attribute the
   // change to a control key; repeated changes to the SAME control inside a
@@ -5928,7 +6088,9 @@ function App() {
   // instead of an endless fresh rep.
   const practiceAgain = () => {
     if (repShareFree) { setPitchFor(SCENARIOS[window.LEVELS.length]); return; }
-    loadLevel(levelIdx);
+    // Bypass the lock: this replays the current scenario (already accessible),
+    // which is also how a free viewer retries a custom or shared scenario.
+    loadLevel(levelIdx, undefined, true);
   };
   // FAULTS difficulty change re-rolls the current rep at the new count.
   const setPracticeFaults = (n) => {
@@ -6117,6 +6279,10 @@ function App() {
 
       <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
       <FaultCatalog open={catalogOpen} onClose={() => setCatalogOpen(false)} tier={TIER}/>
+      {AUTHOR_MODE && (
+        <AuthorPanel text={authorText} setText={setAuthorText} goal={authorGoal}
+          onCapture={captureGoal} onClearGoal={() => setAuthorGoal(null)} onCopy={copyScenarioLink} msg={authorMsg}/>
+      )}
       <TourOverlay open={tourOpen} onClose={dismissTour}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
@@ -6206,7 +6372,7 @@ function App() {
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < SCENARIOS.length && !isLocked(SCENARIOS[levelIdx + 1])}
                         onPracticeAgain={level.isChallenge ? practiceAgain : null}
                         onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}
-                        debrief={level.isChallenge ? {
+                        debrief={(level.isChallenge && !level.isCustom) ? {
                           moves: movesRef.current,
                           par: level.isPractice ? (practiceInfoRef.current ? practiceInfoRef.current.par : null) : level.par,
                           hints: hintsUsedRef.current,
@@ -6772,7 +6938,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
       boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 4px 14px rgba(0,0,0,0.5), 0 0 30px rgba(74,222,128,0.15)',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>{(debrief && debrief.zeroFault) ? '✓ GOOD CALL · NOTHING BROKEN' : (debrief && debrief.goalLabel) ? '✓ DONE' : level.task ? '✓ TASK COMPLETE' : '✓ MIX RESTORED'}</div>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>{(debrief && debrief.zeroFault) ? '✓ GOOD CALL · NOTHING BROKEN' : (debrief && debrief.goalLabel) ? '✓ DONE' : level.isCustom ? '✓ DONE' : level.task ? '✓ TASK COMPLETE' : '✓ MIX RESTORED'}</div>
         <div className="display" style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.1 }}>{level.title}</div>
       </div>
       {/* Challenges get a DEBRIEF instead of the answer key: how many moves
@@ -6838,7 +7004,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
         )
       ) : (
         <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-          <span style={{ color: 'var(--green)', fontWeight: 600 }}>{level.task ? 'Recap: ' : 'Fix: '}</span>{level.solution}
+          <span style={{ color: 'var(--green)', fontWeight: 600 }}>{(level.task || level.isCustom) ? 'Recap: ' : 'Fix: '}</span>{level.solution}
         </div>
       )}
       {Array.isArray(coaching) && coaching.length > 0 && (
@@ -6851,7 +7017,14 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           ))}
         </div>
       )}
-      {(level.isPractice || level.isFeedbackMode) ? (
+      {level.isCustom ? (
+        /* A custom scenario has no "next" — the action is to run it again. */
+        <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
+          width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+          background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+          border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
+        }}>↻ RUN IT AGAIN</button>
+      ) : (level.isPractice || level.isFeedbackMode) ? (
         /* The training modes never end — the primary action is the next rep. */
         <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
           width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
