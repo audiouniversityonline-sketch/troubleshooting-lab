@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=34"></script>
+<script src="content.js?v=35"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -4276,11 +4276,35 @@ const SCENARIOS = [
   ...(window.FEEDBACK_MODE ? [{ ...window.FEEDBACK_MODE, isChallenge: true, isFeedbackMode: true }] : []),
 ];
 
+// The Scenario Library: a curated, growing shelf of real-world situations Kyle
+// authors and ships in content.js (window.SCENARIO_LIBRARY). Each entry is the
+// decoded form of an authored scenario: the start board, the win conditions,
+// and the four text fields. They play exactly like a custom ?scenario= link but
+// they're persistent and browsable. Member-gated (the depth that earns the
+// membership); any single one can still be handed out as a free ?scenario= link.
+function libraryToScenario(e, i) {
+  return {
+    id: 'lib_' + (e.id || i), isChallenge: true, isLibrary: true,
+    title: e.title || 'Library Scenario',
+    symptom: e.symptom || 'Sort out the system.',
+    hint: e.hint || '',
+    solution: e.solution || 'Scenario complete.',
+    conditions: (Array.isArray(e.conditions) && e.conditions.length) ? e.conditions : RESTORE_CONDITIONS,
+    involves: e.involves || [1, 2, 3, 4],
+    defaultInspect: e.defaultInspect || 'pa',
+    tags: Array.isArray(e.tags) ? e.tags : [],
+    sabotage: (s) => applyCapturedState(s, e.start),
+  };
+}
+if (Array.isArray(window.SCENARIO_LIBRARY)) {
+  window.SCENARIO_LIBRARY.forEach((e, i) => SCENARIOS.push(libraryToScenario(e, i)));
+}
+
 // A custom scenario opened from a ?scenario= link gets appended as its own
 // scenario. It behaves like a challenge (hint behind a button, a debrief, no
 // answer key), wins on the authored conditions, and its sabotage just lays down
 // the authored start state. The lock is bypassed at load so a YouTube viewer
-// can play it.
+// can play it. Appended AFTER the library so its index is past every library row.
 const CUSTOM_INDEX = SCENARIO_PARAM ? SCENARIOS.length : -1;
 if (SCENARIO_PARAM) {
   const sp = SCENARIO_PARAM;
@@ -4312,10 +4336,12 @@ const FREE_PRACTICE_LIMIT = 3;
 // pointing bandOf() at it; the header shows up on its own. SHOW DAY lands here
 // when that mode ships.
 const SCENARIO_BANDS = [
-  { id: 'LEARN', label: 'LEARN · THE ESSENTIALS', member: false },
-  { id: 'DRILL', label: 'DRILL · ENDLESS REPS',   member: true },
+  { id: 'LEARN',   label: 'LEARN · THE ESSENTIALS',   member: false },
+  { id: 'DRILL',   label: 'DRILL · ENDLESS REPS',     member: true },
+  { id: 'LIBRARY', label: 'SCENARIO LIBRARY',         member: true },
 ];
 function bandOf(l) {
+  if (l.isLibrary) return 'LIBRARY';   // curated, browsable real-world scenarios
   if (l.isChallenge) return 'DRILL';   // Practice + Feedback Mode + any future packs
   return 'LEARN';
 }
@@ -4855,7 +4881,7 @@ function FaultCatalog({ open, onClose, tier }) {
 // screen so Kyle can work the board above it. Four text fields, a goal capture
 // (snapshot the current signal as the win), and copy a ?scenario= link. The
 // board as it stands when he copies IS the student's starting point.
-function AuthorPanel({ text, setText, goal, onCapture, onClearGoal, onCopy, msg }) {
+function AuthorPanel({ text, setText, goal, onCapture, onClearGoal, onCopy, onCopyEntry, msg }) {
   const fld = (key, label, ph, rows) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 110 }}>
       <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>{label}</div>
@@ -4876,7 +4902,7 @@ function AuthorPanel({ text, setText, goal, onCapture, onClearGoal, onCopy, msg 
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.4, fontWeight: 800 }}>✎ AUTHOR</div>
-        <div style={{ fontSize: 9, color: 'var(--ink-3)' }}>Set the board, capture the goal, write the prompt, copy the link.</div>
+        <div style={{ fontSize: 9, color: 'var(--ink-3)' }}>Set the board, capture the goal, write the prompt. Copy a share link, or a library entry to paste into content.js.</div>
         {msg && <div style={{ marginLeft: 'auto', fontSize: 9.5, color: 'var(--green)', fontWeight: 600 }}>{msg}</div>}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -4891,7 +4917,8 @@ function AuthorPanel({ text, setText, goal, onCapture, onClearGoal, onCopy, msg 
           {goal ? ('GOAL: ' + goal.length + ' target' + (goal.length === 1 ? '' : 's') + ' captured') : 'GOAL: restore the full mix (default)'}
         </div>
         {goal && <button onClick={onClearGoal} className="mono ui-no-select" style={btn('var(--ink-3)')}>CLEAR GOAL</button>}
-        <button onClick={onCopy} className="mono ui-no-select" style={{ ...btn('var(--accent)', true), marginLeft: 'auto' }}>⎘ COPY SCENARIO LINK</button>
+        <button onClick={onCopyEntry} className="mono ui-no-select" title="Copy a paste-ready entry for window.SCENARIO_LIBRARY in content.js" style={{ ...btn('var(--green)'), marginLeft: 'auto' }}>📚 COPY LIBRARY ENTRY</button>
+        <button onClick={onCopy} className="mono ui-no-select" style={btn('var(--accent)', true)}>⎘ COPY SCENARIO LINK</button>
       </div>
     </div>
   );
@@ -6149,6 +6176,30 @@ function App() {
       flashAuthorMsg('Scenario link copied (' + url.length + ' chars). Goal: ' + (authorGoal ? authorGoal.length + ' targets' : 'restore the full mix') + '.');
     } catch (e) { flashAuthorMsg('Could not build the link.'); }
   };
+  // Export the current board + goal + text as a paste-ready library entry. Same
+  // payload as the share link, but as a JS object literal to drop into
+  // window.SCENARIO_LIBRARY in content.js (the curated, shipped shelf). Also
+  // stashes it on window.__lastLibraryEntry so it can be read back for tooling.
+  const copyLibraryEntry = () => {
+    try {
+      const start = JSON.parse(JSON.stringify(state));
+      delete start.phantomPop;
+      const slug = (authorText.title || 'scenario').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'scenario';
+      const entry = {
+        id: slug,
+        title: authorText.title || 'Library Scenario',
+        symptom: authorText.symptom || 'Sort out the system.',
+        hint: authorText.hint || '',
+        solution: authorText.solution || 'Scenario complete.',
+        conditions: authorGoal || [],
+        start,
+      };
+      window.__lastLibraryEntry = entry;
+      const text = JSON.stringify(entry, null, 2);
+      try { navigator.clipboard.writeText(text); } catch (e) {}
+      flashAuthorMsg('Library entry copied (id "' + slug + '"). Paste it into window.SCENARIO_LIBRARY in content.js.');
+    } catch (e) { flashAuthorMsg('Could not build the library entry.'); }
+  };
 
   // Gesture-level move counting. Diff consecutive states and attribute the
   // change to a control key; repeated changes to the SAME control inside a
@@ -6417,7 +6468,7 @@ function App() {
       <FaultCatalog open={catalogOpen} onClose={() => setCatalogOpen(false)} tier={TIER}/>
       {AUTHOR_MODE && (
         <AuthorPanel text={authorText} setText={setAuthorText} goal={authorGoal}
-          onCapture={captureGoal} onClearGoal={() => setAuthorGoal(null)} onCopy={copyScenarioLink} msg={authorMsg}/>
+          onCapture={captureGoal} onClearGoal={() => setAuthorGoal(null)} onCopy={copyScenarioLink} onCopyEntry={copyLibraryEntry} msg={authorMsg}/>
       )}
       <TourOverlay open={tourOpen} onClose={dismissTour}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
@@ -6469,7 +6520,9 @@ function App() {
             <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700 }}>🔒 MEMBERS ONLY</div>
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-              {pitchFor.isFeedbackMode
+              {pitchFor.isLibrary
+                ? 'The Scenario Library is a growing shelf of real-world situations, each one a specific show that went sideways and the exact board behind it. Members can browse and play the whole library, and it keeps growing. Some land as free links in the videos; the full shelf is part of the membership.'
+                : pitchFor.isFeedbackMode
                 ? 'Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Every rep is a new wedge with a new ring profile.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
                 ? 'That\'s your ' + FREE_PRACTICE_LIMIT + ' free reps. You felt it: the band is playing, something is broken, and every rep hides a new fault in a new place. Members keep going with no limit, stack two or three faults at once, and train until troubleshooting is reflex. There\'s always a next rep.'
@@ -6519,7 +6572,7 @@ function App() {
                         onGoEssentials={(level.isCustom && TIER !== 'member') ? () => loadLevel(0) : null}
                         practiceFreeLeft={(level.isPractice && TIER !== 'member') ? freeRepsLeft : null}
                         onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}
-                        debrief={(level.isChallenge && !level.isCustom) ? {
+                        debrief={(level.isChallenge && !level.isCustom && !level.isLibrary) ? {
                           moves: movesRef.current,
                           par: level.isPractice ? (practiceInfoRef.current ? practiceInfoRef.current.par : null) : level.par,
                           hints: hintsUsedRef.current,
@@ -6732,7 +6785,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                       onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
                       onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
                       <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', width: 24 }}>
-                        {(l.isPractice || l.isFeedbackMode) ? '∞' : String(i + 1).padStart(2, '0')}
+                        {(l.isPractice || l.isFeedbackMode) ? '∞' : l.isLibrary ? '◆' : String(i + 1).padStart(2, '0')}
                       </div>
                       <div style={{ flex: 1, fontSize: 12, textAlign: 'left' }}>
                         {l.isPractice ? l.title + ' · endless reps' : l.isFeedbackMode ? l.title + ' · ring-out training' : l.title}
@@ -7091,7 +7144,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
       boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 4px 14px rgba(0,0,0,0.5), 0 0 30px rgba(74,222,128,0.15)',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>{(debrief && debrief.zeroFault) ? '✓ GOOD CALL · NOTHING BROKEN' : (debrief && debrief.goalLabel) ? '✓ DONE' : level.isCustom ? '✓ DONE' : level.task ? '✓ TASK COMPLETE' : '✓ MIX RESTORED'}</div>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>{(debrief && debrief.zeroFault) ? '✓ GOOD CALL · NOTHING BROKEN' : (debrief && debrief.goalLabel) ? '✓ DONE' : (level.isCustom || level.isLibrary) ? '✓ DONE' : level.task ? '✓ TASK COMPLETE' : '✓ MIX RESTORED'}</div>
         <div className="display" style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.1 }}>{level.title}</div>
       </div>
       {/* Challenges get a DEBRIEF instead of the answer key: how many moves
@@ -7157,7 +7210,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
         )
       ) : (
         <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-          <span style={{ color: 'var(--green)', fontWeight: 600 }}>{(level.task || level.isCustom) ? 'Recap: ' : 'Fix: '}</span>{level.solution}
+          <span style={{ color: 'var(--green)', fontWeight: 600 }}>{(level.task || level.isCustom || level.isLibrary) ? 'Recap: ' : 'Fix: '}</span>{level.solution}
         </div>
       )}
       {Array.isArray(coaching) && coaching.length > 0 && (
@@ -7170,10 +7223,11 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           ))}
         </div>
       )}
-      {level.isCustom ? (
-        /* A custom scenario has no "next". For a free viewer who arrived from a
-           YouTube link, the real next step is the full Essentials course, so
-           that's the primary button; running it again is secondary. */
+      {(level.isCustom || level.isLibrary) ? (
+        /* A custom or library scenario has no "next". For a free viewer who
+           arrived from a YouTube link, the real next step is the full Essentials
+           course, so that's the primary button (custom only); otherwise running
+           it again is the action. */
         <>
           {onGoEssentials && (
             <button onClick={onGoEssentials} className="mono ui-no-select" style={{
