@@ -86,7 +86,7 @@
 //   6 DI Boxes            - passive (no power) + active (+48V)
 //   7 Monitor Mix         - send a wedge mix
 //   8 Feedback Awareness  - keep the monitor loop under control
-//   9 The Gig             - final exam: full line check from a cold start
+//   9 The Gig             - final exam: full pre-show check from a cold start
 //                           (speakers verified with playback, then the band)
 //  10 Power-Down          - zero the console, then shut down in the right order
 // The early levels build on each other (each starts where the last ended).
@@ -463,8 +463,9 @@ window.LEVELS = [
     id: 9,
     title: 'The Gig',
     // FINAL EXAM. Everything from Levels 1-7 performed start to finish from a
-    // cold venue, with no new skills. This is a LINE CHECK, the objective
-    // version of soundcheck: nobody judges the blend, the student proves every
+    // cold venue, with no new skills. The objective version of soundcheck:
+    // prove every speaker passes signal, then line-check every input. Nobody
+    // judges the blend, the student proves every
     // signal arrives clean. Win = power-on order (requirePowerOn) + every
     // speaker TESTED with playback (verifyEach latches each one, exactly like
     // Test the Wedges — playback is a checking tool, so it can and should be
@@ -522,7 +523,7 @@ window.LEVELS = [
       }
       return s;
     },
-    solution: 'The whole setup, start to finish: power in order, every speaker tested with playback, every input checked in PFL and brought up clean, and the singer hearing herself in her wedge. That was a full line check. This is the job.',
+    solution: 'The whole setup, start to finish: power in order, every speaker proven with playback, every input line checked in PFL and brought up clean, and the singer hearing herself in her wedge. That is the job, top to bottom.',
     defaultInspect: 'pa',
   },
   {
@@ -699,7 +700,7 @@ for (const src of BAND_SOURCES) {
 
 // PRACTICE GOALS — the dynamic part. A practice rep isn't always "something is
 // broken, restore the full mix". Sometimes the call is a positive task: build a
-// monitor mix, fix the gain structure, run a line check. Each goal sets up its
+// monitor mix, fix the gain structure, check the speakers. Each goal sets up its
 // own start state and returns a `winSpec` — the win conditions plus the prompt
 // text — which the app merges over the base Practice scenario, so the same
 // engine that wins the lessons wins these. `apply(s, r)` mutates the band-up
@@ -747,10 +748,11 @@ window.PRACTICE_GOALS = [
     },
   },
   {
-    key: 'line-check', label: 'Run a line check', par: 3,
+    key: 'speaker-check', label: 'Check the speakers', par: 3,
     apply: (s) => {
       // Quiet stage before the band: use the playback to prove every speaker is
-      // passing signal, the PA and both wedges, one at a time.
+      // passing signal, the PA and both wedges, one at a time. This checks the
+      // OUTPUTS — it is NOT a line check (a line check verifies the inputs).
       for (let i = 0; i < 4; i++) { s.channels[i].mute = true; }
       s.channels[4].mute = false; s.channels[4].gain = 0.5; s.channels[4].fader = 0.75; s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
       s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.6 };
@@ -762,10 +764,10 @@ window.PRACTICE_GOALS = [
           { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 passes signal' },
           { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 passes signal' },
         ],
-        symptom: 'Line check before the band loads in. Use the playback to prove every speaker is passing signal: the PA and both wedges. Each one checks off the moment it plays.',
-        title: 'Line Check',
+        symptom: 'Before the band loads in, confirm every speaker is passing signal: the PA and both wedges. Send the playback to each one. They check off as they play.',
+        title: 'Check the Speakers',
         hint: 'Send the playback to the PA on its fader, then open AUX 1 for Wedge 1 and AUX 2 for Wedge 2. Each speaker checks off once it plays, so you can move on.',
-        solution: 'Playback sent to the PA and both wedges: every speaker proven to pass signal. That is a line check.',
+        solution: 'Playback sent to the PA and both wedges: every speaker proven to pass signal, before a single input matters.',
       };
     },
   },
@@ -797,7 +799,7 @@ window.PRACTICE = {
       return s; // bandUp() already left it healthy
     }
     // Sometimes the call is a positive task, not a fault: build a monitor mix,
-    // fix the gain, run a line check. These ignore the FAULTS count (a task is
+    // fix the gain, check the speakers. These ignore the FAULTS count (a task is
     // a task), carry their own win conditions + prompt text (winSpec), and make
     // Practice train the whole job instead of only diagnosis.
     const GOAL_TASK_CHANCE = 0.25;

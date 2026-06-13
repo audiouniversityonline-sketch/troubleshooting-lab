@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=33"></script>
+<script src="content.js?v=34"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -4977,7 +4977,7 @@ function App() {
 
   // The active scenario. A Practice rep can carry a per-rep GOAL (its win
   // conditions + prompt text) in PRACTICE_LAST.winSpec — that's how Practice
-  // does varied goals (build a monitor mix, gain-stage, line check) instead of
+  // does varied goals (build a monitor mix, gain-stage, speaker check) instead of
   // always "restore the full mix", and how a custom authored scenario sets its
   // own goal. Merging winSpec over the base level means every downstream read
   // (win checks, objective list, brief text) picks it up with no other change.
@@ -6791,7 +6791,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
               {debrief.rep != null && <> That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} rep{debrief.rep === 1 ? '' : 's'}</b> finished.</>}
             </div>
             <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
-              Building monitor mixes, setting gain, running line checks: the job is a lot more than chasing faults.
+              Building monitor mixes, setting gain, checking the speakers: the job is a lot more than chasing faults.
             </div>
           </div>
         ) : debrief.zeroFault ? (
