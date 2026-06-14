@@ -815,7 +815,7 @@ window.PRACTICE_GOALS = [
 window.PRACTICE = {
   id: 'practice',
   title: 'Practice Mode',
-  symptom: 'The band is mid-show and something is wrong with the sound. Find what is broken and fix it, without popping anything. The FAULTS selector in the top bar sets how many things are broken at once.',
+  symptom: 'The band is mid-show and something is wrong with the sound. Find what is broken and fix it, without popping anything.',
   hint: 'Walk the signal path and watch where the meters stop: source, cable, gain, mute, fader, master, speaker. Check the quick things first, and close the path before you touch a cable or +48V (mute the channel, or pull the master down). If a wedge rings, cut the glowing band on its monitor EQ.',
   conditions: PRACTICE_CONDITIONS,
   involves: [1, 2, 3, 4],

@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=41"></script>
+<script src="content.js?v=42"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -7147,6 +7147,20 @@ function App() {
     const idx = SCENARIOS.findIndex((s) => s.isPractice);
     if (idx >= 0) loadLevel(idx);
   };
+  // Start a Practice rep at a chosen fault count, or toggle Live Show on the
+  // way in. These let the difficulty + Live Show controls live in the practice
+  // panel instead of cluttering the top bar.
+  const practiceAtFaults = (n) => {
+    focusRef.current = null; drillFocusRef.current = null;
+    practiceFaultsRef.current = n; setPracticeFaultsState(n);
+    const idx = SCENARIOS.findIndex((s) => s.isPractice);
+    if (idx >= 0) loadLevel(idx);
+  };
+  const practiceLive = (v) => {
+    liveShowRef.current = !!v; setLiveShowState(!!v); dropoutsRef.current = 0; setDropouts(0);
+    const idx = SCENARIOS.findIndex((s) => s.isPractice);
+    if (idx >= 0) loadLevel(idx);
+  };
   // Fault-freshness coverage for the picker + debrief (members only). Recomputed
   // each render from the live ledger, so it reflects the rep just solved.
   const coverage = (TIER === 'member') ? coverageFrom(profileRef.current.ledger, window.PRACTICE_FAULTS) : null;
@@ -7356,6 +7370,7 @@ function App() {
         rank={rank} rankClean={rankClean} onTrainRank={(TIER === 'member' && !repShareFree) ? trainRank : null}
         liveShow={liveShow} onSetLiveShow={(TIER === 'member' && !repShareFree) ? toggleLiveShow : null}
         coverage={coverage} onPracticeFocus={(TIER === 'member' && !repShareFree) ? practiceWhatNeedsIt : null}
+        onPracticeFaults={(TIER === 'member' && !repShareFree) ? practiceAtFaults : null} onPracticeLive={(TIER === 'member' && !repShareFree) ? practiceLive : null}
       />
 
       <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
@@ -7608,7 +7623,7 @@ function App() {
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, coverage, onPracticeFocus }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, coverage, onPracticeFocus, onPracticeFaults, onPracticeLive }) {
   const [picker, setPicker] = uS(false);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
   // column width, so this is the reliable "use my whole screen" path: it puts
@@ -7663,15 +7678,12 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           </div>
           {picker && (
             <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8, background: '#16161a', border: '1px solid #38383e', borderRadius: 6, padding: 6, zIndex: 50, minWidth: 340, boxShadow: '0 12px 32px rgba(0,0,0,0.6)', maxHeight: '70vh', overflow: 'auto' }}>
-              {/* YOUR PRACTICE — the freshness headline: how many fault types the
-                  member can currently handle cleanly, how many need practice, and
-                  one click to drill the weak ones. Computed from the ledger; zero
-                  authoring. Replaces the old rank strip. */}
+              {/* YOUR PRACTICE — the freshness headline plus practice setup. The
+                  count + what-needs-practice come from the ledger; the buttons
+                  start a Practice rep, so difficulty and Live Show live here
+                  instead of cluttering the top bar. */}
               {coverage && (
-                <div onClick={(e) => { e.stopPropagation(); if (onPracticeFocus) onPracticeFocus(); setPicker(false); }} className="ui-no-select"
-                  style={{ padding: '9px 11px 10px', borderRadius: 4, cursor: 'pointer', borderBottom: '1px solid #2a2a2e', marginBottom: 2 }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                <div className="ui-no-select" style={{ padding: '9px 11px 11px', borderBottom: '1px solid #2a2a2e', marginBottom: 2 }}>
                   <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700, marginBottom: 7, textAlign: 'left' }}>YOUR PRACTICE</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <div style={{ flex: 1, height: 6, background: '#1a1a1d', borderRadius: 999, overflow: 'hidden', border: '1px solid #2a2a2e' }}>
@@ -7679,13 +7691,47 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                     </div>
                     <span className="mono" style={{ fontSize: 10, color: 'var(--ink)', fontWeight: 800, whiteSpace: 'nowrap' }}>{coverage.solid} / {coverage.total}</span>
                   </div>
-                  <div style={{ fontSize: 10.5, color: 'var(--ink-2)', lineHeight: 1.35, textAlign: 'left' }}>
+                  <div style={{ fontSize: 10.5, color: 'var(--ink-2)', lineHeight: 1.35, textAlign: 'left', marginBottom: 8 }}>
                     {coverage.needs.length === 0
-                      ? <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>every fault</b>. Keep them current. →</>
-                      : <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b> faults. <b style={{ color: 'var(--accent)' }}>{coverage.needs.length}</b> need practice. →</>}
+                      ? <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>every fault</b>. Keep them current.</>
+                      : <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b> faults. <b style={{ color: 'var(--accent)' }}>{coverage.needs.length}</b> need practice.</>}
                   </div>
+                  {onPracticeFocus && (
+                    <button onClick={(e) => { e.stopPropagation(); onPracticeFocus(); setPicker(false); }} className="mono ui-no-select" style={{
+                      width: '100%', padding: '7px 10px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6,
+                      background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+                      border: '1px solid #2c9d52', borderRadius: 4, cursor: 'pointer', marginBottom: 8,
+                    }}>▶ PRACTICE WHAT NEEDS IT</button>
+                  )}
+                  {(onPracticeFaults || onPracticeLive) && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {onPracticeFaults && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>OR</span>
+                          {[1, 2, 3].map(n => (
+                            <button key={n} onClick={(e) => { e.stopPropagation(); onPracticeFaults(n); setPicker(false); }} className="mono ui-no-select" title={n + ' fault' + (n === 1 ? '' : 's') + ' at once'} style={{
+                              ...navBtn, padding: '4px 9px', fontWeight: 800,
+                              background: practiceFaults === n ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d',
+                              color: practiceFaults === n ? '#0a0a0c' : 'var(--ink-2)',
+                              borderColor: practiceFaults === n ? '#2c5d9e' : '#38383e',
+                            }}>{n}</button>
+                          ))}
+                          <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, fontWeight: 700 }}>FAULTS</span>
+                        </div>
+                      )}
+                      {onPracticeLive && (
+                        <button onClick={(e) => { e.stopPropagation(); onPracticeLive(!liveShow); setPicker(false); }} className="mono ui-no-select"
+                          title="Live Show: the audience is listening, so muting a channel or pulling the master is a dropout. PFL into the cans stays free." style={{
+                          ...navBtn, padding: '4px 9px', fontWeight: 800, marginLeft: 'auto',
+                          background: liveShow ? 'linear-gradient(180deg, #d8473f, #a8322b)' : '#1a1a1d',
+                          color: liveShow ? '#fff' : 'var(--ink-2)',
+                          borderColor: liveShow ? '#a8322b' : '#38383e',
+                        }}>{liveShow ? '🔴 LIVE SHOW' : 'LIVE SHOW'}</button>
+                      )}
+                    </div>
+                  )}
                   {coverage.lastPracticedDays != null && (
-                    <div style={{ fontSize: 9, color: 'var(--ink-3)', textAlign: 'left', marginTop: 3 }}>
+                    <div style={{ fontSize: 9, color: 'var(--ink-3)', textAlign: 'left', marginTop: 8 }}>
                       {coverage.lastPracticedDays === 0 ? 'Practiced today' : 'Last practiced ' + coverage.lastPracticedDays + ' day' + (coverage.lastPracticedDays === 1 ? '' : 's') + ' ago'}
                     </div>
                   )}
@@ -7741,33 +7787,8 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         <button onClick={onNext} disabled={levelIdx + 1 >= totalLevels} className="mono ui-no-select" style={navBtn}>→</button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* FAULTS difficulty — Practice Mode only. How many faults each rep
-            hides; changing it re-rolls the rep at the new count. */}
-        {level.isPractice && onSetPracticeFaults && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }}>
-            <div className="mono" title="How many faults each practice rep hides" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>FAULTS</div>
-            {[1, 2, 3].map(n => (
-              <button key={n} onClick={() => onSetPracticeFaults(n)} className="mono ui-no-select" style={{
-                ...navBtn, padding: '6px 10px', fontWeight: 800,
-                background: practiceFaults === n ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d',
-                color: practiceFaults === n ? '#0a0a0c' : 'var(--ink-2)',
-                borderColor: practiceFaults === n ? '#2c5d9e' : '#38383e',
-              }}>{n}</button>
-            ))}
-          </div>
-        )}
-        {/* LIVE SHOW — Practice Mode, members. "The room is listening": muting a
-            channel or pulling the master is a dropout the audience hears, so the
-            engineer has to diagnose with PFL and the meters instead. */}
-        {level.isPractice && onSetLiveShow && (
-          <button onClick={() => onSetLiveShow(!liveShow)} className="mono ui-no-select"
-            title="Live Show: the audience is listening. Muting a channel or pulling the master is a dropout the room hears. PFL into the cans stays free." style={{
-            ...navBtn, padding: '6px 10px', fontWeight: 800, marginRight: 4,
-            background: liveShow ? 'linear-gradient(180deg, #d8473f, #a8322b)' : '#1a1a1d',
-            color: liveShow ? '#fff' : 'var(--ink-2)',
-            borderColor: liveShow ? '#a8322b' : '#38383e',
-          }}>{liveShow ? '🔴 LIVE SHOW' : 'LIVE SHOW'}</button>
-        )}
+        {/* Practice difficulty + Live Show moved into the "your practice" panel
+            in the picker, to keep the top bar clean. */}
         {/* Ring-out difficulty — Feedback Mode only. Guided glows the ringing
             band; By Ear hides it so the engineer finds the frequency by ear. */}
         {level.isFeedbackMode && onSetFeedbackByEar && (
