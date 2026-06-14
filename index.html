@@ -7650,6 +7650,10 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
   // allow="fullscreen", which the embed snippet sets). Combined with the
   // raised scale cap, the board fills a big monitor when fullscreen.
   const [isFs, setIsFs] = uS(typeof document !== 'undefined' && !!document.fullscreenElement);
+  // Once a member has run the whole Essentials arc, those 10 lesson rows are
+  // clutter on the way to their real home (practice), so they collapse to a
+  // single "revisit" row. Default collapsed; a click expands them back.
+  const [essentialsOpen, setEssentialsOpen] = uS(false);
   uE(() => {
     const onFs = () => setIsFs(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFs);
@@ -7665,6 +7669,72 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
       }
     } catch (e) {}
   };
+  // The Essentials lessons all share the LEARN band. A member has "passed" once
+  // every one is complete; free users (still learning the procedure) never
+  // collapse. essentialsCollapsed hides the individual rows behind one toggle.
+  const learnScenarios = SCENARIOS.filter(l => bandOf(l) === 'LEARN');
+  const passedEssentials = TIER === 'member' && learnScenarios.length > 0 && learnScenarios.every(l => completed[l.id]);
+  const essentialsCollapsed = passedEssentials && !essentialsOpen;
+  // The freshness panel ("what needs practice") now renders INSIDE the DRILL
+  // group, directly above Practice Mode, so the practice path reads as one
+  // block instead of floating above the whole list. Members only (coverage set).
+  const practicePanel = coverage ? (
+    <div className="ui-no-select" style={{ padding: '2px 11px 10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <div style={{ flex: 1, height: 6, background: '#1a1a1d', borderRadius: 999, overflow: 'hidden', border: '1px solid #2a2a2e' }}>
+          <div style={{ width: (coverage.total ? Math.round(coverage.solid / coverage.total * 100) : 0) + '%', height: '100%', background: 'var(--green)' }}/>
+        </div>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--ink)', fontWeight: 800, whiteSpace: 'nowrap' }}>{coverage.solid} / {coverage.total}</span>
+      </div>
+      <div style={{ fontSize: 10.5, color: 'var(--ink-2)', lineHeight: 1.35, textAlign: 'left', marginBottom: 6 }}>
+        {coverage.needs.length === 0
+          ? <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>every fault type</b>. Keep them current.</>
+          : <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b> fault types. <b style={{ color: 'var(--accent)' }}>{coverage.needs.length}</b> need practice.</>}
+      </div>
+      <div style={{ fontSize: 9, color: 'var(--ink-3)', lineHeight: 1.35, textAlign: 'left', marginBottom: 8 }}>
+        Fix a fault on your own, no hint, and it turns solid. Solid faults slip back to needs-practice after a few weeks, so a little practice keeps them up.
+      </div>
+      {onPracticeFocus && (
+        <button onClick={(e) => { e.stopPropagation(); onPracticeFocus(); setPicker(false); }} className="mono ui-no-select" style={{
+          width: '100%', padding: '7px 10px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6,
+          background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+          border: '1px solid #2c9d52', borderRadius: 4, cursor: 'pointer', marginBottom: 8,
+        }}>▶ PRACTICE WHAT NEEDS IT</button>
+      )}
+      {(onPracticeFaults || onPracticeLive) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {onPracticeFaults && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>OR</span>
+              {[1, 2, 3].map(n => (
+                <button key={n} onClick={(e) => { e.stopPropagation(); onPracticeFaults(n); setPicker(false); }} className="mono ui-no-select" title={n + ' fault' + (n === 1 ? '' : 's') + ' at once'} style={{
+                  ...navBtn, padding: '4px 9px', fontWeight: 800,
+                  background: practiceFaults === n ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d',
+                  color: practiceFaults === n ? '#0a0a0c' : 'var(--ink-2)',
+                  borderColor: practiceFaults === n ? '#2c5d9e' : '#38383e',
+                }}>{n}</button>
+              ))}
+              <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, fontWeight: 700 }}>FAULTS</span>
+            </div>
+          )}
+          {onPracticeLive && (
+            <button onClick={(e) => { e.stopPropagation(); onPracticeLive(!liveShow); setPicker(false); }} className="mono ui-no-select"
+              title="Live Show: the audience is listening, so muting a channel or pulling the master is a dropout. PFL into the cans stays free." style={{
+              ...navBtn, padding: '4px 9px', fontWeight: 800, marginLeft: 'auto',
+              background: liveShow ? 'linear-gradient(180deg, #d8473f, #a8322b)' : '#1a1a1d',
+              color: liveShow ? '#fff' : 'var(--ink-2)',
+              borderColor: liveShow ? '#a8322b' : '#38383e',
+            }}>{liveShow ? '🔴 LIVE SHOW' : 'LIVE SHOW'}</button>
+          )}
+        </div>
+      )}
+      {coverage.lastPracticedDays != null && (
+        <div style={{ fontSize: 9, color: 'var(--ink-3)', textAlign: 'left', marginTop: 8 }}>
+          {coverage.lastPracticedDays === 0 ? 'Practiced today' : 'Last practiced ' + coverage.lastPracticedDays + ' day' + (coverage.lastPracticedDays === 1 ? '' : 's') + ' ago'}
+        </div>
+      )}
+    </div>
+  ) : null;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -7697,68 +7767,10 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           </div>
           {picker && (
             <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8, background: '#16161a', border: '1px solid #38383e', borderRadius: 6, padding: 6, zIndex: 50, minWidth: 340, boxShadow: '0 12px 32px rgba(0,0,0,0.6)', maxHeight: '70vh', overflow: 'auto' }}>
-              {/* YOUR PRACTICE — the freshness headline plus practice setup. The
-                  count + what-needs-practice come from the ledger; the buttons
-                  start a Practice rep, so difficulty and Live Show live here
-                  instead of cluttering the top bar. */}
-              {coverage && (
-                <div className="ui-no-select" style={{ padding: '9px 11px 11px', borderBottom: '1px solid #2a2a2e', marginBottom: 2 }}>
-                  <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700, marginBottom: 7, textAlign: 'left' }}>YOUR PRACTICE</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <div style={{ flex: 1, height: 6, background: '#1a1a1d', borderRadius: 999, overflow: 'hidden', border: '1px solid #2a2a2e' }}>
-                      <div style={{ width: (coverage.total ? Math.round(coverage.solid / coverage.total * 100) : 0) + '%', height: '100%', background: 'var(--green)' }}/>
-                    </div>
-                    <span className="mono" style={{ fontSize: 10, color: 'var(--ink)', fontWeight: 800, whiteSpace: 'nowrap' }}>{coverage.solid} / {coverage.total}</span>
-                  </div>
-                  <div style={{ fontSize: 10.5, color: 'var(--ink-2)', lineHeight: 1.35, textAlign: 'left', marginBottom: 6 }}>
-                    {coverage.needs.length === 0
-                      ? <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>every fault type</b>. Keep them current.</>
-                      : <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b> fault types. <b style={{ color: 'var(--accent)' }}>{coverage.needs.length}</b> need practice.</>}
-                  </div>
-                  <div style={{ fontSize: 9, color: 'var(--ink-3)', lineHeight: 1.35, textAlign: 'left', marginBottom: 8 }}>
-                    Fix a fault on your own, no hint, and it turns solid. Solid faults slip back to needs-practice after a few weeks, so a little practice keeps them up.
-                  </div>
-                  {onPracticeFocus && (
-                    <button onClick={(e) => { e.stopPropagation(); onPracticeFocus(); setPicker(false); }} className="mono ui-no-select" style={{
-                      width: '100%', padding: '7px 10px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6,
-                      background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
-                      border: '1px solid #2c9d52', borderRadius: 4, cursor: 'pointer', marginBottom: 8,
-                    }}>▶ PRACTICE WHAT NEEDS IT</button>
-                  )}
-                  {(onPracticeFaults || onPracticeLive) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      {onPracticeFaults && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>OR</span>
-                          {[1, 2, 3].map(n => (
-                            <button key={n} onClick={(e) => { e.stopPropagation(); onPracticeFaults(n); setPicker(false); }} className="mono ui-no-select" title={n + ' fault' + (n === 1 ? '' : 's') + ' at once'} style={{
-                              ...navBtn, padding: '4px 9px', fontWeight: 800,
-                              background: practiceFaults === n ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d',
-                              color: practiceFaults === n ? '#0a0a0c' : 'var(--ink-2)',
-                              borderColor: practiceFaults === n ? '#2c5d9e' : '#38383e',
-                            }}>{n}</button>
-                          ))}
-                          <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, fontWeight: 700 }}>FAULTS</span>
-                        </div>
-                      )}
-                      {onPracticeLive && (
-                        <button onClick={(e) => { e.stopPropagation(); onPracticeLive(!liveShow); setPicker(false); }} className="mono ui-no-select"
-                          title="Live Show: the audience is listening, so muting a channel or pulling the master is a dropout. PFL into the cans stays free." style={{
-                          ...navBtn, padding: '4px 9px', fontWeight: 800, marginLeft: 'auto',
-                          background: liveShow ? 'linear-gradient(180deg, #d8473f, #a8322b)' : '#1a1a1d',
-                          color: liveShow ? '#fff' : 'var(--ink-2)',
-                          borderColor: liveShow ? '#a8322b' : '#38383e',
-                        }}>{liveShow ? '🔴 LIVE SHOW' : 'LIVE SHOW'}</button>
-                      )}
-                    </div>
-                  )}
-                  {coverage.lastPracticedDays != null && (
-                    <div style={{ fontSize: 9, color: 'var(--ink-3)', textAlign: 'left', marginTop: 8 }}>
-                      {coverage.lastPracticedDays === 0 ? 'Practiced today' : 'Last practiced ' + coverage.lastPracticedDays + ' day' + (coverage.lastPracticedDays === 1 ? '' : 's') + ' ago'}
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* The "your practice" freshness panel used to sit here at the top;
+                  it now renders inside the DRILL group (right above Practice
+                  Mode) via `practicePanel`, so the practice path reads as one
+                  block instead of floating over the whole list. */}
               {(() => { window.__pickerPrevBand = null; return null; })()}
               {SCENARIOS.map((l, i) => {
                 // Practice Mode is soft-gated: while free reps remain it shows a
@@ -7771,6 +7783,9 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                 window.__pickerPrevBand = band;
                 const bandMeta = SCENARIO_BANDS.find(b => b.id === band) || { label: band, member: false };
                 const first = i === 0;
+                // A passed member's Essentials rows fold behind one toggle; the
+                // individual lesson rows are hidden until they choose to revisit.
+                const learnRowHidden = band === 'LEARN' && essentialsCollapsed;
                 return (
                   <React.Fragment key={l.id}>
                     {newBand && (
@@ -7778,9 +7793,25 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                         <div className="mono" style={{ padding: first ? '5px 10px 3px' : '8px 10px 3px', fontSize: 8.5, color: bandMeta.member ? 'var(--accent)' : 'var(--ink-3)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left', borderTop: first ? 'none' : '1px solid #2a2a2e', marginTop: first ? 0 : 4 }}>
                           {bandMeta.label}{bandMeta.member ? (TIER !== 'member' ? ' · MEMBERS · 🔒' : ' · MEMBERS') : ' · FREE'}
                         </div>
-                        {bandMeta.desc && <div style={{ padding: '0 10px 4px', fontSize: 9.5, color: 'var(--ink-3)', textAlign: 'left', lineHeight: 1.3 }}>{bandMeta.desc}</div>}
+                        {bandMeta.desc && !learnRowHidden && <div style={{ padding: '0 10px 4px', fontSize: 9.5, color: 'var(--ink-3)', textAlign: 'left', lineHeight: 1.3 }}>{bandMeta.desc}</div>}
+                        {/* Essentials, once passed, collapse to a single revisit toggle. */}
+                        {band === 'LEARN' && passedEssentials && (
+                          <div onClick={(e) => { e.stopPropagation(); setEssentialsOpen(o => !o); }} className="ui-no-select"
+                            style={{ padding: '6px 10px', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                            <div className="mono" style={{ fontSize: 11, color: 'var(--green)', width: 24, textAlign: 'center' }}>✓</div>
+                            <div style={{ flex: 1, textAlign: 'left', fontSize: 11, color: 'var(--ink-2)' }}>
+                              {essentialsOpen ? 'Hide the lessons' : 'All ' + learnScenarios.length + ' lessons done. Revisit any time.'}
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>{essentialsOpen ? '▴' : '▾'}</div>
+                          </div>
+                        )}
+                        {/* The practice path lives here: freshness panel, then the modes. */}
+                        {band === 'DRILL' && practicePanel}
                       </React.Fragment>
                     )}
+                    {!learnRowHidden && (
                     <div onClick={(e) => { e.stopPropagation(); onPick(i); setPicker(false); }} className="ui-no-select"
                       style={{ padding: '6px 10px', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: i === levelIdx ? '#2a2a2e' : 'transparent', opacity: locked ? 0.6 : 1 }}
                       onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
@@ -7796,6 +7827,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                         : softFree ? <div className="mono" style={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.6, color: 'var(--green)', border: '1px solid var(--green)', borderRadius: 3, padding: '1px 4px' }}>{practiceFreeLeft} FREE</div>
                         : (completed[l.id] && <div style={{ color: 'var(--green)', fontSize: 12 }}>✓</div>)}
                     </div>
+                    )}
                   </React.Fragment>
                 );
               })}
