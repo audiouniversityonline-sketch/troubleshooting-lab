@@ -865,7 +865,11 @@ window.PRACTICE = {
       // analog (or before it's set), these are skipped so a player is never
       // handed a fault they have no way to reach.
       if (f.digital && window.PRACTICE_SURFACE !== 'digital') continue;
-      const w = f.weight || 1;
+      // "Practice what needs it" biases the draw toward the fault types the
+      // member is rusty on (window.PRACTICE_FOCUS, set by the app from the
+      // freshness ledger). Unset = an even draw across the pool.
+      let w = f.weight || 1;
+      if (Array.isArray(window.PRACTICE_FOCUS) && window.PRACTICE_FOCUS.indexOf(f.key) !== -1) w += 4;
       for (let i = 0; i < w; i++) pool.push(f);
     }
     let par = 0;
