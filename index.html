@@ -5997,13 +5997,22 @@ function App() {
     // zero-fault rep par is 0, so clean means you touched nothing and signed
     // off once, correctly.
     const clean = hints === 0 && moves <= par && falseSignoffs === 0;
+    // "Solid" on the coverage meter asks a softer, reachable question than the
+    // at-par "clean" badge: did you fix it on your own, no hint, no premature
+    // sign-off? Diagnosing a fault means soloing and nudging to find it, so an
+    // honest solve usually runs a move or two over par. Gating "solid" on
+    // at-or-under-par (par is 1 for most fault types) made the meter unreachable
+    // in normal use — you could grind reps forever and stay at 0. Par stays on
+    // as the sharpness number (overPar) in the stats panel and the debrief.
+    const solvedUnaided = hints === 0 && falseSignoffs === 0;
     const prof = profileRef.current || defaultProfile();
     const ledger = { ...(prof.ledger || {}) };
     const now = Date.now();
     for (const key of keys) {
       const e = ledger[key] ? { ...ledger[key] } : { reps: 0, clean: 0, overPar: 0, hints: 0, last: 0 };
       e.reps += 1;
-      if (clean) { e.clean += 1; e.lastClean = now; }
+      if (clean) e.clean += 1;
+      if (solvedUnaided) e.lastClean = now;
       e.overPar += overPar;
       e.hints += hints;
       e.last = now;
@@ -7500,6 +7509,7 @@ function App() {
                           par: level.isPractice ? (practiceInfoRef.current ? practiceInfoRef.current.par : null) : level.par,
                           hints: hintsUsedRef.current,
                           faults: level.isPractice ? (practiceInfoRef.current && practiceInfoRef.current.faults ? practiceInfoRef.current.faults.length : practiceFaults) : null,
+                          faultKeys: (level.isPractice && practiceInfoRef.current && Array.isArray(practiceInfoRef.current.faults)) ? practiceInfoRef.current.faults : null,
                           rep: level.isPractice ? reps : null,
                           zeroFault: !!(level.isPractice && practiceInfoRef.current && practiceInfoRef.current.zeroFault),
                           goalLabel: (level.isPractice && practiceInfoRef.current && practiceInfoRef.current.goalKey) ? practiceInfoRef.current.goalLabel : null,
@@ -7700,10 +7710,13 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                     </div>
                     <span className="mono" style={{ fontSize: 10, color: 'var(--ink)', fontWeight: 800, whiteSpace: 'nowrap' }}>{coverage.solid} / {coverage.total}</span>
                   </div>
-                  <div style={{ fontSize: 10.5, color: 'var(--ink-2)', lineHeight: 1.35, textAlign: 'left', marginBottom: 8 }}>
+                  <div style={{ fontSize: 10.5, color: 'var(--ink-2)', lineHeight: 1.35, textAlign: 'left', marginBottom: 6 }}>
                     {coverage.needs.length === 0
-                      ? <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>every fault</b>. Keep them current.</>
-                      : <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b> faults. <b style={{ color: 'var(--accent)' }}>{coverage.needs.length}</b> need practice.</>}
+                      ? <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>every fault type</b>. Keep them current.</>
+                      : <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b> fault types. <b style={{ color: 'var(--accent)' }}>{coverage.needs.length}</b> need practice.</>}
+                  </div>
+                  <div style={{ fontSize: 9, color: 'var(--ink-3)', lineHeight: 1.35, textAlign: 'left', marginBottom: 8 }}>
+                    Fix a fault on your own, no hint, and it turns solid. Solid faults slip back to needs-practice after a few weeks, so a little practice keeps them up.
                   </div>
                   {onPracticeFocus && (
                     <button onClick={(e) => { e.stopPropagation(); onPracticeFocus(); setPicker(false); }} className="mono ui-no-select" style={{
@@ -8253,17 +8266,37 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           </div>
         </div>
       )}
-      {/* Practice progress — how many fault types the member can currently
-          handle cleanly (the same number the picker shows). Encouraging and
-          honest; replaces the rank-up banner. */}
+      {/* Practice progress — responds to the rep just finished. A clean solve
+          (no hint, no premature sign-off) marks the fault type solid and the
+          number ticks up; a hint-assisted solve says so and tells you how to
+          earn it. This is the feedback loop that makes the meter legible: the
+          player sees exactly why "X of N" did or didn't move. */}
       {level.isPractice && coverage && practiceFreeLeft == null && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, borderTop: '1px solid rgba(74,222,128,0.18)', paddingTop: 5 }}>
           <div className="mono" style={{ fontSize: 8, color: 'var(--accent)', letterSpacing: 1.2, fontWeight: 700 }}>YOUR PRACTICE</div>
-          <div style={{ fontSize: 9, color: 'var(--ink-3)', lineHeight: 1.4 }}>
-            {coverage.needs.length === 0
-              ? <>You can cleanly handle <b style={{ color: 'var(--green)' }}>every fault</b>. Keep them current.</>
-              : <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b> faults. <b style={{ color: 'var(--accent)' }}>{coverage.needs.length}</b> still need practice.</>}
-          </div>
+          {(() => {
+            const fk = (debrief && Array.isArray(debrief.faultKeys)) ? debrief.faultKeys : null;
+            const unaided = debrief && debrief.hints === 0 && (debrief.falseSignoffs || 0) === 0;
+            if (fk && fk.length) {
+              const names = fk.map(faultLabel).join(' and ');
+              return unaided ? (
+                <div style={{ fontSize: 9, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+                  ✓ You handled <b style={{ color: 'var(--green)' }}>{names}</b> on your own, so it counts as solid. You can cleanly handle <b style={{ color: 'var(--green)' }}>{coverage.solid} of {coverage.total}</b> fault types now.
+                </div>
+              ) : (
+                <div style={{ fontSize: 9, color: 'var(--ink-2)', lineHeight: 1.4 }}>
+                  You fixed <b style={{ color: 'var(--ink)' }}>{names}</b> with a hint, so it still needs practice. Run it again with no hint and it turns solid. You're at <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b>.
+                </div>
+              );
+            }
+            return (
+              <div style={{ fontSize: 9, color: 'var(--ink-3)', lineHeight: 1.4 }}>
+                {coverage.needs.length === 0
+                  ? <>You can cleanly handle <b style={{ color: 'var(--green)' }}>every fault type</b>. Keep them current.</>
+                  : <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b> fault types. <b style={{ color: 'var(--accent)' }}>{coverage.needs.length}</b> still need practice.</>}
+              </div>
+            );
+          })()}
         </div>
       )}
       {(level.isCustom || level.isLibrary) ? (
