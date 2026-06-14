@@ -5041,11 +5041,20 @@ const FREE_PRACTICE_LIMIT = 3;
 // pointing bandOf() at it; the header shows up on its own. SHOW DAY lands here
 // when that mode ships.
 const SCENARIO_BANDS = [
-  { id: 'LEARN',   label: 'LEARN · THE ESSENTIALS',   member: false },
+  { id: 'LEARN',   label: 'LEARN · THE ESSENTIALS',   member: false, desc: 'Set up and run a full show, start to finish.' },
   { id: 'PLAY',    label: 'FREE PLAY',                member: false },
   { id: 'DRILL',   label: 'DRILL · ENDLESS REPS',     member: true },
-  { id: 'LIBRARY', label: 'SCENARIO LIBRARY',         member: true },
+  { id: 'LIBRARY', label: 'SCENARIO LIBRARY',         member: true, desc: 'Real situations pulled from real gigs.' },
 ];
+// One plain "what it trains" line per member mode, so the picker reads as a set
+// of training types, not a bare list. Library scenarios use their own titles +
+// the band line; lessons (LEARN) carry their own titles in sequence.
+function trainsBlurb(l) {
+  if (l.isPractice) return "The band's playing, something's broken. Endless reps.";
+  if (l.isFeedbackMode) return 'Ring out a wedge by ear: push it till it rings, find the frequency, cut it.';
+  if (l.isSandbox) return 'A full working system, nothing broken. Poke around with no clock.';
+  return null;
+}
 function bandOf(l) {
   if (l.isSandbox) return 'PLAY';      // free, no-goal exploration
   if (l.isLibrary) return 'LIBRARY';   // curated, browsable real-world scenarios
@@ -7752,9 +7761,12 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                 return (
                   <React.Fragment key={l.id}>
                     {newBand && (
-                      <div className="mono" style={{ padding: first ? '5px 10px 3px' : '8px 10px 3px', fontSize: 8.5, color: bandMeta.member ? 'var(--accent)' : 'var(--ink-3)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left', borderTop: first ? 'none' : '1px solid #2a2a2e', marginTop: first ? 0 : 4 }}>
-                        {bandMeta.label}{bandMeta.member ? (TIER !== 'member' ? ' · MEMBERS · 🔒' : ' · MEMBERS') : ' · FREE'}
-                      </div>
+                      <React.Fragment>
+                        <div className="mono" style={{ padding: first ? '5px 10px 3px' : '8px 10px 3px', fontSize: 8.5, color: bandMeta.member ? 'var(--accent)' : 'var(--ink-3)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left', borderTop: first ? 'none' : '1px solid #2a2a2e', marginTop: first ? 0 : 4 }}>
+                          {bandMeta.label}{bandMeta.member ? (TIER !== 'member' ? ' · MEMBERS · 🔒' : ' · MEMBERS') : ' · FREE'}
+                        </div>
+                        {bandMeta.desc && <div style={{ padding: '0 10px 4px', fontSize: 9.5, color: 'var(--ink-3)', textAlign: 'left', lineHeight: 1.3 }}>{bandMeta.desc}</div>}
+                      </React.Fragment>
                     )}
                     <div onClick={(e) => { e.stopPropagation(); onPick(i); setPicker(false); }} className="ui-no-select"
                       style={{ padding: '6px 10px', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: i === levelIdx ? '#2a2a2e' : 'transparent', opacity: locked ? 0.6 : 1 }}
@@ -7763,8 +7775,9 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                       <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', width: 24 }}>
                         {(l.isPractice || l.isFeedbackMode) ? '∞' : l.isSandbox ? '▶' : l.isLibrary ? '◆' : String(i + 1).padStart(2, '0')}
                       </div>
-                      <div style={{ flex: 1, fontSize: 12, textAlign: 'left' }}>
-                        {l.isPractice ? l.title + ' · endless reps' : l.isFeedbackMode ? l.title + ' · ring-out training' : l.isSandbox ? l.title + ' · no goal, just explore' : l.title}
+                      <div style={{ flex: 1, textAlign: 'left' }}>
+                        <div style={{ fontSize: 12 }}>{l.title}</div>
+                        {trainsBlurb(l) && <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.3, marginTop: 1 }}>{trainsBlurb(l)}</div>}
                       </div>
                       {locked ? <div style={{ fontSize: 11 }}>🔒</div>
                         : softFree ? <div className="mono" style={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.6, color: 'var(--green)', border: '1px solid var(--green)', borderRadius: 3, padding: '1px 4px' }}>{practiceFreeLeft} FREE</div>
@@ -7773,6 +7786,17 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
                   </React.Fragment>
                 );
               })}
+              {/* The digital desk is a surface toggle on the console, not a
+                  scenario, so it gets a "way to train" note rather than a row. */}
+              {TIER === 'member' && (
+                <div className="ui-no-select" style={{ marginTop: 2, padding: '7px 10px', borderTop: '1px solid #2a2a2e', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', width: 24, textAlign: 'center' }}>▦</div>
+                  <div style={{ flex: 1, textAlign: 'left' }}>
+                    <div style={{ fontSize: 12 }}>The digital desk</div>
+                    <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.3, marginTop: 1 }}>The same skills on a digital console. Flip any rep with the ANALOG / DIGITAL toggle.</div>
+                  </div>
+                </div>
+              )}
               {onOpenCatalog && (
                 <div onClick={(e) => { e.stopPropagation(); setPicker(false); onOpenCatalog(); }} className="mono ui-no-select"
                   style={{ marginTop: 4, padding: '7px 10px', borderTop: '1px solid #2a2a2e', fontSize: 9, color: 'var(--cool)', letterSpacing: 0.8, fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}
