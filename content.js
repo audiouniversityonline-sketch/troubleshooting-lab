@@ -826,6 +826,28 @@ window.PRACTICE = {
   sabotage: (s, rng) => {
     bandUp(s);
     const r = rng || (() => 0);
+    // ONBOARDING ONE-SHOT. The welcome screen's "quick fix" sets
+    // window.PRACTICE_FORCE to a fault key (or array of keys) so a brand-new
+    // signup's very first rep is always a single, legible, winnable fault, never
+    // a zero-fault call or a goal task. Cleared after this one draw, so every rep
+    // after it is a normal random draw. Inert (skipped) when unset.
+    const forced = window.PRACTICE_FORCE;
+    if (forced) {
+      window.PRACTICE_FORCE = null;
+      const fkeys = Array.isArray(forced) ? forced : [forced];
+      let fpar = 0; const ffaults = []; const fcond = [];
+      for (const k of fkeys) {
+        const f = window.PRACTICE_FAULTS.find((x) => x.key === k);
+        if (!f) continue;
+        const res = f.apply(s, r);
+        if (res && res.conditions) fcond.push(...res.conditions);
+        fpar += f.par; ffaults.push(f.key);
+      }
+      if (ffaults.length) {
+        window.PRACTICE_LAST = { par: fpar, faults: ffaults, extraConditions: fcond };
+        return s;
+      }
+    }
     // Sometimes nothing is broken. The band is playing and the system is
     // healthy; the call is to recognize that and sign off, not to invent a
     // fault and start fiddling with a working mix. Knowing when to leave it

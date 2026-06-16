@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=42"></script>
+<script src="content.js?v=43"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -4682,6 +4682,7 @@ function defaultProfile() {
     rank: 1,            // drill ladder: highest rung reached
     rankClean: 0,       // drill ladder: clean solves banked toward the next rung
     liveShow: false,    // Practice: "the room is listening" mode (charges destructive diagnosis)
+    pathChosen: false,  // welcome chooser: has the user picked a first path (quick fix vs Essentials)
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -4705,6 +4706,7 @@ function normalizeProfile(data) {
   p.rank = (Number.isFinite(data.rank) && data.rank >= 1) ? Math.min(6, Math.floor(data.rank)) : 1;
   p.rankClean = (Number.isFinite(data.rankClean) && data.rankClean >= 0) ? Math.floor(data.rankClean) : 0;
   p.liveShow = !!data.liveShow;
+  p.pathChosen = !!data.pathChosen;
   p.v = PROFILE_VERSION;
   return p;
 }
@@ -5460,7 +5462,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>🎧 FREE · 10 LESSONS</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Learn to run a live show.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          Ten hands-on lessons take you from a cold, silent system to a full show: power up in order, set your gain, check every speaker, build a monitor mix, and keep it clean through feedback. Drop your email and start now.
+          Learn it by doing: fix a live problem on a real console, or take the full ten-lesson course from a cold system to a running show. Drop your email and pick where to start.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -5479,13 +5481,67 @@ function EmailGate({ open, onSubmit, onSkip }) {
           width: '100%', padding: '11px 18px', fontSize: 12, fontWeight: 800, letterSpacing: 1,
           background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
           border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer',
-        }}>START THE LESSONS →</button>
+        }}>GET STARTED →</button>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <span style={{ fontSize: 10, color: 'var(--ink-3)', lineHeight: 1.4 }}>No spam. Tips and new lessons, unsubscribe anytime.</span>
           <button onClick={onSkip} className="ui-no-select" style={{
             background: 'transparent', border: 'none', color: 'var(--ink-3)', cursor: 'pointer',
             fontSize: 10.5, textDecoration: 'underline', whiteSpace: 'nowrap', padding: 0,
           }}>Skip for now</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Welcome chooser: the front door for a brand-new signup. Two paths, side by
+// side. Quick fix (led visually, in green) drops them straight into the
+// diagnosis game, which is the tool's signature moment; Essentials is the full
+// 10-lesson setup course. Either one is a click. Shown once, after the tour and
+// the email capture; never again once a path is chosen or any progress exists.
+function WelcomeChooser({ open, onQuickFix, onEssentials }) {
+  if (!open) return null;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 94, background: 'rgba(0,0,0,0.82)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div style={{
+        width: 560, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
+        border: '1px solid #38383e', borderRadius: 12, padding: '22px 24px',
+        boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: 14,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <img src={window.AU_LOGO} alt="Audio University" style={{ height: 40, width: 40, display: 'block' }}/>
+          <div>
+            <div className="display" style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.1 }}>Where do you want to start?</div>
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 3 }}>Two ways in. You can switch any time.</div>
+          </div>
+        </div>
+        {/* Quick fix — the exciting one, led visually. */}
+        <div onClick={onQuickFix} className="ui-no-select" style={{
+          cursor: 'pointer', border: '1px solid var(--green)', borderRadius: 10, padding: '15px 18px',
+          background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)', display: 'flex', flexDirection: 'column', gap: 5,
+          boxShadow: '0 0 0 1px rgba(74,222,128,0.15)', transition: 'box-shadow 0.15s',
+        }}
+          onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 0 0 1px rgba(74,222,128,0.4), 0 0 22px rgba(74,222,128,0.18)'}
+          onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 0 0 1px rgba(74,222,128,0.15)'}>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 1.6, fontWeight: 700 }}>▶ JUMP IN · FIND THE PROBLEM</div>
+          <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>The band's playing. Something just broke.</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>A channel dropped out mid-song. Read the meters, find what's wrong, and bring it back. This is what the lab is really about.</div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginTop: 3 }}>START A QUICK FIX →</div>
+        </div>
+        {/* Essentials — the full setup course. */}
+        <div onClick={onEssentials} className="ui-no-select" style={{
+          cursor: 'pointer', border: '1px solid #38383e', borderRadius: 10, padding: '15px 18px',
+          background: '#16161a', display: 'flex', flexDirection: 'column', gap: 5, transition: 'border-color 0.15s',
+        }}
+          onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
+          onMouseLeave={(e) => e.currentTarget.style.borderColor = '#38383e'}>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700 }}>🎓 LEARN THE FULL SETUP · 10 LESSONS</div>
+          <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>Build a live system from a cold start.</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>Start at the beginning: patch it, power up in order, set your levels, build a monitor mix, and run a full show. Step by step.</div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--accent)', fontWeight: 800, letterSpacing: 0.6, marginTop: 3 }}>START THE ESSENTIALS →</div>
         </div>
       </div>
     </div>
@@ -5915,6 +5971,16 @@ function App() {
     saveProfile(profileRef.current);
     setEmailDone(true);
   };
+
+  // Welcome chooser. A brand-new signup picks their first experience: a guided
+  // quick fix (the diagnosis game) or the full Essentials course. pathChosen is
+  // true once they've picked, OR if they already have any progress (so an
+  // existing user is never shown the chooser). Persisted, so it sticks.
+  const [pathChosen, setPathChosen] = uS(() =>
+    !!profileRef.current.pathChosen ||
+    (profileRef.current.reps > 0) ||
+    Object.keys(profileRef.current.completed || {}).length > 0
+  );
 
   // Persist the whole profile whenever a React-state field changes. Survives
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
@@ -7179,6 +7245,26 @@ function App() {
     const idx = SCENARIOS.findIndex((s) => s.isPractice);
     if (idx >= 0) loadLevel(idx);
   };
+  // Welcome chooser handlers. Either choice marks the path chosen (so the
+  // chooser never returns) and routes. Quick fix forces a single legible fault
+  // (a muted channel: dead meter, one obvious fix) for the first rep so a
+  // newcomer always wins it; Essentials starts the course at lesson one.
+  const markPathChosen = () => {
+    setPathChosen(true);
+    profileRef.current = { ...profileRef.current, pathChosen: true };
+    saveProfile(profileRef.current);
+  };
+  const chooseQuickFix = () => {
+    markPathChosen();
+    focusRef.current = null; drillFocusRef.current = null;
+    window.PRACTICE_FORCE = 'mute';
+    const idx = SCENARIOS.findIndex((s) => s.isPractice);
+    if (idx >= 0) loadLevel(idx);
+  };
+  const chooseEssentials = () => {
+    markPathChosen();
+    loadLevel(0);
+  };
   // Fault-freshness coverage for the picker + debrief (members only). Recomputed
   // each render from the live ledger, so it reflects the rep just solved.
   const coverage = (TIER === 'member') ? coverageFrom(profileRef.current.ledger, window.PRACTICE_FAULTS) : null;
@@ -7407,6 +7493,13 @@ function App() {
       <EmailGate
         open={TIER !== 'member' && !emailDone && !tourOpen && levelIdx >= 0 && levelIdx < window.LEVELS.length}
         onSubmit={captureEmail} onSkip={skipEmail}/>
+      {/* Welcome chooser: the first thing a brand-new signup picks. Shows after
+          the tour and (for free) after the email gate, only on a fresh profile
+          parked on an Essentials lesson. Shared links load a higher index, so
+          they skip it. */}
+      <WelcomeChooser
+        open={!pathChosen && !tourOpen && (TIER === 'member' || emailDone) && levelIdx >= 0 && levelIdx < window.LEVELS.length}
+        onQuickFix={chooseQuickFix} onEssentials={chooseEssentials}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
         wedge={state.outputs.wedge} wedge2={state.outputs.wedge2}
