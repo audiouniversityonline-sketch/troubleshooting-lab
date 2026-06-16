@@ -5035,7 +5035,7 @@ const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
 // FELT (a door walked through and pulled back from), not just described behind
 // a lock. Feedback Mode and custom authoring stay fully member-gated; only
 // Practice Mode is soft-gated by this budget. Members are never counted.
-const FREE_PRACTICE_LIMIT = 3;
+const FREE_PRACTICE_LIMIT = 10;
 
 // Picker bands — the member journey, in order. The picker emits a band header
 // whenever the band changes, so the curriculum reads as a path (and the locked
