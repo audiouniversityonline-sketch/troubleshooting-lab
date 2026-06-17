@@ -7735,6 +7735,156 @@ function App() {
   );
 }
 
+// Mode picker: a two-pane modal that replaced the long scrolling level dropdown
+// (Kyle, 2026-06-16). Left rail = the three modes (Learn / Practice / Free Play);
+// right pane = the detail for the highlighted one, so the top level stays three
+// simple choices and never grows. Practice holds its own secondary selection
+// (Troubleshooting / Feedback / Library) instead of cramming everything into one
+// list. Opens onto whatever mode the current level belongs to. The digital
+// console toggle is NOT here (it lives on the console itself).
+function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedbackByEar, onSetFeedbackByEar, onPick, practiceFreeLeft, onOpenCatalog }) {
+  // Mounted fresh each time the picker opens (rendered behind `{picker && ...}`),
+  // so it always lands on whatever mode the current level belongs to.
+  const curMode = level.isSandbox ? 'play' : (level.isPractice || level.isFeedbackMode || level.isLibrary) ? 'practice' : 'learn';
+  const curTab = level.isFeedbackMode ? 'feedback' : level.isLibrary ? 'library' : 'trouble';
+  const [mode, setMode] = uS(curMode);
+  const [tab, setTab] = uS(curTab);
+  const isMember = TIER === 'member';
+  const lessons = []; const libraries = [];
+  SCENARIOS.forEach((s, i) => { const b = bandOf(s); if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); });
+  const practiceIdx = SCENARIOS.findIndex((s) => s.isPractice);
+  const feedbackIdx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
+  const sandboxIdx = SCENARIOS.findIndex((s) => s.isSandbox);
+  const go = (i) => { if (i >= 0) { onPick(i); onClose(); } };
+  const startBtn = (label, onClick) => (
+    <button onClick={onClick} className="mono ui-no-select" style={{
+      width: '100%', padding: '9px 12px', fontSize: 11, fontWeight: 800, letterSpacing: 0.6,
+      background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+      border: '1px solid #2c9d52', borderRadius: 5, cursor: 'pointer',
+    }}>{label}</button>
+  );
+  const MODES = [
+    { key: 'learn', icon: '🎓', label: 'LEARN', sub: 'The Essentials · 10 lessons', accent: 'var(--accent)' },
+    { key: 'practice', icon: '∞', label: 'PRACTICE', sub: 'Endless reps · find the fault', accent: 'var(--green)' },
+    { key: 'play', icon: '▶', label: 'FREE PLAY', sub: 'A working system · explore', accent: 'var(--cool)' },
+  ];
+  const lessonRow = ({ s, i }) => (
+    <div key={s.id} onClick={() => go(i)} className="ui-no-select"
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 5, cursor: 'pointer', background: i === levelIdx ? '#2a2a2e' : 'transparent' }}
+      onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
+      onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
+      <div className="mono" style={{ fontSize: 9, width: 20, color: completed[s.id] ? 'var(--green)' : 'var(--ink-3)' }}>{completed[s.id] ? '✓' : String(i + 1).padStart(2, '0')}</div>
+      <div style={{ flex: 1, fontSize: 12, color: 'var(--ink)' }}>{s.title}</div>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 680, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>
+        <div style={{ padding: '13px 18px', borderBottom: '1px solid #2a2a2e', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src={window.AU_LOGO} alt="" style={{ height: 26, width: 26, display: 'block' }}/>
+            <div className="display" style={{ fontSize: 16, fontWeight: 700 }}>What do you want to do?</div>
+          </div>
+          <button onClick={onClose} className="mono ui-no-select" style={{ ...navBtn, padding: '4px 10px' }}>✕</button>
+        </div>
+        <div style={{ display: 'flex', minHeight: 330, maxHeight: 'calc(88vh - 54px)' }}>
+          <div style={{ width: 210, borderRight: '1px solid #2a2a2e', padding: 10, display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+            {MODES.map((m) => {
+              const on = mode === m.key;
+              return (
+                <div key={m.key} onClick={() => setMode(m.key)} className="ui-no-select"
+                  style={{ cursor: 'pointer', border: '1px solid ' + (on ? m.accent : '#2a2a2e'), borderRadius: 8, padding: '11px 12px', background: on ? 'rgba(255,255,255,0.03)' : '#16161a', display: 'flex', gap: 10, alignItems: 'flex-start' }}
+                  onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = '#1d1d22'; }}
+                  onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = '#16161a'; }}>
+                  <div style={{ fontSize: 15, color: m.accent, width: 18, textAlign: 'center' }}>{m.icon}</div>
+                  <div>
+                    <div className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.6, color: on ? 'var(--ink)' : 'var(--ink-2)' }}>{m.label}</div>
+                    <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.3 }}>{m.sub}</div>
+                  </div>
+                </div>
+              );
+            })}
+            {onOpenCatalog && (
+              <div onClick={() => { onClose(); onOpenCatalog(); }} className="mono ui-no-select"
+                style={{ marginTop: 'auto', padding: '8px', fontSize: 8.5, color: 'var(--cool)', letterSpacing: 0.8, fontWeight: 700, cursor: 'pointer', borderTop: '1px solid #2a2a2e', textAlign: 'left' }}>◎ WHAT THIS TRAINS</div>
+            )}
+          </div>
+          <div style={{ flex: 1, padding: '16px 18px', overflowY: 'auto', textAlign: 'left' }}>
+            {mode === 'learn' && (
+              <div>
+                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--accent)', marginBottom: 5 }}>LEARN · THE ESSENTIALS</div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 12 }}>Set up a live system from a cold start and run a full show. Ten lessons, in order.</div>
+                {lessons.map(lessonRow)}
+              </div>
+            )}
+            {mode === 'play' && (
+              <div>
+                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--cool)', marginBottom: 5 }}>FREE PLAY</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 14 }}>A full working system, nothing broken. Move any fader, push any knob, and listen to what it does. No goal, no clock. The place to get a feel for the desk.</div>
+                {startBtn('START FREE PLAY →', () => go(sandboxIdx))}
+              </div>
+            )}
+            {mode === 'practice' && (
+              <div>
+                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--green)', marginBottom: 10 }}>PRACTICE</div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+                  {[{ k: 'trouble', l: 'TROUBLESHOOTING', lock: false }, { k: 'feedback', l: 'FEEDBACK', lock: !isMember }, { k: 'library', l: 'LIBRARY', lock: !isMember }].map((t) => {
+                    const on = tab === t.k;
+                    return (
+                      <div key={t.k} onClick={() => setTab(t.k)} className="mono ui-no-select"
+                        style={{ cursor: 'pointer', fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, padding: '6px 10px', borderRadius: 5, border: '1px solid ' + (on ? '#2c9d52' : '#38383e'), background: on ? 'linear-gradient(180deg, var(--green), #2c9d52)' : '#1a1a1d', color: on ? '#0a0a0c' : 'var(--ink-2)' }}>{t.l}{t.lock ? ' 🔒' : ''}</div>
+                    );
+                  })}
+                </div>
+                {tab === 'trouble' && (practicePanel
+                  ? practicePanel
+                  : (
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>The band's playing and something's broken. Find it and fix it. Every rep hides a new fault in a new place.</div>
+                      {practiceFreeLeft != null && practiceFreeLeft > 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>{practiceFreeLeft} FREE REPS LEFT</div>}
+                      {startBtn('START A REP →', () => go(practiceIdx))}
+                    </div>
+                  ))}
+                {tab === 'feedback' && (
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Ring out a wedge: push the send until it rings, find the frequency on the graphic EQ, and cut it. A monitor engineer's core skill.</div>
+                    {isMember && onSetFeedbackByEar && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+                        <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>DIFFICULTY</span>
+                        {[{ v: false, l: 'GUIDED' }, { v: true, l: 'BY EAR' }].map((opt) => (
+                          <div key={opt.l} onClick={() => onSetFeedbackByEar(opt.v)} className="mono ui-no-select"
+                            style={{ cursor: 'pointer', fontSize: 9, fontWeight: 700, padding: '5px 10px', borderRadius: 4, border: '1px solid ' + (feedbackByEar === opt.v ? '#2c5d9e' : '#38383e'), background: feedbackByEar === opt.v ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d', color: feedbackByEar === opt.v ? '#0a0a0c' : 'var(--ink-2)' }}>{opt.l}</div>
+                        ))}
+                      </div>
+                    )}
+                    {startBtn(isMember ? 'START FEEDBACK →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
+                  </div>
+                )}
+                {tab === 'library' && (
+                  <div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 10 }}>Hand-picked situations pulled from real gigs.{isMember ? '' : ' Part of the membership.'}</div>
+                    {libraries.map(({ s, i }) => (
+                      <div key={s.id} onClick={() => go(i)} className="ui-no-select"
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 5, cursor: 'pointer', opacity: isMember ? 1 : 0.7 }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                        <div style={{ width: 20, textAlign: 'center', color: 'var(--cool)', fontSize: 11 }}>◆</div>
+                        <div style={{ flex: 1, fontSize: 12, color: 'var(--ink)' }}>{s.title}</div>
+                        {!isMember && <div style={{ fontSize: 11 }}>🔒</div>}
+                      </div>
+                    ))}
+                    {libraries.length === 0 && <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>No scenarios yet.</div>}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, coverage, onPracticeFocus, onPracticeFaults, onPracticeLive }) {
   const [picker, setPicker] = uS(false);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
@@ -7859,91 +8009,12 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>▾</span>
           </div>
           {picker && (
-            <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 8, background: '#16161a', border: '1px solid #38383e', borderRadius: 6, padding: 6, zIndex: 50, minWidth: 340, boxShadow: '0 12px 32px rgba(0,0,0,0.6)', maxHeight: '70vh', overflow: 'auto' }}>
-              {/* The "your practice" freshness panel used to sit here at the top;
-                  it now renders inside the DRILL group (right above Practice
-                  Mode) via `practicePanel`, so the practice path reads as one
-                  block instead of floating over the whole list. */}
-              {(() => { window.__pickerPrevBand = null; return null; })()}
-              {SCENARIOS.map((l, i) => {
-                // Practice Mode is soft-gated: while free reps remain it shows a
-                // "N FREE" badge and is playable; once spent it locks like the
-                // rest of the member band.
-                const softFree = l.isPractice && practiceFreeLeft != null && practiceFreeLeft > 0;
-                const locked = isLocked(l) && !softFree;
-                const band = bandOf(l);
-                const newBand = band !== window.__pickerPrevBand;
-                window.__pickerPrevBand = band;
-                const bandMeta = SCENARIO_BANDS.find(b => b.id === band) || { label: band, member: false };
-                const first = i === 0;
-                // A passed member's Essentials rows fold behind one toggle; the
-                // individual lesson rows are hidden until they choose to revisit.
-                const learnRowHidden = band === 'LEARN' && essentialsCollapsed;
-                return (
-                  <React.Fragment key={l.id}>
-                    {newBand && (
-                      <React.Fragment>
-                        <div className="mono" style={{ padding: first ? '5px 10px 3px' : '8px 10px 3px', fontSize: 8.5, color: bandMeta.member ? 'var(--accent)' : 'var(--ink-3)', letterSpacing: 1.6, fontWeight: 700, textAlign: 'left', borderTop: first ? 'none' : '1px solid #2a2a2e', marginTop: first ? 0 : 4 }}>
-                          {bandMeta.label}{bandMeta.member ? (TIER !== 'member' ? ' · MEMBERS · 🔒' : ' · MEMBERS') : ' · FREE'}
-                        </div>
-                        {bandMeta.desc && !learnRowHidden && <div style={{ padding: '0 10px 4px', fontSize: 9.5, color: 'var(--ink-3)', textAlign: 'left', lineHeight: 1.3 }}>{bandMeta.desc}</div>}
-                        {/* Essentials, once passed, collapse to a single revisit toggle. */}
-                        {band === 'LEARN' && passedEssentials && (
-                          <div onClick={(e) => { e.stopPropagation(); setEssentialsOpen(o => !o); }} className="ui-no-select"
-                            style={{ padding: '6px 10px', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                            <div className="mono" style={{ fontSize: 11, color: 'var(--green)', width: 24, textAlign: 'center' }}>✓</div>
-                            <div style={{ flex: 1, textAlign: 'left', fontSize: 11, color: 'var(--ink-2)' }}>
-                              {essentialsOpen ? 'Hide the lessons' : 'All ' + learnScenarios.length + ' lessons done. Revisit any time.'}
-                            </div>
-                            <div style={{ fontSize: 10, color: 'var(--ink-3)' }}>{essentialsOpen ? '▴' : '▾'}</div>
-                          </div>
-                        )}
-                        {/* The practice path lives here: freshness panel, then the modes. */}
-                        {band === 'DRILL' && practicePanel}
-                      </React.Fragment>
-                    )}
-                    {!learnRowHidden && (
-                    <div onClick={(e) => { e.stopPropagation(); onPick(i); setPicker(false); }} className="ui-no-select"
-                      style={{ padding: '6px 10px', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: i === levelIdx ? '#2a2a2e' : 'transparent', opacity: locked ? 0.6 : 1 }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
-                      <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', width: 24 }}>
-                        {(l.isPractice || l.isFeedbackMode) ? '∞' : l.isSandbox ? '▶' : l.isLibrary ? '◆' : String(i + 1).padStart(2, '0')}
-                      </div>
-                      <div style={{ flex: 1, textAlign: 'left' }}>
-                        <div style={{ fontSize: 12 }}>{l.title}</div>
-                        {trainsBlurb(l) && <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.3, marginTop: 1 }}>{trainsBlurb(l)}</div>}
-                      </div>
-                      {locked ? <div style={{ fontSize: 11 }}>🔒</div>
-                        : softFree ? <div className="mono" style={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.6, color: 'var(--green)', border: '1px solid var(--green)', borderRadius: 3, padding: '1px 4px' }}>{practiceFreeLeft} FREE</div>
-                        : (completed[l.id] && <div style={{ color: 'var(--green)', fontSize: 12 }}>✓</div>)}
-                    </div>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-              {/* The digital desk is a surface toggle on the console, not a
-                  scenario, so it gets a "way to train" note rather than a row. */}
-              {TIER === 'member' && (
-                <div className="ui-no-select" style={{ marginTop: 2, padding: '7px 10px', borderTop: '1px solid #2a2a2e', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', width: 24, textAlign: 'center' }}>▦</div>
-                  <div style={{ flex: 1, textAlign: 'left' }}>
-                    <div style={{ fontSize: 12 }}>The digital desk</div>
-                    <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.3, marginTop: 1 }}>The same skills on a digital console. Flip any rep with the ANALOG / DIGITAL toggle.</div>
-                  </div>
-                </div>
-              )}
-              {onOpenCatalog && (
-                <div onClick={(e) => { e.stopPropagation(); setPicker(false); onOpenCatalog(); }} className="mono ui-no-select"
-                  style={{ marginTop: 4, padding: '7px 10px', borderTop: '1px solid #2a2a2e', fontSize: 9, color: 'var(--cool)', letterSpacing: 0.8, fontWeight: 700, cursor: 'pointer', textAlign: 'left' }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                  ◎ WHAT THIS TRAINS
-                </div>
-              )}
-            </div>
+            <ModePicker
+              onClose={() => setPicker(false)}
+              level={level} levelIdx={levelIdx} completed={completed}
+              practicePanel={practicePanel}
+              feedbackByEar={feedbackByEar} onSetFeedbackByEar={onSetFeedbackByEar}
+              onPick={onPick} practiceFreeLeft={practiceFreeLeft} onOpenCatalog={onOpenCatalog}/>
           )}
         </div>
         <button onClick={onNext} disabled={levelIdx + 1 >= totalLevels} className="mono ui-no-select" style={navBtn}>→</button>
