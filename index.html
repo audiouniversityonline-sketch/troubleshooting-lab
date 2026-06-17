@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=44"></script>
+<script src="content.js?v=45"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -2892,7 +2892,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge,
               {ringing ? (
                 byEar
                   ? <span style={{ color: 'var(--ink)' }}>Feeding back. Find the ringing frequency by <b style={{ color: 'var(--hot)' }}>ear</b> and pull that band down, just enough to stop it.</span>
-                  : <span style={{ color: 'var(--ink)' }}>Feeding back. Pull the <b style={{ color: 'var(--hot)' }}>glowing band</b> down to cut that frequency, just enough to stop it. A couple of small cuts is enough.</span>
+                  : <span style={{ color: 'var(--ink)' }}>Feeding back. Pull the <b style={{ color: 'var(--hot)' }}>glowing band</b> down to cut that frequency, just enough to stop it.</span>
               ) : (
                 byEar
                   ? <span>Listen for the ring, then pull that frequency's band down. No band glows in this mode; use your ear.</span>
@@ -3220,7 +3220,7 @@ function AudienceSplMeter({ paL, paR }) {
     }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6 }}>
         <div className="mono" style={{ fontSize: 7, letterSpacing: 1.5, fontWeight: 700, color: 'var(--ink-3)' }}>
-          HOW LOUD IS IT?
+          LOUDNESS
         </div>
         <div className="display" style={{ fontSize: 16, fontWeight: 800, lineHeight: 1, color: zoneColor, letterSpacing: -0.4 }}>
           {dbRounded}<span className="mono" style={{ fontSize: 8, fontWeight: 700, marginLeft: 3, color: zoneColor }}>dB SPL</span>
@@ -3503,7 +3503,7 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
     }}>
       <ZoneHeader
         label="Console (FOH)"
-        sublabel="engineer station · the mix desk"
+        sublabel="the mix desk"
         badge={sfc === 'digital' ? 'DX-6' : 'MX-6'}
         badgeColor="var(--accent)"
       />
@@ -4880,7 +4880,7 @@ function MobileNotice() {
       }}>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>BUILT FOR DESKTOP</div>
         <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          This trainer uses precise knob and fader controls and shows the whole stage and the front-of-house mixer at the same time. It needs more room than a phone can offer.
+          This trainer uses precise knob and fader controls and shows the whole stage and the front-of-house mixer at once. It needs more room than a phone has.
         </div>
         <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, marginTop: 8 }}>
           Open this page in a desktop or laptop browser for the full experience.
@@ -5360,14 +5360,14 @@ function TourOverlay({ open, onClose }) {
           </div>
         </div>
         {row('🎤', 'THE STAGE', 'The top half is the stage: the band\'s sources, the speakers, and every cable. Click a speaker to listen to it. Grab a cable end to move it.')}
-        {row('🎛', 'THE CONSOLE', 'The right side is the mixing console. Every knob, fader and button works like the real thing, and mistakes have real consequences, just like a gig. Hover any control for a quick description.')}
+        {row('🎛', 'THE CONSOLE', 'The right side is the mixing console. Every knob, fader and button works like the real thing, and mistakes have real consequences. Hover any control for a quick description.')}
         {row('🔊', 'TURN ON SOUND', 'This lab makes sound. Hit the SOUND button in the top bar so you can hear what you\'re doing. The bar at the bottom shows which speaker your ears are on.')}
         {row('📋', 'THE BRIEF', 'The card next to the stage tells you the task or the symptom, tracks your objectives, and offers a hint. Green checks mean you\'re done.')}
         <button onClick={onClose} className="mono ui-no-select" style={{
           alignSelf: 'flex-start', padding: '9px 18px', fontSize: 11, fontWeight: 800, letterSpacing: 1,
           background: 'linear-gradient(180deg, var(--accent), #c79a1f)', color: '#0a0a0c',
           border: '1px solid #c79a1f', borderRadius: 5, cursor: 'pointer',
-        }}>LET'S GO →</button>
+        }}>START →</button>
       </div>
     </div>
   );
@@ -5460,7 +5460,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>🎧 FREE · 10 LESSONS</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Learn to run a live show.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          Learn it by doing: fix a live problem on a real console, or take the full ten-lesson course from a cold system to a running show. Drop your email and pick where to start.
+          Learn by doing. Fix a live problem on a real console, or take the full ten-lesson course from a cold system to a running show. Enter your email and pick where to start.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -5537,9 +5537,9 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
         }}
           onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 0 0 1px rgba(74,222,128,0.4), 0 0 22px rgba(74,222,128,0.18)'}
           onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 0 0 1px rgba(74,222,128,0.15)'}>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 1.6, fontWeight: 700 }}>▶ JUMP IN · FIND THE PROBLEM</div>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 1.6, fontWeight: 700 }}>▶ FIND THE PROBLEM</div>
           <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>Find the fault and fix it.</div>
-          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>A channel has dropped out of the mix. Read the meters, find what is wrong, and bring it back. This is the main thing the tool trains.</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>A channel has dropped out of the mix. Read the meters, find what is wrong, and bring it back.</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginTop: 3 }}>START A QUICK FIX →</div>
         </div>
         {/* Essentials — the full setup course. */}
@@ -5820,7 +5820,7 @@ function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset,
     );
     body = (<><div style={{ color: 'var(--ink)' }}>{desc}</div><div>{fix}</div></>);
     action = onReset ? (
-      <button onClick={onReset} className="mono ui-no-select" style={hotBtn}>↻ Reset · try the safe way</button>
+      <button onClick={onReset} className="mono ui-no-select" style={hotBtn}>↻ Reset and try again</button>
     ) : null;
   } else if (clipping) {
     tag = audienceLive ? '⚠ DISTORTING' : '⚠ PEAKING';
@@ -6052,7 +6052,7 @@ function App() {
       setSignedOff(true); // the win effect re-runs and completes the rep
     } else {
       falseSignoffRef.current += 1;
-      setSignoffMsg("Not yet — something's still off. Walk the signal path again.");
+      setSignoffMsg("Not yet. Something is still off. Walk the signal path again.");
     }
   };
 
@@ -7562,7 +7562,7 @@ function App() {
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
               {pitchFor.isDigital
-                ? 'The digital console surface teaches the part of modern live sound the analog desk cannot: one shared channel section that follows whatever you SELECT, so the real skill is confirming what is selected before you touch a knob. Same signal flow, same faults, a different surface. It is part of the membership.'
+                ? 'The digital console surface teaches the part of modern live sound the analog desk cannot: one shared channel section that follows whatever you SELECT, so the real skill is confirming what is selected before you touch a knob. Same signal flow and faults, a different surface. It is part of the membership.'
                 : pitchFor.isLibrary
                 ? 'The Scenario Library is a growing shelf of real-world situations, each one a specific show that went sideways and the exact board behind it. Members can browse and play the whole library, and it keeps growing. Some land as free links in the videos; the full shelf is part of the membership.'
                 : pitchFor.isFeedbackMode

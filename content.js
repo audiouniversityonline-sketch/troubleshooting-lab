@@ -147,7 +147,7 @@ window.LEVELS = [
     conditions: [],
     topology: { paRig: 'powered' },
     symptom: 'Connect the whole system from the paperwork, with everything still powered off. Open the I/O LIST in the top bar for the plan, then patch each cable to the port it calls for.',
-    hint: 'Drag a cable end and drop it on a port or an output chip. Dropping on a taken spot swaps the two cables. The colors follow the standard 8-channel snake code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray. Patching with the power off is the professional habit: nothing can pop while the system is dead.',
+    hint: 'Drag a cable end and drop it on a port or an output chip. Dropping on a taken spot swaps the two cables. The colors follow the standard 8-channel snake code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray. Patch with the power off so nothing can pop while the system is dead.',
     hints: [
       { text: 'Open the I/O LIST. Drag a cable end onto a port; drop on a taken spot to swap.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
       { text: 'Inputs: drop each source cable onto its numbered stage-box port.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
@@ -173,7 +173,7 @@ window.LEVELS = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
       return s;
     },
-    solution: 'Everything connected per the I/O list: inputs on snake 1 to 4, outputs on 5 to 8, every color matched. The system is connected and still safely off. Time to power on.',
+    solution: 'Everything connected per the I/O list: inputs on snake 1 to 4, outputs on 5 to 8, every color matched. The system is connected and still off. Next, power on.',
     defaultInspect: 'pa',
   },
   {
@@ -199,8 +199,8 @@ window.LEVELS = [
     // down (the zeroed console start). Without it, deriveInvolves defaults to
     // [1] to avoid an accidentally-dead desk, which would leave channel 1 live.
     involves: [],
-    symptom: 'Everything is connected, and the console is zeroed out: every channel is back at its starting position. Power the system up, and mind the order: bring it up the wrong way and you pop the speakers.',
-    hint: 'Power on from the console end first, then the powered speakers last. If you turn a PA speaker or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the wedges and the PA speakers.',
+    symptom: 'Everything is connected and the console is zeroed: every channel is back at its starting position. Power the system up in the right order. The wrong order pops the speakers.',
+    hint: 'Power on the console first, then the powered speakers last. If you turn a PA speaker or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the wedges and the PA speakers.',
     hints: [
       { text: 'Console on first, so its switch-on pop never reaches a powered speaker.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
       { text: 'With the console on, bring up the rest: both PA speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
@@ -244,7 +244,7 @@ window.LEVELS = [
     conditions: [
       { source: 'playback', dest: 'pa', min: 0.30, max: 0.50 },
     ],
-    symptom: 'The system is on and the console is fully zeroed, with your playback connected. Set your levels the right way, start to finish (this is your gain structure): check it in PFL, set the gain, bring the faders to unity, then set how loud the room is with the PA.',
+    symptom: 'The system is on and the console is fully zeroed, with your playback connected. Set your gain structure start to finish: check it in PFL, set the gain, bring the faders to unity, then set the room level with the PA.',
     hint: 'Press PFL on the playback to hear it in your headphones. Set the GAIN so the meter sits in the healthy zone. Release PFL, unmute the playback and the master, and bring both faders up to unity. Then bring up the PA speaker volume until the room sits at a good level on the loudness meter.',
     hints: [
       { text: 'PFL the playback so you can set it in your headphones first.', done: (ctx) => ctx.pflChecked || (ctx.state.channels[4] && ctx.state.channels[4].solo) },
@@ -288,7 +288,7 @@ window.LEVELS = [
     hint: 'Turn up AUX 1 on the playback channel and bring up the Wedge 1 volume on stage until it plays. Do the same with AUX 2 for Wedge 2. Each wedge gets checked off once it is playing.',
     hints: [
       { text: 'Wedge 1: turn up AUX 1, then raise the Wedge 1 volume until it plays.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
-      { text: 'Wedge 2: same idea with AUX 2 and the Wedge 2 volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
+      { text: 'Wedge 2: same with AUX 2 and the Wedge 2 volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
     ],
     sabotage: (s) => {
       // Carried from Set the Input Level: good input, faders at unity, PA set.
@@ -429,7 +429,7 @@ window.LEVELS = [
     // level stays up). NEXT TURN: add an EQ on the aux outputs as the real,
     // surgical fix; HPF is the stopgap so the level is solvable today.
     symptom: 'Turn the singer\'s vocal up in her wedge so she can hear herself. Careful: monitors feed back when you push them too hard.',
-    hint: 'Turn up AUX 1 on the vocal to give her more in her wedge. When it starts to ring, look at the monitor EQ on her wedge: the ringing frequency glows. Pull that band down just far enough to stop the ring. Cuts cost a little monitor level too, so keep them small. (HPF only helps low-frequency ring, not this one.)',
+    hint: 'Turn up AUX 1 on the vocal to give her more in her wedge. When it starts to ring, look at the monitor EQ on her wedge: the ringing frequency glows. Pull that band down just far enough to stop the ring. Cuts cost a little monitor level, so keep them small. (HPF only helps low-frequency ring, not this one.)',
     hints: [
       { text: 'Bring AUX 1 on the vocal up so her wedge reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.6) },
       { text: 'When it rings, pull the glowing band down on her Monitor EQ, just enough to stop it.', done: (ctx) => !ctx.feedback },
@@ -496,7 +496,7 @@ window.LEVELS = [
     ],
     topology: { paRig: 'powered' },
     symptom: 'Final exam. Run the whole job from a cold system, in order: power on, test every speaker with playback, then bring the band in. Keep it clean the whole way.',
-    hint: 'It is everything you have already done, in the order you learned it. Console on first, then the speakers. PFL the playback, set its gain, and send it to the PA and both wedges: each speaker checks off once it plays and stays checked, so you can turn the playback back down afterward. Then the band: PFL each input, set its gain, and bring it up with the fader at unity. Turn on +48V for the condenser and the active DI while the channel is muted and before you PFL it. Open AUX 1 on the vocal for her wedge.',
+    hint: 'Everything you have already done, in order. Console on first, then the speakers. PFL the playback, set its gain, and send it to the PA and both wedges: each speaker checks off once it plays and stays checked, so you can turn the playback back down afterward. Then the band: PFL each input, set its gain, and bring it up with the fader at unity. Turn on +48V for the condenser and the active DI while the channel is muted and before you PFL it. Open AUX 1 on the vocal for her wedge.',
     hints: [
       { text: 'Power on in order: console first, then both PA speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
       { text: 'Test every speaker with playback: send it to the PA and both wedges.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.pa && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2 },
@@ -523,7 +523,7 @@ window.LEVELS = [
       }
       return s;
     },
-    solution: 'The whole setup, start to finish: power in order, every speaker proven with playback, every input line checked in PFL and brought up clean, and the singer hearing herself in her wedge. That is the job, top to bottom.',
+    solution: 'The whole setup, start to finish: power in order, every speaker proven with playback, every input line checked in PFL and brought up clean, and the singer hearing herself in her wedge.',
     defaultInspect: 'pa',
   },
   {
@@ -572,7 +572,7 @@ window.LEVELS = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, volume: 0.6, mute: false };
       return s;
     },
-    solution: 'Console zeroed, master down and muted, speakers off, console off last. The next engineer powers on into a safe, predictable console.',
+    solution: 'Console zeroed, master down and muted, speakers off, console off last. The next engineer powers on into a predictable console.',
     defaultInspect: 'pa',
   },
 ];
@@ -947,7 +947,7 @@ window.FEEDBACK_MODE = {
   // four small cuts pass easily, slammed sliders or shotgun cutting fail.
   toneGate: 0.92,
   involves: [1],
-  symptom: 'Ring-out training. Bring the singer\'s vocal up to the target level in her wedge. As you push, a frequency will start to ring. Back the send off a touch, find the glowing band on the wedge\'s graphic EQ, and cut it a few dB, just enough that the ring stays gone. Then keep climbing. A real ring-out only takes a few cuts, so keep them small and stop when you reach the target.',
+  symptom: 'Ring-out training. Bring the singer\'s vocal up to the target level in her wedge. As you push, a frequency will start to ring. Back the send off a little, find the glowing band on the wedge\'s graphic EQ, and cut it a few dB, just enough that the ring stays gone. Then keep climbing. A real ring-out only takes a few cuts, so keep them small and stop when you reach the target.',
   hint: 'Raise the send a little at a time. When a frequency rings, find it on the monitor EQ and pull that band down a few dB, just past where the ring stops. Expect three or four on the way up, and keep every cut small. Once the vocal hits the target, stop.',
   sabotage: (s, rng) => {
     const r = rng || (() => 0.5);
