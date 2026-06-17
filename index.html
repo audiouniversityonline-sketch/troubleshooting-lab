@@ -4984,7 +4984,7 @@ const SCENARIOS = [
   {
     id: 'sandbox', isSandbox: true,
     title: 'Free Play',
-    symptom: 'Nothing is broken here, and there is no goal. Move faders, set gains, build a monitor mix, and switch the surface between analog and digital. Turn the sound on to hear what changes. When you want a challenge, open the lessons or a practice rep from the menu above.',
+    symptom: 'Nothing is broken here, and there is no goal. Move faders, set gains, build a monitor mix, and switch the surface between analog and digital. Turn the sound on to hear what changes. When you want a challenge, open the lessons or a practice round from the menu above.',
     conditions: [],
     involves: [1, 2, 3, 4],
     defaultInspect: 'pa',
@@ -5211,7 +5211,7 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
       .sort((a, b) => b.avgOver - a.avgOver || b.reps - a.reps);
     if (totalReps === 0) {
       return (<div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-        Play a few Practice reps and your training record shows up here: which faults you've seen, and which ones still slow you down.
+        Play a few practice rounds and your training record shows up here: which faults you've seen, and which ones still slow you down.
       </div>);
     }
     const overTxt = (avgOver) => {
@@ -5223,18 +5223,18 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.5 }}>
-          You've finished <b>{totalReps}</b> practice rep{totalReps === 1 ? '' : 's'}, <b>{cleanPct}%</b> of them clean (no hints, at or under par).
+          You've finished <b>{totalReps}</b> practice round{totalReps === 1 ? '' : 's'}, <b>{cleanPct}%</b> of them clean (no hints, at or under par).
         </div>
         {entries.length === 0 ? (
           <div style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.5 }}>
-            Your earlier reps are counted. New reps from here on break down fault by fault, right here.
+            Your earlier rounds are counted. New rounds from here on break down fault by fault, right here.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div className="mono" style={{ fontSize: 8.5, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>BY FAULT · WEAKEST FIRST</div>
             {entries.map((e, i) => (
               <div key={e.key} style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.45 }}>
-                <b style={{ color: 'var(--ink)' }}>{faultLabel(e.key)}</b>: {e.reps} rep{e.reps === 1 ? '' : 's'}, {overTxt(e.avgOver)}.
+                <b style={{ color: 'var(--ink)' }}>{faultLabel(e.key)}</b>: {e.reps} round{e.reps === 1 ? '' : 's'}, {overTxt(e.avgOver)}.
                 {e.clean > 0 ? ' ' + e.clean + ' clean.' : ''}
                 {i === 0 && entries.length > 1 && e.avgOver >= 1 ? <span style={{ color: 'var(--amber)' }}> Your slowest fault.</span> : null}
               </div>
@@ -5398,7 +5398,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         {tier === 'member' ? (
           <>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
-              Practice Mode is open. The band is up, something is broken, and every rep hides a new fault. That's where this turns into a skill.
+              Practice Mode is open. Something breaks and you fix it, with a new fault each time.
             </div>
             <button onClick={onGoPractice} className="mono ui-no-select" style={{
               alignSelf: 'flex-start', padding: '9px 18px', fontSize: 11, fontWeight: 800, letterSpacing: 1,
@@ -5409,7 +5409,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         ) : (
           <>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
-              Members keep training in Practice Mode: something breaks, you find it and fix it, with a new fault every rep, for as long as you want. It is part of the Audio University membership.
+              Members keep training in Practice Mode: something breaks, you find it and fix it, with a new fault each time, for as long as you want. It is part of the Audio University membership.
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <a href={joinUrl('completion-card')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
@@ -5676,7 +5676,7 @@ function FaultCatalog({ open, onClose, tier }) {
 
         {sectionTitle('var(--accent)', 'PRACTICE MODE · MEMBERS')}
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 6 }}>
-          The band is playing and something is wrong. You find it and fix it, without popping anything. Every rep hides 1 to 3 of these, drawn at random, so no two are the same:
+          The band is playing and something is wrong. You find it and fix it, without popping anything. Each one hides 1 to 3 of these, drawn at random, so no two are the same:
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {faultList.map((f) => (
@@ -5688,7 +5688,7 @@ function FaultCatalog({ open, onClose, tier }) {
 
         {sectionTitle('var(--aux)', 'FEEDBACK MODE · MEMBERS')}
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-          Ring-out training: push a wedge toward a target level, and when a frequency starts to ring, find it on the graphic EQ and cut it by ear. Every rep is a new wedge with a new set of problem frequencies.
+          Ring-out training: push a wedge toward a target level, and when a frequency starts to ring, find it on the graphic EQ and cut it by ear. Each one is a new wedge with a new set of problem frequencies.
         </div>
 
         {tier !== 'member' && (
@@ -7566,10 +7566,10 @@ function App() {
                 : pitchFor.isLibrary
                 ? 'The Scenario Library is a growing shelf of real-world situations, each one a specific show that went sideways and the exact board behind it. Members can browse and play the whole library, and it keeps growing. Some land as free links in the videos; the full shelf is part of the membership.'
                 : pitchFor.isFeedbackMode
-                ? 'Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Every rep is a new wedge with a new ring profile.'
+                ? 'Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Each one is a new wedge with a new ring profile.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
-                ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free reps. Members keep going with no limit: a new fault every rep, two or three at once when you turn the difficulty up, for as long as you want to practice.'
-                : 'The free lessons teach you to set up and run the system. Practice Mode trains you to troubleshoot it: a new fault every rep, two or three at once when you turn the difficulty up, for as long as you want to practice.'}
+                ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free tries. Members keep going with no limit: a new fault each time, two or three at once when you turn the difficulty up, for as long as you want to practice.'
+                : 'The free lessons teach you to set up and run the system. Practice Mode trains you to troubleshoot it: a new fault each time, two or three at once when you turn the difficulty up, for as long as you want to practice.'}
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
               {pitchFor.title} is part of the Audio University membership.
@@ -7786,7 +7786,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
   const MODES = [
     { key: 'learn', icon: '🎓', label: 'LEARN', sub: 'The Essentials · 10 lessons', accent: 'var(--accent)' },
-    { key: 'practice', icon: '∞', label: 'PRACTICE', sub: 'Endless reps · find the fault', accent: 'var(--green)' },
+    { key: 'practice', icon: '∞', label: 'PRACTICE', sub: 'Endless practice · find the fault', accent: 'var(--green)' },
     { key: 'play', icon: '▶', label: 'FREE PLAY', sub: 'A working system · explore', accent: 'var(--cool)' },
   ];
   const lessonRow = ({ s, i }) => (
@@ -7861,9 +7861,9 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                   ? practicePanel
                   : (
                     <div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Something in the system is broken. Find it and fix it. Every rep has a new fault to find.</div>
-                      {practiceFreeLeft != null && practiceFreeLeft > 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>{practiceFreeLeft} FREE REPS LEFT</div>}
-                      {startBtn('START A REP →', () => go(practiceIdx))}
+                      <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Something in the system is broken. Find it and fix it. Each one has a new fault to find.</div>
+                      {practiceFreeLeft != null && practiceFreeLeft > 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>{practiceFreeLeft} FREE TRIES LEFT</div>}
+                      {startBtn('START →', () => go(practiceIdx))}
                     </div>
                   ))}
                 {tab === 'feedback' && (
@@ -8215,7 +8215,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   })();
   const workChip = (
     <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-      {level.isPractice ? 'PRACTICE REP' : level.isFeedbackMode ? 'RING-OUT REP' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
+      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'RING-OUT' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
     </div>
   );
 
@@ -8365,11 +8365,11 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
               }}>SYSTEM IS HEALTHY</button>
             )}
             {onCopyRepLink && (
-              <button onClick={onCopyRepLink} className="mono ui-no-select" title="Copy a link that loads this exact rep for anyone" style={{
+              <button onClick={onCopyRepLink} className="mono ui-no-select" title="Copy a link that loads this exact problem for anyone" style={{
                 padding: '6px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 0.6,
                 color: repCopied ? 'var(--green)' : 'var(--ink-3)', background: 'transparent', border: '1px solid #38383e',
                 borderRadius: 4, cursor: 'pointer',
-              }}>{repCopied ? '✓ COPIED' : '⎘ COPY REP LINK'}</button>
+              }}>{repCopied ? '✓ COPIED' : '⎘ COPY LINK'}</button>
             )}
           </div>
         </div>
@@ -8403,7 +8403,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
             </div>
             <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
               Hints: {debrief.hints > 0 ? <b style={{ color: 'var(--amber)' }}>{debrief.hints} used</b> : <b style={{ color: 'var(--green)' }}>none</b>}.
-              {debrief.rep != null && <> That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} rep{debrief.rep === 1 ? '' : 's'}</b> finished.</>}
+              {debrief.rep != null && <> That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} round{debrief.rep === 1 ? '' : 's'}</b> finished.</>}
             </div>
             <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
               Building monitor mixes, setting gain, and checking speakers are all part of the job, not just finding faults.
@@ -8425,7 +8425,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
             )}
             {debrief.rep != null && (
               <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-                That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} rep{debrief.rep === 1 ? '' : 's'}</b> finished.
+                That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} round{debrief.rep === 1 ? '' : 's'}</b> finished.
               </div>
             )}
             <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
@@ -8442,7 +8442,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           </div>
           <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
             Hints: {debrief.hints > 0 ? <b style={{ color: 'var(--amber)' }}>{debrief.hints} used</b> : <b style={{ color: 'var(--green)' }}>none</b>}.
-            {debrief.rep != null && <> That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} rep{debrief.rep === 1 ? '' : 's'}</b> finished.</>}
+            {debrief.rep != null && <> That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} round{debrief.rep === 1 ? '' : 's'}</b> finished.</>}
           </div>
           <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
             {level.isFeedbackMode
@@ -8539,7 +8539,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           {practiceFreeLeft != null && (
             <div className="mono" style={{ fontSize: 8.5, letterSpacing: 0.6, textAlign: 'center', fontWeight: 700, color: practiceFreeLeft > 0 ? 'var(--green)' : 'var(--accent)' }}>
               {practiceFreeLeft > 0
-                ? ('FREE PREVIEW · ' + practiceFreeLeft + ' REP' + (practiceFreeLeft === 1 ? '' : 'S') + ' LEFT')
+                ? ('FREE PREVIEW · ' + practiceFreeLeft + ' LEFT')
                 : 'FREE PREVIEW USED'}
             </div>
           )}
@@ -8547,9 +8547,9 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
             width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
             background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
             border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-          }}>{level.isFeedbackMode ? 'NEXT REP · NEW WEDGE →'
+          }}>{level.isFeedbackMode ? 'NEXT WEDGE →'
               : (practiceFreeLeft === 0) ? 'JOIN TO KEEP TRAINING →'
-              : 'NEXT REP · NEW FAULT →'}</button>
+              : 'NEXT FAULT →'}</button>
         </>
       ) : hasNext ? (
         <button onClick={onNext} className="mono ui-no-select" style={{
@@ -8561,11 +8561,11 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
         <div className="mono" style={{ width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1, background: '#0a0a0c', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, textAlign: 'center' }}>🎓 ALL LEVELS COMPLETE</div>
       )}
       {onCopyRepLink && (
-        <button onClick={onCopyRepLink} className="mono ui-no-select" title="Copy a link that loads this exact rep for anyone" style={{
+        <button onClick={onCopyRepLink} className="mono ui-no-select" title="Copy a link that loads this exact problem for anyone" style={{
           width: '100%', padding: '5px 10px', fontSize: 9, fontWeight: 700, letterSpacing: 0.8,
           background: 'transparent', color: repCopied ? 'var(--green)' : 'var(--ink-3)', border: '1px solid #38383e',
           borderRadius: 3, cursor: 'pointer',
-        }}>{repCopied ? '✓ LINK COPIED' : '⎘ COPY A LINK TO THIS REP'}</button>
+        }}>{repCopied ? '✓ LINK COPIED' : '⎘ COPY A LINK TO THIS PROBLEM'}</button>
       )}
     </div>
   );
