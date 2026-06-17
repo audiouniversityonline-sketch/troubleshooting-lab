@@ -146,7 +146,7 @@ window.LEVELS = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'First job of the day: connect the whole system from the paperwork, with everything still powered off. Open the I/O LIST in the top bar for the plan, then patch each cable to the port it calls for.',
+    symptom: 'Connect the whole system from the paperwork, with everything still powered off. Open the I/O LIST in the top bar for the plan, then patch each cable to the port it calls for.',
     hint: 'Drag a cable end and drop it on a port or an output chip. Dropping on a taken spot swaps the two cables. The colors follow the standard 8-channel snake code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray. Patching with the power off is the professional habit: nothing can pop while the system is dead.',
     hints: [
       { text: 'Open the I/O LIST. Drag a cable end onto a port; drop on a taken spot to swap.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
@@ -394,7 +394,7 @@ window.LEVELS = [
     // A positive setup task, not a problem: build the singer her monitor mix.
     // The wedge volume is already up (set in Test the Wedges and kept), so this
     // is purely the aux send: open AUX 1 on the vocal to feed her wedge.
-    symptom: 'The singer needs to hear themselves on stage. Send her vocal to her wedge so she can hear herself.',
+    symptom: 'Send the singer\'s vocal to her wedge so she can hear herself on stage.',
     hint: 'Her wedge is on and turned up. Send her vocal to it by turning up AUX 1 on the vocal channel.',
     hints: [
       { text: 'Her wedge is up. Send her vocal to it with AUX 1 on the vocal channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
@@ -428,7 +428,7 @@ window.LEVELS = [
     // For now HPF clears it (drops the low-end loop gain ~40% while the wedge
     // level stays up). NEXT TURN: add an EQ on the aux outputs as the real,
     // surgical fix; HPF is the stopgap so the level is solvable today.
-    symptom: 'The singer still can\'t hear herself well in her wedge. Turn her vocal up in the monitor for her. Careful, monitors feed back when you push them too hard.',
+    symptom: 'Turn the singer\'s vocal up in her wedge so she can hear herself. Careful: monitors feed back when you push them too hard.',
     hint: 'Turn up AUX 1 on the vocal to give her more in her wedge. When it starts to ring, look at the monitor EQ on her wedge: the ringing frequency glows. Pull that band down just far enough to stop the ring. Cuts cost a little monitor level too, so keep them small. (HPF only helps low-frequency ring, not this one.)',
     hints: [
       { text: 'Bring AUX 1 on the vocal up so her wedge reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.6) },
@@ -495,7 +495,7 @@ window.LEVELS = [
       { source: 'vocal',  dest: 'wedge', min: 0.35 },
     ],
     topology: { paRig: 'powered' },
-    symptom: 'Final exam. You are opening the venue alone today, from a cold system. Do the whole job in order: power on, test every speaker with your playback, then bring the band in clean. Keep it clean the whole way.',
+    symptom: 'Final exam. Run the whole job from a cold system, in order: power on, test every speaker with playback, then bring the band in. Keep it clean the whole way.',
     hint: 'It is everything you have already done, in the order you learned it. Console on first, then the speakers. PFL the playback, set its gain, and send it to the PA and both wedges: each speaker checks off once it plays and stays checked, so you can turn the playback back down afterward. Then the band: PFL each input, set its gain, and bring it up with the fader at unity. Turn on +48V for the condenser and the active DI while the channel is muted and before you PFL it. Open AUX 1 on the vocal for her wedge.',
     hints: [
       { text: 'Power on in order: console first, then both PA speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
@@ -547,7 +547,7 @@ window.LEVELS = [
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The show is over and the band has gone home. Zero the console back to default, then shut down in reverse order: speakers and wedges off first, console off last.',
+    symptom: 'Zero the console back to default, then shut down in reverse order: speakers and wedges off first, console off last.',
     hint: 'Work down each strip: gain down, aux sends down, HPF off, +48V off, pan back to center, fader down, mute on. Then the master: all the way down and muted. Power-off is power-on in reverse: the speakers go off first and the console goes off last. A console makes a pop when it switches off, and any powered speaker still on will play that pop.',
     hints: [
       { text: 'Zero the console: gains, sends, faders down; mute; pans centered; HPF and +48V off.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus.slice(0, 7).every((z) => z.pass) },
@@ -644,16 +644,16 @@ const POWERED_IDX = [1, 2];
 // STAY UP, so pulling the send to zero isn't a fix; ringing the wedge out on
 // its EQ band is.
 window.PRACTICE_FAULTS = [
-  { key: 'cable',        label: 'Cable unplugged',   blurb: 'A cable gets pulled and a channel goes dead.',           par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
+  { key: 'cable',        label: 'Cable unplugged',   blurb: "A channel's input cable is unplugged.",                  par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
   { key: 'gain',         label: 'Gain at zero',      blurb: "A channel's gain is at zero, so its meter never moves.",  par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].gain = 0; } },
   { key: 'fader',        label: 'Fader down',        blurb: 'A channel fader is all the way down.',                    par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].fader = 0; } },
-  { key: 'mute',         label: 'Channel muted',     blurb: 'A channel is muted and nobody catches it.',               par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].mute = true; } },
+  { key: 'mute',         label: 'Channel muted',     blurb: 'A channel is muted.',                                    par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].mute = true; } },
   { key: 'pan',          label: 'Hard pan',          blurb: 'A channel is panned hard to one side.',                   par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].pan = rng() < 0.5 ? 0 : 1; } },
   { key: 'phantom',      label: 'Phantom power off', blurb: 'Phantom power is off, so a condenser or active DI is silent.', par: 3, apply: (s, rng) => { s.channels[POWERED_IDX[Math.floor(rng() * 2)]].phantom = false; } },
-  { key: 'master-mute',  label: 'Master muted',      blurb: 'The master is muted and the whole room goes quiet.',      par: 1, apply: (s)      => { s.master.mute = true; } },
+  { key: 'master-mute',  label: 'Master muted',      blurb: 'The master is muted, so nothing reaches the room.',       par: 1, apply: (s)      => { s.master.mute = true; } },
   { key: 'master-fader', label: 'Master fader down', blurb: 'The master fader is down.',                               par: 1, apply: (s)      => { s.master.fader = 0; } },
   { key: 'pa-volume',    label: 'PA volume down',    blurb: 'One PA speaker is turned down.',                          par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].volume = 0; } },
-  { key: 'pa-mute',      label: 'PA muted',          blurb: 'One PA speaker is muted, so the room sounds lopsided.',   par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].mute = true; } },
+  { key: 'pa-mute',      label: 'PA muted',          blurb: 'One PA speaker is muted, so one side of the room is silent.', par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].mute = true; } },
   // DIGITAL-ONLY faults (digital: true). They live in the mute-group buttons and
   // DCA faders on the digital surface and have no analog equivalent, so the draw
   // skips them unless window.PRACTICE_SURFACE === 'digital'.
@@ -763,7 +763,7 @@ window.PRACTICE_GOALS = [
           { source: 'vocal2', dest: 'wedge2', min: 0.35 },
           { source: 'vocal2', dest: 'wedge',  min: 0.30 },
         ],
-        symptom: 'Monitor mix request. Vocalist 2 wants to hear themselves in their own wedge, and Vocalist 1 wants Vocal 2 in their wedge too. Build it: their sends are closed right now.',
+        symptom: 'Build a monitor mix. Send Vocal 2 to its own wedge (Wedge 2) and into Vocal 1\'s wedge (Wedge 1). Both sends are closed right now.',
         title: 'Monitor Mix Request',
         hint: "It's all aux sends on the Vocal 2 channel. AUX 2 feeds Wedge 2 (their own monitor); AUX 1 feeds Wedge 1 (Vocal 1's monitor). Bring both up until each wedge has them.",
         solution: 'AUX 2 and AUX 1 up on the Vocal 2 channel, so Vocal 2 is in both wedges.',
@@ -779,7 +779,7 @@ window.PRACTICE_GOALS = [
       return {
         conditions: [{ source: 'guitar', dest: 'pa', min: 0.3 }],
         gainStructure: { refChannel: 3, unity: 0.75, faderTol: 0.08, inputBand: [0.75, 1.0] },
-        symptom: 'The bass is weak and thin. Someone cracked its gain right down and rode the fader up to make up for it, which is backwards. Set the gain structure properly: gain healthy on the meter, fader back at unity.',
+        symptom: 'The bass gain is set far too low, with the fader pushed up to make up for it. That is backwards. Set the gain structure properly: gain healthy on the meter, fader back at unity.',
         title: 'Fix the Gain Structure',
         hint: 'PFL the bass (channel 3) and bring its GAIN up until the input meter sits in the healthy zone, then drop the fader back to the unity mark.',
         solution: "Bass gain set healthy in PFL, fader at unity. That's proper gain structure, level set at the top of the chain, not the bottom.",
@@ -803,7 +803,7 @@ window.PRACTICE_GOALS = [
           { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 passes signal' },
           { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 passes signal' },
         ],
-        symptom: 'Before the band loads in, confirm every speaker is passing signal: the PA and both wedges. Send the playback to each one. They check off as they play.',
+        symptom: 'Confirm every speaker is passing signal: the PA and both wedges. Send the playback to each one. They check off as they play.',
         title: 'Check the Speakers',
         hint: 'Send the playback to the PA on its fader, then open AUX 1 for Wedge 1 and AUX 2 for Wedge 2. Each speaker checks off once it plays, so you can move on.',
         solution: 'Playback sent to the PA and both wedges: every speaker proven to pass signal, before a single input matters.',
@@ -815,7 +815,7 @@ window.PRACTICE_GOALS = [
 window.PRACTICE = {
   id: 'practice',
   title: 'Practice Mode',
-  symptom: 'The band is mid-show and something is wrong with the sound. Find what is broken and fix it, without popping anything.',
+  symptom: 'Something is wrong with the sound. Find what is broken and fix it, without popping the speakers.',
   hint: 'Walk the signal path and watch where the meters stop: source, cable, gain, mute, fader, master, speaker. Check the quick things first, and close the path before you touch a cable or +48V (mute the channel, or pull the master down). If a wedge rings, cut the glowing band on its monitor EQ.',
   conditions: PRACTICE_CONDITIONS,
   involves: [1, 2, 3, 4],
@@ -1021,7 +1021,7 @@ window.SCENARIO_LIBRARY = [
   {
     id: 'lead-vocal-dead',
     title: 'Lead vocal is dead',
-    symptom: 'The singer steps up for the first song and nothing comes through the PA. The band is already playing. Get the lead vocal back into the mix.',
+    symptom: 'The lead vocal is not coming through the PA. Get it back into the mix.',
     hint: 'Everything upstream looks fine. Check the channel itself before you touch the gain.',
     solution: 'Channel 1 was muted, so the lead vocal never reached the mix. Unmuting it put it back in the PA. When one source is missing and the rest sound fine, check the channel mute first.',
     conditions: [],

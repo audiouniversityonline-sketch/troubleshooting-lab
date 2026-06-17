@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=43"></script>
+<script src="content.js?v=44"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -4984,7 +4984,7 @@ const SCENARIOS = [
   {
     id: 'sandbox', isSandbox: true,
     title: 'Free Play',
-    symptom: 'Nothing is broken. The band is up and the system is working. Poke around: move faders, set gains, build a monitor mix, flip the SURFACE between analog and digital. Turn the sound on to hear what you change. No goal, no clock, nothing to fix. When you want a real challenge, open the lessons or a practice rep from the menu above.',
+    symptom: 'Nothing is broken here, and there is no goal. Move faders, set gains, build a monitor mix, and switch the surface between analog and digital. Turn the sound on to hear what changes. When you want a challenge, open the lessons or a practice rep from the menu above.',
     conditions: [],
     involves: [1, 2, 3, 4],
     defaultInspect: 'pa',
@@ -5176,7 +5176,7 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
   const copy = () => {
     try {
       navigator.clipboard.writeText(code);
-      setMsg({ ok: true, text: 'Copied. Keep it somewhere safe — a note, or an email to yourself.' });
+      setMsg({ ok: true, text: 'Copied. Keep it somewhere safe, like a note or an email to yourself.' });
     } catch (e) {
       setMsg({ ok: false, text: 'Copy failed. Select the code and copy it by hand.' });
     }
@@ -5409,7 +5409,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         ) : (
           <>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
-              Members keep going in Practice Mode: the band is up, something is broken, and every rep hides a new fault in a new place, for as long as you want to train. It's part of the Audio University membership.
+              Members keep training in Practice Mode: something breaks, you find it and fix it, with a new fault every rep, for as long as you want. It is part of the Audio University membership.
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <a href={joinUrl('completion-card')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
@@ -5486,7 +5486,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
               background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6,
               border: '1px solid ' + (err ? '#e05a5a' : '#2c9d52'), outline: 'none',
             }}/>
-          {err && <div style={{ fontSize: 10.5, color: '#e98a8a' }}>That doesn't look like an email. Mind checking it?</div>}
+          {err && <div style={{ fontSize: 10.5, color: '#e98a8a' }}>That doesn't look like a valid email address.</div>}
         </div>
         <button onClick={go} className="mono ui-no-select" style={{
           width: '100%', padding: '11px 18px', fontSize: 12, fontWeight: 800, letterSpacing: 1,
@@ -5538,8 +5538,8 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
           onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 0 0 1px rgba(74,222,128,0.4), 0 0 22px rgba(74,222,128,0.18)'}
           onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 0 0 1px rgba(74,222,128,0.15)'}>
           <div className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 1.6, fontWeight: 700 }}>▶ JUMP IN · FIND THE PROBLEM</div>
-          <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>The band's playing. Something just broke.</div>
-          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>A channel dropped out mid-song. Read the meters, find what's wrong, and bring it back. This is what the lab is really about.</div>
+          <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>Find the fault and fix it.</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>A channel has dropped out of the mix. Read the meters, find what is wrong, and bring it back. This is the main thing the tool trains.</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginTop: 3 }}>START A QUICK FIX →</div>
         </div>
         {/* Essentials — the full setup course. */}
@@ -5681,7 +5681,7 @@ function FaultCatalog({ open, onClose, tier }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {faultList.map((f) => (
             <div key={f.key} style={{ fontSize: 10.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-              <b style={{ color: 'var(--ink)' }}>{f.label}</b>{f.blurb ? ' — ' + f.blurb : ''}
+              <b style={{ color: 'var(--ink)' }}>{f.label}</b>{f.blurb ? ': ' + f.blurb : ''}
             </div>
           ))}
         </div>
@@ -7568,8 +7568,8 @@ function App() {
                 : pitchFor.isFeedbackMode
                 ? 'Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Every rep is a new wedge with a new ring profile.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
-                ? 'That\'s your ' + FREE_PRACTICE_LIMIT + ' free reps. You felt it: the band is playing, something is broken, and every rep hides a new fault in a new place. Members keep going with no limit, stack two or three faults at once, and train until troubleshooting is reflex. There\'s always a next rep.'
-                : 'The free lessons taught you to set up and run the system. Practice Mode trains you to troubleshoot it: the band is playing, something is broken, and every rep hides a new fault in a new place. Turn the difficulty up and it stacks two or three faults at once. Play as long as you want. There\'s always a next rep.'}
+                ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free reps. Members keep going with no limit: a new fault every rep, two or three at once when you turn the difficulty up, for as long as you want to practice.'
+                : 'The free lessons teach you to set up and run the system. Practice Mode trains you to troubleshoot it: a new fault every rep, two or three at once when you turn the difficulty up, for as long as you want to practice.'}
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
               {pitchFor.title} is part of the Audio University membership.
@@ -7841,7 +7841,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
             {mode === 'play' && (
               <div>
                 <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--cool)', marginBottom: 5 }}>FREE PLAY</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 14 }}>A full working system, nothing broken. Move any fader, push any knob, and listen to what it does. No goal, no clock. The place to get a feel for the desk.</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 14 }}>A full working system with nothing broken. Move any fader, turn any knob, and listen to what changes. No goal and no timer, just a place to get familiar with the console.</div>
                 {startBtn('START FREE PLAY →', () => go(sandboxIdx))}
               </div>
             )}
@@ -7861,7 +7861,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                   ? practicePanel
                   : (
                     <div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>The band's playing and something's broken. Find it and fix it. Every rep hides a new fault in a new place.</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Something in the system is broken. Find it and fix it. Every rep has a new fault to find.</div>
                       {practiceFreeLeft != null && practiceFreeLeft > 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>{practiceFreeLeft} FREE REPS LEFT</div>}
                       {startBtn('START A REP →', () => go(practiceIdx))}
                     </div>
@@ -8406,7 +8406,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
               {debrief.rep != null && <> That makes <b style={{ color: 'var(--green)' }}>{debrief.rep} rep{debrief.rep === 1 ? '' : 's'}</b> finished.</>}
             </div>
             <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
-              Building monitor mixes, setting gain, checking the speakers: the job is a lot more than chasing faults.
+              Building monitor mixes, setting gain, and checking speakers are all part of the job, not just finding faults.
             </div>
           </div>
         ) : debrief.zeroFault ? (
@@ -8415,12 +8415,12 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
             <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
               Nothing was broken. You checked it and signed off
               {debrief.moves === 0
-                ? <> without touching a thing. <b style={{ color: 'var(--green)' }}>That's the call.</b></>
+                ? <> without touching a thing. <b style={{ color: 'var(--green)' }}>Correct.</b></>
                 : <> after <b style={{ color: 'var(--ink)' }}>{debrief.moves} move{debrief.moves === 1 ? '' : 's'}</b>. A healthy system doesn't need them, so the clean call is zero.</>}
             </div>
             {debrief.falseSignoffs > 0 && (
               <div style={{ fontSize: 9.5, color: 'var(--amber)', lineHeight: 1.4 }}>
-                You signed off <b>{debrief.falseSignoffs}</b> time{debrief.falseSignoffs === 1 ? '' : 's'} before it was ready — worth a second look next time.
+                You signed off <b>{debrief.falseSignoffs}</b> time{debrief.falseSignoffs === 1 ? '' : 's'} before it was ready. Take a second look next time.
               </div>
             )}
             {debrief.rep != null && (
@@ -8429,7 +8429,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
               </div>
             )}
             <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
-              Knowing when to leave a healthy system alone is half the job. Not every call is a fault.
+              Not every call is a fault. Recognizing a healthy system is part of the skill.
             </div>
           </div>
         ) : (
@@ -8446,8 +8446,8 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           </div>
           <div style={{ fontSize: 9.5, color: 'var(--ink-3)', lineHeight: 1.4 }}>
             {level.isFeedbackMode
-              ? 'The method: push, cut the band that rings by a few dB, push again. A few small cuts, then stop at the target.'
-              : 'The method: walk the signal path from source to speaker, and check the quick things first.'}
+              ? 'Push the send, cut the band that rings by a few dB, then push again. A few small cuts, then stop at the target.'
+              : 'Walk the signal path from source to speaker, and check the quick things first.'}
           </div>
         </div>
         )
