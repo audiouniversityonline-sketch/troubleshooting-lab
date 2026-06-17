@@ -6019,6 +6019,11 @@ function App() {
   // "Practice what needs it": fault keys to bias the draw toward (the member's
   // rusty fault types). null = an even draw.
   const focusRef = uR(null);
+  // First quick fix: set by the welcome chooser so a brand-new player's very
+  // first rep carries a one-line "watch the meters" orientation in the brief.
+  // Consumed (read + cleared) by loadLevel, so it only ever shows on that rep.
+  const firstFixRef = uR(false);
+  const [firstFix, setFirstFix] = uS(false);
 
   // Live Show mode: "the room is listening." When on, destructive diagnosis
   // (muting or pulling a healthy channel, or pulling the master) charges a
@@ -6963,6 +6968,10 @@ function App() {
     // its share link).
     const hardLocked = isLocked(lv) && !(lv && lv.isPractice && practiceSoftOpen);
     if (!lv || (hardLocked && !bypassLock)) { if (lv) setPitchFor(lv); return; }
+    // Show the first-rep orientation only on the welcome chooser's quick fix,
+    // and clear it so the next load (any load) turns it back off.
+    const wasFirstFix = firstFixRef.current; firstFixRef.current = false;
+    setFirstFix(!!(wasFirstFix && lv.isPractice));
     const base = window.defaultState();
     base.topology = { ...base.topology, ...(lv.topology || {}) };
     base.channels = normalizeChannels(base.channels, deriveInvolves(lv));
@@ -7268,6 +7277,7 @@ function App() {
   const chooseQuickFix = () => {
     markPathChosen();
     focusRef.current = null; drillFocusRef.current = null;
+    firstFixRef.current = true;
     window.PRACTICE_FORCE = 'mute';
     const idx = SCENARIOS.findIndex((s) => s.isPractice);
     if (idx >= 0) loadLevel(idx);
@@ -7627,7 +7637,7 @@ function App() {
                         verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus} patchStatus={patchStatus}
                         powerStatus={powerStatus}
                         onSignOff={(level.isPractice && !(practiceInfoRef.current && practiceInfoRef.current.goalKey)) ? attemptSignOff : null} signoffMsg={signoffMsg}
-                        onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}/>}
+                        onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied} firstFix={firstFix}/>}
                   </StableSlot>
                 }
               />
@@ -8074,7 +8084,7 @@ const navBtn = {
   letterSpacing: 0.5, cursor: 'pointer',
 };
 
-function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, patchStatus, pendingHints, hintCount, onRevealHint, onSignOff, signoffMsg, onCopyRepLink, repCopied, liveShow, dropouts }) {
+function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pflChecked, clips, paBalanceIssue, feedback, powerStatus, verifyStatus, gainStatus, pflEachStatus, zeroStatus, patchStatus, pendingHints, hintCount, onRevealHint, onSignOff, signoffMsg, onCopyRepLink, repCopied, liveShow, dropouts, firstFix }) {
   // Free Play has no objective and never solves, so it gets its own calm card
   // instead of the symptom/objective machinery below.
   if (level.isSandbox) {
@@ -8236,6 +8246,11 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
           </div>
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.4 }}>{level.symptom}</div>
+        {firstFix && level.isPractice && (
+          <div style={{ fontSize: 10, color: 'var(--green)', lineHeight: 1.45, marginTop: 1 }}>
+            New here? Watch the channel meters: one just went dead. Find why it dropped out and bring it back. Stuck? Tap "Need a hint?" below.
+          </div>
+        )}
         {liveShow && level.isPractice && (
           <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.3, lineHeight: 1.4, color: dropouts > 0 ? 'var(--hot)' : 'var(--ink-3)' }}>
             {dropouts > 0
