@@ -85,7 +85,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=45"></script>
+<script src="content.js?v=46"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -5686,7 +5686,7 @@ function FaultCatalog({ open, onClose, tier }) {
           ))}
         </div>
 
-        {sectionTitle('var(--aux)', 'FEEDBACK MODE · MEMBERS')}
+        {sectionTitle('var(--aux)', 'MIC FEEDBACK MODE · MEMBERS')}
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5 }}>
           Ring-out training: push a wedge toward a target level, and when a frequency starts to ring, find it on the graphic EQ and cut it by ear. Each one is a new wedge with a new set of problem frequencies.
         </div>
@@ -5694,7 +5694,7 @@ function FaultCatalog({ open, onClose, tier }) {
         {tier !== 'member' && (
           <div style={{ marginTop: 14, borderTop: '1px solid #2a2a2e', paddingTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 11, color: 'var(--ink)', lineHeight: 1.5, flex: 1, minWidth: 180 }}>
-              The Essentials are free. Practice Mode and Feedback Mode are part of the Audio University membership.
+              The Essentials are free. Practice Mode and Mic Feedback Mode are part of the Audio University membership.
             </div>
             <a href={joinUrl('catalog')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
               padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
@@ -7566,7 +7566,7 @@ function App() {
                 : pitchFor.isLibrary
                 ? 'The Scenario Library is a growing shelf of real-world situations, each one a specific show that went sideways and the exact board behind it. Members can browse and play the whole library, and it keeps growing. Some land as free links in the videos; the full shelf is part of the membership.'
                 : pitchFor.isFeedbackMode
-                ? 'Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Each one is a new wedge with a new ring profile.'
+                ? 'Mic Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Each one is a new wedge with a new ring profile.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
                 ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free tries. Members keep going with no limit: a new fault each time, two or three at once when you turn the difficulty up, for as long as you want to practice.'
                 : 'The free lessons teach you to set up and run the system. Practice Mode trains you to troubleshoot it: a new fault each time, two or three at once when you turn the difficulty up, for as long as you want to practice.'}
@@ -7767,7 +7767,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // Mounted fresh each time the picker opens (rendered behind `{picker && ...}`),
   // so it always lands on whatever mode the current level belongs to.
   const curMode = level.isSandbox ? 'play' : (level.isPractice || level.isFeedbackMode || level.isLibrary) ? 'practice' : 'learn';
-  const curTab = level.isFeedbackMode ? 'feedback' : level.isLibrary ? 'library' : 'trouble';
+  const curTab = level.isFeedbackMode ? 'feedback' : 'trouble';
   const [mode, setMode] = uS(curMode);
   const [tab, setTab] = uS(curTab);
   const isMember = TIER === 'member';
@@ -7849,7 +7849,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
               <div>
                 <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--green)', marginBottom: 10 }}>PRACTICE</div>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-                  {[{ k: 'trouble', l: 'TROUBLESHOOTING', lock: false }, { k: 'feedback', l: 'FEEDBACK', lock: !isMember }, { k: 'library', l: 'LIBRARY', lock: !isMember }].map((t) => {
+                  {[{ k: 'trouble', l: 'TROUBLESHOOTING', lock: false }, { k: 'feedback', l: 'MIC FEEDBACK', lock: !isMember }].map((t) => {
                     const on = tab === t.k;
                     return (
                       <div key={t.k} onClick={() => setTab(t.k)} className="mono ui-no-select"
@@ -7878,7 +7878,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                         ))}
                       </div>
                     )}
-                    {startBtn(isMember ? 'START FEEDBACK →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
+                    {startBtn(isMember ? 'START →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
                   </div>
                 )}
                 {tab === 'library' && (
@@ -8010,7 +8010,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             {level.isPractice
               ? (practiceFreeLeft != null ? 'PRACTICE MODE · FREE PREVIEW' : 'PRACTICE MODE · MEMBERS')
               : level.isFeedbackMode
-              ? 'FEEDBACK MODE · MEMBERS'
+              ? 'MIC FEEDBACK MODE · MEMBERS'
               : level.isSandbox
               ? 'FREE PLAY · NO GOAL'
               : `LEVEL ${String(levelIdx + 1).padStart(2, '0')} / ${String(window.LEVELS.length).padStart(2, '0')}`}

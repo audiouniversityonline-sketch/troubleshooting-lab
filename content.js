@@ -938,7 +938,7 @@ window.PRACTICE = {
 //     rings needed. Win = target level + no rings + tone intact.
 window.FEEDBACK_MODE = {
   id: 'feedback-mode',
-  title: 'Feedback Mode',
+  title: 'Mic Feedback Mode',
   par: 12,
   conditions: [
     { source: 'vocal', dest: 'wedge', min: 0.65 },
