@@ -4676,6 +4676,7 @@ function defaultProfile() {
     practiceFaults: 1,  // resume: FAULTS difficulty (1-3)
     feedbackByEar: false, // resume: Feedback Mode GUIDED(false)/BY EAR(true)
     email: '',          // free-tier email gate: captured address (sent to Kit)
+    firstName: '',      // free-tier email gate: captured first name (sent to Kit)
     emailSkipped: false, // free-tier email gate: chose "skip for now" (soft gate)
     freePractice: 0,    // free-tier Practice taste: reps consumed (gate at FREE_PRACTICE_LIMIT)
     surface: 'analog',  // member console surface: 'analog' or 'digital' (select-then-edit)
@@ -4707,6 +4708,7 @@ function normalizeProfile(data) {
   p.rankClean = (Number.isFinite(data.rankClean) && data.rankClean >= 0) ? Math.floor(data.rankClean) : 0;
   p.liveShow = !!data.liveShow;
   p.pathChosen = !!data.pathChosen;
+  p.firstName = (typeof data.firstName === 'string') ? data.firstName : '';
   p.v = PROFILE_VERSION;
   return p;
 }
@@ -4783,13 +4785,20 @@ const isValidEmail = (s) => typeof s === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$
 // Fire-and-forget POST to Kit's public form-subscription endpoint. Designed for
 // browser embedding (CORS open), so no backend is needed. Entry never waits on
 // this; a network/Kit failure must not trap a viewer behind the gate.
-function submitToKit(email) {
+function submitToKit(email, firstName) {
   if (!KIT_FORM_ID) return Promise.resolve(false);
   try {
+    // `first_name` is Kit's (ConvertKit's) standard, built-in subscriber
+    // attribute, so it maps to the subscriber's first name regardless of how the
+    // form is configured. Custom fields would use `fields[...]`, but first name
+    // is not custom. Only sent when present so a blank never overwrites a name.
+    const payload = { email_address: String(email).trim() };
+    const fn = (firstName || '').trim();
+    if (fn) payload.first_name = fn;
     return fetch('https://app.kit.com/forms/' + KIT_FORM_ID + '/subscriptions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ email_address: String(email).trim() }),
+      body: JSON.stringify(payload),
     }).then(() => true).catch(() => false);
   } catch (e) { return Promise.resolve(false); }
 }
@@ -5441,12 +5450,17 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
 // (green, "let's start"), not a lock: there's a "skip for now" link. Sends the
 // address to Kit on submit and lets the viewer straight in either way.
 function EmailGate({ open, onSubmit, onSkip }) {
+  const [name, setName] = uS('');
   const [val, setVal] = uS('');
   const [err, setErr] = uS(false);
+  const [nameErr, setNameErr] = uS(false);
   if (!open) return null;
   const go = () => {
-    if (!isValidEmail(val)) { setErr(true); return; }
-    onSubmit(val.trim());
+    const okName = name.trim().length > 0;
+    const okEmail = isValidEmail(val);
+    setNameErr(!okName); setErr(!okEmail);
+    if (!okName || !okEmail) return;
+    onSubmit(val.trim(), name.trim());
   };
   return (
     <div style={{
@@ -5463,6 +5477,19 @@ function EmailGate({ open, onSubmit, onSkip }) {
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Learn to run a live show.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
           Learn it by doing: fix a live problem on a real console, or take the full ten-lesson course from a cold system to a running show. Drop your email and pick where to start.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input
+            type="text" autoComplete="given-name" placeholder="First name"
+            value={name}
+            onChange={(e) => { setName(e.target.value); if (nameErr) setNameErr(false); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '11px 13px', fontSize: 13,
+              background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6,
+              border: '1px solid ' + (nameErr ? '#e05a5a' : '#2c9d52'), outline: 'none',
+            }}/>
+          {nameErr && <div style={{ fontSize: 10.5, color: '#e98a8a' }}>What should we call you?</div>}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -5960,10 +5987,10 @@ function App() {
   const practiceSoftOpen = TIER === 'member' || freeRepsLeft > 0;
 
   const [emailDone, setEmailDone] = uS(() => !!(profileRef.current.email || profileRef.current.emailSkipped));
-  const captureEmail = (email) => {
-    profileRef.current = { ...profileRef.current, email };
+  const captureEmail = (email, firstName) => {
+    profileRef.current = { ...profileRef.current, email, firstName: firstName || '' };
     saveProfile(profileRef.current);
-    submitToKit(email);
+    submitToKit(email, firstName);
     setEmailDone(true);
   };
   const skipEmail = () => {
