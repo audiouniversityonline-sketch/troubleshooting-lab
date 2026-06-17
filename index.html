@@ -5046,26 +5046,10 @@ const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
 // Practice Mode is soft-gated by this budget. Members are never counted.
 const FREE_PRACTICE_LIMIT = 10;
 
-// Picker bands — the member journey, in order. The picker emits a band header
-// whenever the band changes, so the curriculum reads as a path (and the locked
-// bands do quiet sales work). Adding a pack or a lesson track later means
-// pointing bandOf() at it; the header shows up on its own. SHOW DAY lands here
-// when that mode ships.
-const SCENARIO_BANDS = [
-  { id: 'LEARN',   label: 'LEARN · THE ESSENTIALS',   member: false, desc: 'Set up and run a full show, start to finish.' },
-  { id: 'PLAY',    label: 'FREE PLAY',                member: false },
-  { id: 'DRILL',   label: 'DRILL · ENDLESS REPS',     member: true },
-  { id: 'LIBRARY', label: 'SCENARIO LIBRARY',         member: true, desc: 'Real situations pulled from real gigs.' },
-];
-// One plain "what it trains" line per member mode, so the picker reads as a set
-// of training types, not a bare list. Library scenarios use their own titles +
-// the band line; lessons (LEARN) carry their own titles in sequence.
-function trainsBlurb(l) {
-  if (l.isPractice) return "The band's playing, something's broken. Endless reps.";
-  if (l.isFeedbackMode) return 'Ring out a wedge by ear: push it till it rings, find the frequency, cut it.';
-  if (l.isSandbox) return 'A full working system, nothing broken. Poke around with no clock.';
-  return null;
-}
+// Picker bands — every scenario maps to one of four bands via bandOf(). The
+// mode picker groups by these IDs: Learn (the Essentials), Practice (Practice +
+// Feedback + Library), and Free Play. Adding a pack or a lesson track later
+// means pointing bandOf() at it.
 function bandOf(l) {
   if (l.isSandbox) return 'PLAY';      // free, no-goal exploration
   if (l.isLibrary) return 'LIBRARY';   // curated, browsable real-world scenarios
@@ -7920,10 +7904,6 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
   // allow="fullscreen", which the embed snippet sets). Combined with the
   // raised scale cap, the board fills a big monitor when fullscreen.
   const [isFs, setIsFs] = uS(typeof document !== 'undefined' && !!document.fullscreenElement);
-  // Once a member has run the whole Essentials arc, those 10 lesson rows are
-  // clutter on the way to their real home (practice), so they collapse to a
-  // single "revisit" row. Default collapsed; a click expands them back.
-  const [essentialsOpen, setEssentialsOpen] = uS(false);
   uE(() => {
     const onFs = () => setIsFs(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFs);
@@ -7939,12 +7919,6 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
       }
     } catch (e) {}
   };
-  // The Essentials lessons all share the LEARN band. A member has "passed" once
-  // every one is complete; free users (still learning the procedure) never
-  // collapse. essentialsCollapsed hides the individual rows behind one toggle.
-  const learnScenarios = SCENARIOS.filter(l => bandOf(l) === 'LEARN');
-  const passedEssentials = TIER === 'member' && learnScenarios.length > 0 && learnScenarios.every(l => completed[l.id]);
-  const essentialsCollapsed = passedEssentials && !essentialsOpen;
   // The freshness panel ("what needs practice") now renders INSIDE the DRILL
   // group, directly above Practice Mode, so the practice path reads as one
   // block instead of floating above the whole list. Members only (coverage set).
