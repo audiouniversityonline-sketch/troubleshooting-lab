@@ -4684,6 +4684,7 @@ function defaultProfile() {
     rankClean: 0,       // drill ladder: clean solves banked toward the next rung
     liveShow: false,    // Practice: "the room is listening" mode (charges destructive diagnosis)
     pathChosen: false,  // welcome chooser: has the user picked a first path (quick fix vs Essentials)
+    walkthroughDone: false, // free "Know your console" walkthrough: shown once to a fresh free visitor
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -4708,6 +4709,7 @@ function normalizeProfile(data) {
   p.rankClean = (Number.isFinite(data.rankClean) && data.rankClean >= 0) ? Math.floor(data.rankClean) : 0;
   p.liveShow = !!data.liveShow;
   p.pathChosen = !!data.pathChosen;
+  p.walkthroughDone = !!data.walkthroughDone;
   p.firstName = (typeof data.firstName === 'string') ? data.firstName : '';
   p.v = PROFILE_VERSION;
   return p;
@@ -4990,6 +4992,19 @@ const SCENARIOS = [
     defaultInspect: 'pa',
     sabotage: (s) => { if (s.channels[2]) s.channels[2].phantom = true; return s; },
   },
+  // The free "Know your console" walkthrough: a guided tour of every control on
+  // a system that's already connected and playing. Same healthy board as Free
+  // Play; no fault, no win (the win effect skips isWalkthrough). The
+  // WalkthroughPanel + the intro/wrap modals drive the steps. It's the new front
+  // door for a fresh free visitor (entered in App's mount effect), not a picker
+  // row, so it never has to be navigated to.
+  {
+    id: 'walkthrough', isWalkthrough: true,
+    title: 'Know your console',
+    symptom: 'A guided tour of the console.',
+    conditions: [], involves: [1, 2, 3, 4], defaultInspect: 'pa',
+    sabotage: (s) => { if (s.channels[2]) s.channels[2].phantom = true; return s; },
+  },
 ];
 
 // The Scenario Library: a curated, growing shelf of real-world situations Kyle
@@ -5039,6 +5054,12 @@ if (SCENARIO_PARAM) {
 }
 const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
 
+// Indices of the two unlocked, no-win scenarios the app jumps to directly
+// (the welcome walkthrough and Free Play). Computed once after SCENARIOS is
+// assembled; -1 if absent.
+const SANDBOX_INDEX = SCENARIOS.findIndex((s) => s.isSandbox);
+const WALKTHROUGH_INDEX = SCENARIOS.findIndex((s) => s.isWalkthrough);
+
 // Free-tier Practice taste: a free viewer gets this many real Practice reps
 // before the membership gate. The point is to let the endless-mastery value be
 // FELT (a door walked through and pulled back from), not just described behind
@@ -5051,6 +5072,7 @@ const FREE_PRACTICE_LIMIT = 10;
 // Feedback + Library), and Free Play. Adding a pack or a lesson track later
 // means pointing bandOf() at it.
 function bandOf(l) {
+  if (l.isWalkthrough) return 'PLAY';  // the guided tour, entered directly, never a picker row
   if (l.isSandbox) return 'PLAY';      // free, no-goal exploration
   if (l.isLibrary) return 'LIBRARY';   // curated, browsable real-world scenarios
   if (l.isChallenge) return 'DRILL';   // Practice + Feedback Mode + any future packs
@@ -5559,6 +5581,180 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
   );
 }
 
+// The free "Know your console" walkthrough. A guided tour of the analog board,
+// built to mirror how the mixer is taught on the channel: start at the outputs
+// (the master section, where every output's level lives), then follow one
+// channel in (PFL to check it, gain to set it, the fader into the room, pan to
+// place it), then the second mix (the monitor send to the wedge). No invented
+// control pairings; the structure is the master section, then the channel. Each
+// stop asks the viewer to actually touch the control before NEXT lights up.
+const WALK_LEAD = 0; // lead vocal channel — the strip the whole tour anchors on
+const WALK_STEPS = [
+  {
+    act: 'Where the sound goes out', title: 'The master section',
+    teach: "Start where the sound leaves the console. Every output has its own level control here in the master section. The MAIN fader is the overall volume for the room, and the mute beside it cuts the mains. The monitor master sets the level going to the singer's wedge.",
+    prompt: "Ease the MAIN fader down and hear the whole room get quieter, then bring it back up.",
+    takeaway: "Every output has a control in the master section. The MAIN fader is the room's volume.",
+    test: (s, b) => Math.abs((s.master.fader ?? 0) - b.mfader) > 0.08,
+  },
+  {
+    act: 'Following one channel', title: 'PFL and the meter',
+    teach: "Before the room hears a channel, you can check it yourself. PFL, for pre-fade listen, sends just that channel to your headphones, whatever its fader is doing. Watch the meter while you listen: yellow is fine, red is too hot.",
+    prompt: "Press PFL on the lead vocal to hear it on its own. Press it again to drop back to the full mix.",
+    takeaway: "PFL checks any channel in your headphones, and on the meter, before the room hears it.",
+    test: (s, b) => (!!s.channels[WALK_LEAD].solo) !== b.solo,
+  },
+  {
+    act: 'Following one channel', title: 'Gain',
+    teach: "If a channel is weak on the meter, set its level with the gain knob at the top of the strip. Gain is how strong the input is before anything else. Bring it up while you watch the meter, leaving room before the red. You set gain by the meter, not by ear.",
+    prompt: "Turn the lead vocal gain up slowly and watch the meter climb. Ease it back if it hits the red.",
+    aside: "The +48V button powers mics that need it, like condensers. The stage mics already have it on, so leave it.",
+    takeaway: "Gain is the input level, set at the top of the strip by the meter.",
+    test: (s, b) => Math.abs((s.channels[WALK_LEAD].gain ?? 0) - b.gain) > 0.05,
+  },
+  {
+    act: 'Following one channel', title: 'The channel fader',
+    teach: "Now let the room hear it. The channel fader is that channel's level in the main mix. If the lead vocal is still soloed, tap PFL to drop back first. The mute button sits with the fader, the channel's on and off. Keep faders near the U mark, unity, where small moves give the finest control.",
+    prompt: "Move the lead vocal fader. Try the mute button too: the singer drops out of the room, then comes back when you unmute.",
+    takeaway: "The channel fader is the channel's level in the room. Unity (U) is home. Mute is its on and off.",
+    test: (s, b) => Math.abs((s.channels[WALK_LEAD].fader ?? 0) - b.cfader) > 0.05 || (!!s.channels[WALK_LEAD].mute) !== b.mute,
+  },
+  {
+    act: 'Following one channel', title: 'Pan',
+    teach: "The pan knob sets where the channel sits between the left and right speakers. All the way left sends it to the left speaker, all the way right to the right, and center sends it to both evenly.",
+    prompt: "Pan the lead vocal left, then right, then back to center. It clicks at center.",
+    takeaway: "Pan places the channel left to right across the room.",
+    test: (s, b) => Math.abs((s.channels[WALK_LEAD].pan ?? 0.5) - b.pan) > 0.04,
+  },
+  {
+    act: 'The second mix', title: 'The monitor send',
+    teach: "The console builds more than one mix at once. The main mix goes to the room. The monitor send on each channel sets how much of that channel goes to the singer's wedge, a separate mix so the band can hear themselves. Turn it up and the singer gets more, while the room does not change. The monitor master in the master section sets the wedge's overall level.",
+    prompt: "Turn the lead vocal's monitor send (AUX 1) up. The singer gets more of themselves in the wedge, and the room never hears it change.",
+    takeaway: "The room mix and the monitor mix are separate. The send feeds the wedge, the monitor master sets its level.",
+    test: (s, b) => Math.abs((s.channels[WALK_LEAD].aux1 ?? 0) - b.aux1) > 0.04,
+  },
+];
+function walkSnap(s) {
+  const c = (s.channels && s.channels[WALK_LEAD]) || {};
+  const m = s.master || {};
+  return { mfader: m.fader ?? 0, solo: !!c.solo, mute: !!c.mute, gain: c.gain ?? 0, cfader: c.fader ?? 0, pan: c.pan ?? 0.5, aux1: c.aux1 ?? 0 };
+}
+
+// The step panel — lives in the board sidebar (where the BriefCard normally is),
+// so the console stays reachable while the panel guides. It snapshots the
+// relevant controls when a step begins (or when the steps go live), then
+// watches the live board and lights up NEXT once the prompted control moves.
+function WalkthroughPanel({ step, total, state, active, onNext, onSkip }) {
+  const S = WALK_STEPS[step] || WALK_STEPS[0];
+  const baseRef = uR(null);
+  const [done, setDone] = uS(false);
+  uE(() => { if (active) { baseRef.current = walkSnap(state); setDone(false); } }, [step, active]);
+  uE(() => {
+    if (!active || done || !baseRef.current) return;
+    try { if (S.test(state, baseRef.current)) setDone(true); } catch (e) {}
+  }, [state, step, active, done]);
+  const last = step + 1 >= total;
+  return (
+    <div style={{
+      background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
+      border: '1px solid ' + (done ? 'var(--green)' : '#38383e'), borderRadius: 8, padding: '12px 14px',
+      display: 'flex', flexDirection: 'column', gap: 8,
+      boxShadow: '0 4px 14px rgba(0,0,0,0.4)', maxHeight: 280, overflowY: 'auto',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--cool)', letterSpacing: 1.3, fontWeight: 700, textTransform: 'uppercase' }}>{S.act}</div>
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8 }}>STOP {step + 1} OF {total}</div>
+      </div>
+      <div className="display" style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.15 }}>{S.title}</div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>{S.teach}</div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.5, padding: '7px 10px', background: '#0e1a14', border: '1px solid #1e3a2a', borderRadius: 6 }}>
+        <span className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 1, fontWeight: 700, display: 'block', marginBottom: 3 }}>TRY IT</span>
+        {S.prompt}
+      </div>
+      {S.aside && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.45, fontStyle: 'italic' }}>{S.aside}</div>}
+      {done && <div style={{ fontSize: 11, color: 'var(--green)', lineHeight: 1.45 }}>✓ {S.takeaway}</div>}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+        <button onClick={done ? onNext : undefined} disabled={!done} className="mono ui-no-select" style={{
+          padding: '7px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
+          background: done ? 'linear-gradient(180deg, var(--green), #2c9d52)' : '#1a1a1d',
+          color: done ? '#0a0a0c' : 'var(--ink-3)', border: '1px solid ' + (done ? '#2c9d52' : '#2a2a2e'),
+          borderRadius: 4, cursor: done ? 'pointer' : 'default', opacity: done ? 1 : 0.6,
+        }}>{last ? 'FINISH →' : 'NEXT →'}</button>
+        {!done && <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>Try the control to continue.</span>}
+        <button onClick={onSkip} className="ui-no-select" style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--ink-3)', cursor: 'pointer', fontSize: 10, textDecoration: 'underline', padding: 0 }}>Skip the tour</button>
+      </div>
+    </div>
+  );
+}
+
+// Intro card: the map. Shown before the steps; START turns sound on (a user
+// gesture, so the audio context is allowed to begin) and enters the tour.
+function WalkthroughIntro({ open, onStart }) {
+  if (!open) return null;
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 96, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ width: 560, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, padding: '24px 26px', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <img src={window.AU_LOGO} alt="Audio University" style={{ height: 40, width: 40, display: 'block' }}/>
+          <div>
+            <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Know your console</div>
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 3 }}>A quick tour · about 4 minutes</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6 }}>
+          A mixing console can look intimidating, but it is simpler than it looks. On one side are the inputs, where sources like microphones connect. Each input has its own line of controls called a channel strip, and they all work the same way, so once you understand one, you understand them all. On the other side are the outputs, which run to your speakers.
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6 }}>
+          Right now a band is playing through a system that is already set up: two speakers for the room, and one wedge on the floor so the singer can hear themselves. We will walk through the controls that shape what the room hears and what the singer hears. Nothing here can break, so touch anything you want.
+        </div>
+        <button onClick={onStart} className="mono ui-no-select" style={{ alignSelf: 'flex-start', padding: '11px 22px', fontSize: 12, fontWeight: 800, letterSpacing: 1, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>START →</button>
+      </div>
+    </div>
+  );
+}
+
+// Wrap card: the recap, the email capture (the lead magnet's actual ask, at the
+// moment of peak interest), and the handoff to the lessons or Free Play. The
+// email is optional; routing without it is a soft skip, handled by the caller.
+function WalkthroughWrap({ open, onEmail, onLessons, onExplore }) {
+  const [name, setName] = uS('');
+  const [val, setVal] = uS('');
+  const [err, setErr] = uS(false);
+  const [sent, setSent] = uS(false);
+  if (!open) return null;
+  const submit = () => {
+    if (!isValidEmail(val)) { setErr(true); return; }
+    onEmail(val.trim(), name.trim());
+    setSent(true);
+  };
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 96, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ width: 520, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, padding: '24px 26px', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: 13 }}>
+        <div className="display" style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.1 }}>That's the whole console</div>
+        <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+          You found where the sound goes out, checked a channel in your headphones, set its level with the gain, brought it into the room with the fader, placed it with the pan, and fed the singer's monitor. Every channel on the board works exactly the same way. That is all a console is.
+        </div>
+        {!sent ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '13px 14px', background: '#0e2415', border: '1px solid #1e3a2a', borderRadius: 8 }}>
+            <div className="display" style={{ fontSize: 14, fontWeight: 800 }}>Ready to set one up and run a full show?</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>Enter your email and we'll show you the next step.</div>
+            <input type="text" autoComplete="given-name" placeholder="First name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 13, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid #2c9d52', outline: 'none' }}/>
+            <input type="email" inputMode="email" autoComplete="email" placeholder="you@email.com" value={val} onChange={(e) => { setVal(e.target.value); if (err) setErr(false); }} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 13, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid ' + (err ? '#e05a5a' : '#2c9d52'), outline: 'none' }}/>
+            {err && <div style={{ fontSize: 10.5, color: '#e98a8a' }}>That doesn't look like a valid email address.</div>}
+            <button onClick={submit} className="mono ui-no-select" style={{ width: '100%', padding: '10px 16px', fontSize: 11.5, fontWeight: 800, letterSpacing: 1, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>SEND ME THE NEXT STEP →</button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: 'var(--green)', lineHeight: 1.5, padding: '10px 12px', background: '#0e2415', border: '1px solid #1e3a2a', borderRadius: 8 }}>Thanks{name ? ', ' + name : ''}. Check your inbox for the next step. Where to now?</div>
+        )}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={onLessons} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 6, cursor: 'pointer' }}>🎓 START THE LESSONS →</button>
+          <button onClick={onExplore} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--cool)', border: '1px solid #38383e', borderRadius: 6, cursor: 'pointer' }}>▶ EXPLORE THE BOARD</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // The show's paperwork: an industry-style input list + output list, openable
 // from the top bar on every level. Industry input lists carry the channel,
 // the source/instrument, the mic or DI type, phantom, the snake channel, and
@@ -5927,7 +6123,7 @@ function App() {
   const resumeTargetRef = uR(undefined);
   if (resumeTargetRef.current === undefined) {
     const li = profileRef.current.lastLevel;
-    resumeTargetRef.current = (Number.isInteger(li) && li > 0 && li < SCENARIOS.length && !isLocked(SCENARIOS[li])) ? li : 0;
+    resumeTargetRef.current = (Number.isInteger(li) && li > 0 && li < SCENARIOS.length && !isLocked(SCENARIOS[li]) && !SCENARIOS[li].isWalkthrough) ? li : 0;
   }
   const [completed, setCompleted] = uS(() => profileRef.current.completed);
 
@@ -5992,6 +6188,21 @@ function App() {
     (profileRef.current.reps > 0) ||
     Object.keys(profileRef.current.completed || {}).length > 0
   );
+
+  // The free "Know your console" walkthrough. A brand-new free visitor is
+  // dropped into it as their first experience (the mount effect below loads the
+  // board; walkPhase starts at 'intro' so the intro modal is up from frame one,
+  // which also keeps the generic tour from flashing). walkPhase drives the
+  // intro modal -> the in-board step panel -> the wrap; walkStep is the stop.
+  // Members, returning visitors, and shared links skip it.
+  const shouldWalk = (() => {
+    if (SCENARIO_PARAM || REP_PARAM || WALKTHROUGH_INDEX < 0) return false;
+    const p = profileRef.current;
+    const pristine = (p.reps || 0) === 0 && Object.keys(p.completed || {}).length === 0 && !p.email && !p.emailSkipped;
+    return TIER !== 'member' && !p.walkthroughDone && pristine;
+  })();
+  const [walkPhase, setWalkPhase] = uS(shouldWalk ? 'intro' : null);
+  const [walkStep, setWalkStep] = uS(0);
 
   // Persist the whole profile whenever a React-state field changes. Survives
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
@@ -6391,7 +6602,7 @@ function App() {
     const isZeroFault = level.isPractice && practiceInfoRef.current && practiceInfoRef.current.zeroFault;
     // Sandbox / Free Play never "wins" — there is nothing to solve. Warnings and
     // statuses above still compute, so clipping a fader still flags in free play.
-    const effWon = won && (!isZeroFault || signedOff) && !level.isSandbox;
+    const effWon = won && (!isZeroFault || signedOff) && !level.isSandbox && !level.isWalkthrough;
     if (effWon && !blocked) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
@@ -6972,6 +7183,9 @@ function App() {
     // and clear it so the next load (any load) turns it back off.
     const wasFirstFix = firstFixRef.current; firstFixRef.current = false;
     setFirstFix(!!(wasFirstFix && lv.isPractice));
+    // Loading any normal scenario leaves the guided walkthrough (entering it
+    // sets the phase separately, so an isWalkthrough load is left alone).
+    if (lv && !lv.isWalkthrough) setWalkPhase(null);
     const base = window.defaultState();
     base.topology = { ...base.topology, ...(lv.topology || {}) };
     base.channels = normalizeChannels(base.channels, deriveInvolves(lv));
@@ -7037,6 +7251,12 @@ function App() {
       practiceFaultsRef.current = REP_PARAM.faults;
       setPracticeFaultsState(REP_PARAM.faults);
       loadLevel(window.LEVELS.length, REP_PARAM.seed, true);
+      return;
+    }
+    // A fresh free visitor starts in the "Know your console" walkthrough (the
+    // healthy board); walkPhase is already 'intro' so the intro modal is up.
+    if (shouldWalk) {
+      loadLevel(WALKTHROUGH_INDEX, undefined, true);
       return;
     }
     if (resumeTargetRef.current > 0) loadLevel(resumeTargetRef.current);
@@ -7286,6 +7506,26 @@ function App() {
     markPathChosen();
     loadLevel(0);
   };
+  // Walkthrough handlers. START turns sound on (inside the click, so the audio
+  // context is allowed to begin) and enters the steps; NEXT advances, the last
+  // step opens the wrap; SKIP jumps straight to the wrap (still the email ask).
+  // FINISH marks it done so it never returns, retires the tour + welcome chooser
+  // for this viewer, soft-skips the email if they didn't give one, and routes
+  // to the lessons or Free Play.
+  const startWalkthrough = () => { setAudioOn(true); setWalkStep(0); setWalkPhase('steps'); };
+  const walkNext = () => { setWalkStep((s) => { if (s + 1 >= WALK_STEPS.length) { setWalkPhase('wrap'); return s; } return s + 1; }); };
+  const walkSkip = () => setWalkPhase('wrap');
+  const finishWalkthrough = (route) => {
+    const merge = { ...profileRef.current, walkthroughDone: true, pathChosen: true };
+    if (!emailDone) merge.emailSkipped = true;
+    profileRef.current = merge;
+    saveProfile(profileRef.current);
+    setPathChosen(true);
+    if (!emailDone) setEmailDone(true);
+    dismissTour();
+    setWalkPhase(null);
+    loadLevel(route === 'lessons' ? 0 : (SANDBOX_INDEX >= 0 ? SANDBOX_INDEX : 0), undefined, true);
+  };
   // Fault-freshness coverage for the picker + debrief (members only). Recomputed
   // each render from the live ledger, so it reflects the rep just solved.
   const coverage = (TIER === 'member') ? coverageFrom(profileRef.current.ledger, window.PRACTICE_FAULTS) : null;
@@ -7504,7 +7744,12 @@ function App() {
         <AuthorPanel text={authorText} setText={setAuthorText} goal={authorGoal}
           onCapture={captureGoal} onClearGoal={() => setAuthorGoal(null)} onCopy={copyScenarioLink} onCopyEntry={copyLibraryEntry} msg={authorMsg}/>
       )}
-      <TourOverlay open={tourOpen} onClose={dismissTour}/>
+      <TourOverlay open={tourOpen && walkPhase === null} onClose={dismissTour}/>
+      <WalkthroughIntro open={walkPhase === 'intro'} onStart={startWalkthrough}/>
+      <WalkthroughWrap open={walkPhase === 'wrap'}
+        onEmail={captureEmail}
+        onLessons={() => finishWalkthrough('lessons')}
+        onExplore={() => finishWalkthrough('explore')}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
       {/* Free-tier email gate: blocks the board only while the viewer is on an
@@ -7630,6 +7875,8 @@ function App() {
                           falseSignoffs: falseSignoffRef.current,
                         } : null}
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
+                    : level.isWalkthrough
+                    ? <WalkthroughPanel step={walkStep} total={WALK_STEPS.length} state={state} active={walkPhase === 'steps'} onNext={walkNext} onSkip={walkSkip}/>
                     : <BriefCard level={level} conditions={effConditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
                         liveShow={TIER === 'member' && liveShow} dropouts={dropouts}
                         pendingHints={pendingHints} hintCount={hintCount} onRevealHint={() => { hintsUsedRef.current += 1; setHintCount(c => c + 1); }}
