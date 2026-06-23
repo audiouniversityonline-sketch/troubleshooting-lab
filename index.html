@@ -79,6 +79,12 @@
     0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
     50%      { box-shadow: 0 0 12px 2px rgba(74,222,128,0.55); }
   }
+  /* The guided walkthrough's spotlight ring — a gentle pulse around the control
+     the current step is about, so the eye goes straight to it. */
+  @keyframes walkPulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(74,222,128,0.22), 0 0 10px 2px rgba(74,222,128,0.30); }
+    50%      { box-shadow: 0 0 0 3px rgba(74,222,128,0.50), 0 0 22px 6px rgba(74,222,128,0.55); }
+  }
 </style>
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
@@ -1632,6 +1638,10 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
   // set() if no handler is wired (keeps the strip standalone-usable).
   const togglePhantom = onPhantomToggle ? () => onPhantomToggle() : () => set({ phantom: !ch.phantom });
   const srcDisplay = srcLabel?.label || (ch.label === '—' ? 'EMPTY' : ch.label);
+  // Spotlight anchors for the "Know your console" walkthrough. Only the lead
+  // vocal strip (idx 0) is tagged, so the guided ring points at the exact
+  // control on that one channel; every other strip renders the control plain.
+  const walk = (key, el) => idx === 0 ? <span data-walk={key} style={{ display: 'inline-flex' }}>{el}</span> : el;
 
   return (
     <div style={{
@@ -1664,8 +1674,8 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
         <L on={powered && ch.phantom} color="var(--hot)" size={5}/>
       </div>
 
-      <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={40} color="var(--accent)"
-        tip="Input gain. Sets how strong the source hits the preamp. Set it first, checking in PFL." />
+      {walk('ch-gain', <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={40} color="var(--accent)"
+        tip="Input gain. Sets how strong the source hits the preamp. Set it first, checking in PFL." />)}
 
       <div style={{ width: '94%' }}>
         <PFLBar level={pflLevel} hot={ch.solo}/>
@@ -1680,29 +1690,29 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-        <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={30} color="var(--aux)"
-          tip="How much of this channel goes to Wedge 1 (the monitor mix). Doesn't change the PA." />
+        {walk('ch-aux1', <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={30} color="var(--aux)"
+          tip="How much of this channel goes to Wedge 1 (the monitor mix). Doesn't change the PA." />)}
         <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={30} color="var(--cool)"
           tip="How much of this channel goes to Wedge 2. Doesn't change the PA." />
       </div>
 
-      <K value={ch.pan} onChange={(v) => set({ pan: v })} label={ch.stereo ? 'BAL' : 'PAN'} size={32} color="var(--ink)" detentAt={0.5}
+      {walk('ch-pan', <K value={ch.pan} onChange={(v) => set({ pan: v })} label={ch.stereo ? 'BAL' : 'PAN'} size={32} color="var(--ink)" detentAt={0.5}
         tip={ch.stereo
           ? 'Balance for the stereo channel: favors the left or right side of the PA. Double-click to center.'
-          : 'Pan. Places this channel between the left and right PA speakers. Double-click to center.'} />
+          : 'Pan. Places this channel between the left and right PA speakers. Double-click to center.'} />)}
 
       <div style={{ display: 'flex', gap: 3 }}>
-        <BP active={ch.mute} onClick={() => set({ mute: !ch.mute })} label="MUTE" color="var(--hot)" width={28} height={14} fontSize={7}
-          tip="Silences this channel everywhere after the preamp: PA and wedges."/>
+        {walk('ch-mute', <BP active={ch.mute} onClick={() => set({ mute: !ch.mute })} label="MUTE" color="var(--hot)" width={28} height={14} fontSize={7}
+          tip="Silences this channel everywhere after the preamp: PA and wedges."/>)}
         {/* PFL = Pre-Fader Listen. Monitor-only — routes this channel to
             the engineer's headphone bus. Does NOT mute the rest of the
             mix; the audience keeps hearing everything. */}
-        <BP active={ch.solo} onClick={() => set({ solo: !ch.solo })} label="PFL" color="var(--amber)" width={24} height={14} fontSize={7}
-          tip="Pre-fade listen. Hear just this channel in your headphones. The room keeps hearing the full mix."/>
+        {walk('ch-pfl', <BP active={ch.solo} onClick={() => set({ solo: !ch.solo })} label="PFL" color="var(--amber)" width={24} height={14} fontSize={7}
+          tip="Pre-fade listen. Hear just this channel in your headphones. The room keeps hearing the full mix."/>)}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
-        <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>
+        {walk('ch-fader', <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>)}
         <M level={channelLevel} height={172} segments={22}/>
       </div>
 
@@ -1763,7 +1773,7 @@ function MasterSection({ master, onChange, paLevel, paRLevel, powered = true, on
       <BP active={master.mute} onClick={() => onChange({ ...master, mute: !master.mute })} label="MUTE MAIN" color="var(--hot)" width={108} height={22} fontSize={10}/>
 
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: 1 }}>
-        <F value={master.fader} onChange={(v) => { onChange({ ...master, fader: v }); if (onInspect) onInspect('pa'); }} height={208}/>
+        <span data-walk="master-fader" style={{ display: 'inline-flex' }}><F value={master.fader} onChange={(v) => { onChange({ ...master, fader: v }); if (onInspect) onInspect('pa'); }} height={208}/></span>
         <div style={{ display: 'flex', gap: 3 }}>
           <M level={paLevel} height={208} segments={26}/>
           <M level={paRLevel} height={208} segments={26}/>
@@ -5591,21 +5601,21 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
 const WALK_LEAD = 0; // lead vocal channel — the strip the whole tour anchors on
 const WALK_STEPS = [
   {
-    act: 'Where the sound goes out', title: 'The master section',
+    act: 'Where the sound goes out', title: 'The master section', target: 'master-fader',
     teach: "Start where the sound leaves the console. Every output has its own level control here in the master section. The MAIN fader is the overall volume for the room, and the mute beside it cuts the mains. The monitor master sets the level going to the singer's wedge.",
     prompt: "Ease the MAIN fader down and hear the whole room get quieter, then bring it back up.",
     takeaway: "Every output has a control in the master section. The MAIN fader is the room's volume.",
     test: (s, b) => Math.abs((s.master.fader ?? 0) - b.mfader) > 0.08,
   },
   {
-    act: 'Following one channel', title: 'PFL and the meter',
+    act: 'Following one channel', title: 'PFL and the meter', target: 'ch-pfl',
     teach: "Before the room hears a channel, you can check it yourself. PFL, for pre-fade listen, sends just that channel to your headphones, whatever its fader is doing. Watch the meter while you listen: yellow is fine, red is too hot.",
     prompt: "Press PFL on the lead vocal to hear it on its own. Press it again to drop back to the full mix.",
     takeaway: "PFL checks any channel in your headphones, and on the meter, before the room hears it.",
     test: (s, b) => (!!s.channels[WALK_LEAD].solo) !== b.solo,
   },
   {
-    act: 'Following one channel', title: 'Gain',
+    act: 'Following one channel', title: 'Gain', target: 'ch-gain',
     teach: "If a channel is weak on the meter, set its level with the gain knob at the top of the strip. Gain is how strong the input is before anything else. Bring it up while you watch the meter, leaving room before the red. You set gain by the meter, not by ear.",
     prompt: "Turn the lead vocal gain up slowly and watch the meter climb. Ease it back if it hits the red.",
     aside: "The +48V button powers mics that need it, like condensers. The stage mics already have it on, so leave it.",
@@ -5613,21 +5623,21 @@ const WALK_STEPS = [
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].gain ?? 0) - b.gain) > 0.05,
   },
   {
-    act: 'Following one channel', title: 'The channel fader',
+    act: 'Following one channel', title: 'The channel fader', target: 'ch-fader',
     teach: "Now let the room hear it. The channel fader is that channel's level in the main mix. If the lead vocal is still soloed, tap PFL to drop back first. The mute button sits with the fader, the channel's on and off. Keep faders near the U mark, unity, where small moves give the finest control.",
     prompt: "Move the lead vocal fader. Try the mute button too: the singer drops out of the room, then comes back when you unmute.",
     takeaway: "The channel fader is the channel's level in the room. Unity (U) is home. Mute is its on and off.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].fader ?? 0) - b.cfader) > 0.05 || (!!s.channels[WALK_LEAD].mute) !== b.mute,
   },
   {
-    act: 'Following one channel', title: 'Pan',
+    act: 'Following one channel', title: 'Pan', target: 'ch-pan',
     teach: "The pan knob sets where the channel sits between the left and right speakers. All the way left sends it to the left speaker, all the way right to the right, and center sends it to both evenly.",
     prompt: "Pan the lead vocal left, then right, then back to center. It clicks at center.",
     takeaway: "Pan places the channel left to right across the room.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].pan ?? 0.5) - b.pan) > 0.04,
   },
   {
-    act: 'The second mix', title: 'The monitor send',
+    act: 'The second mix', title: 'The monitor send', target: 'ch-aux1',
     teach: "The console builds more than one mix at once. The main mix goes to the room. The monitor send on each channel sets how much of that channel goes to the singer's wedge, a separate mix so the band can hear themselves. Turn it up and the singer gets more, while the room does not change. The monitor master in the master section sets the wedge's overall level.",
     prompt: "Turn the lead vocal's monitor send (AUX 1) up. The singer gets more of themselves in the wedge, and the room never hears it change.",
     takeaway: "The room mix and the monitor mix are separate. The send feeds the wedge, the monitor master sets its level.",
@@ -5702,10 +5712,7 @@ function WalkthroughIntro({ open, onStart }) {
           </div>
         </div>
         <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6 }}>
-          A mixing console can look intimidating, but it is simpler than it looks. On one side are the inputs, where sources like microphones connect. Each input has its own line of controls called a channel strip, and they all work the same way, so once you understand one, you understand them all. On the other side are the outputs, which run to your speakers.
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6 }}>
-          Right now a band is playing through a system that is already set up: two speakers for the room, and one wedge on the floor so the singer can hear themselves. We will walk through the controls that shape what the room hears and what the singer hears. Nothing here can break, so touch anything you want.
+          A mixing console looks intimidating, but it is simpler than it looks. This is a quick tour of what each control does. A band is already playing, and nothing here can break, so touch anything you want.
         </div>
         <button onClick={onStart} className="mono ui-no-select" style={{ alignSelf: 'flex-start', padding: '11px 22px', fontSize: 12, fontWeight: 800, letterSpacing: 1, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>START →</button>
       </div>
@@ -5752,6 +5759,54 @@ function WalkthroughWrap({ open, onEmail, onLessons, onExplore }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// The guided spotlight. Given the current step's target data-walk key (or keys),
+// it finds the control on the board, measures it, and draws a non-blocking
+// pulsing ring around it so the eye goes straight to the control the step is
+// about. It re-measures on a short interval (and on resize) to track the board's
+// scale-to-fit transform. pointer-events:none so the user clicks straight
+// through the ring to the control.
+function WalkthroughSpotlight({ target }) {
+  const [rect, setRect] = uS(null);
+  const targetKey = Array.isArray(target) ? target.join(',') : (target || '');
+  uE(() => {
+    if (!target) { setRect(null); return; }
+    const keys = Array.isArray(target) ? target : [target];
+    const measure = () => {
+      let box = null;
+      keys.forEach((k) => {
+        const el = document.querySelector('[data-walk="' + k + '"]');
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) return;
+        box = box
+          ? { left: Math.min(box.left, r.left), top: Math.min(box.top, r.top), right: Math.max(box.right, r.right), bottom: Math.max(box.bottom, r.bottom) }
+          : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      });
+      setRect((prev) => {
+        if (!box) return prev ? null : prev;
+        const next = { left: box.left, top: box.top, w: box.right - box.left, h: box.bottom - box.top };
+        if (prev && Math.abs(prev.left - next.left) < 0.5 && Math.abs(prev.top - next.top) < 0.5 && Math.abs(prev.w - next.w) < 0.5 && Math.abs(prev.h - next.h) < 0.5) return prev;
+        return next;
+      });
+    };
+    measure();
+    const id = setInterval(measure, 200);
+    window.addEventListener('resize', measure);
+    return () => { clearInterval(id); window.removeEventListener('resize', measure); };
+  }, [targetKey]);
+  if (!target || !rect) return null;
+  const pad = 7;
+  return (
+    <div style={{
+      position: 'fixed', left: rect.left - pad, top: rect.top - pad,
+      width: rect.w + pad * 2, height: rect.h + pad * 2,
+      border: '2px solid var(--green)', borderRadius: 8,
+      animation: 'walkPulse 1.6s ease-in-out infinite',
+      pointerEvents: 'none', zIndex: 88,
+    }}/>
   );
 }
 
@@ -7750,6 +7805,7 @@ function App() {
         onEmail={captureEmail}
         onLessons={() => finishWalkthrough('lessons')}
         onExplore={() => finishWalkthrough('explore')}/>
+      <WalkthroughSpotlight target={walkPhase === 'steps' ? (WALK_STEPS[walkStep] && WALK_STEPS[walkStep].target) : null}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
       {/* Free-tier email gate: blocks the board only while the viewer is on an
