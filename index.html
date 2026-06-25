@@ -5827,7 +5827,16 @@ function IoListPanel({ open, onClose }) {
   const th = { textAlign: 'left', padding: '4px 10px', fontSize: 8.5, letterSpacing: 1.2, color: 'var(--ink-3)', fontWeight: 700, borderBottom: '1px solid #2a2a2e', textTransform: 'uppercase' };
   const td = { textAlign: 'left', padding: '5px 10px', fontSize: 11, color: 'var(--ink)', borderBottom: '1px solid #1c1c20' };
   const sectionTitle = (txt) => (
-    <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700, margin: '10px 0 4px' }}>{txt}</div>
+    <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700, margin: '14px 0 4px' }}>{txt}</div>
+  );
+  // A channel/signal cell: the cable's color dot next to a plain label. The dot
+  // ties the row to the matching colored cable on the board; a faint grey dot
+  // means it plugs straight in with no snake cable (the playback line).
+  const chCell = (snakeIdx, label) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+      <span style={{ width: 9, height: 9, borderRadius: '50%', background: snakeIdx ? (sc[snakeIdx - 1] || '#4a4a52') : '#4a4a52', display: 'inline-block', flexShrink: 0, opacity: snakeIdx ? 1 : 0.35 }}/>
+      {label}
+    </span>
   );
   return (
     <div onClick={onClose} style={{
@@ -5842,39 +5851,39 @@ function IoListPanel({ open, onClose }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>Input / Output List</div>
-            <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>the show's paperwork · one 8-channel snake · colors follow the standard code</div>
+            <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>What's plugged in</div>
+            <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>the inputs from the stage and the outputs to your speakers</div>
           </div>
           <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
         </div>
-        {sectionTitle('INPUT LIST · SNAKE 1-4')}
-        <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
-          <thead><tr>
-            <th style={th}>Ch</th><th style={th}>Source</th><th style={th}>Type</th><th style={th}>+48V</th><th style={th}>Snake</th><th style={th}>Console</th>
-          </tr></thead>
-          <tbody>
-            <tr><td style={td}>1</td><td style={td}>Vocal Mic 1</td><td style={td}>Dynamic mic</td><td style={td}>—</td><td style={td}>{dot(1)}</td><td style={td}>CH 1</td></tr>
-            <tr><td style={td}>2</td><td style={td}>Vocal Mic 2</td><td style={td}>Condenser mic</td><td style={td}>+48V</td><td style={td}>{dot(2)}</td><td style={td}>CH 2</td></tr>
-            <tr><td style={td}>3</td><td style={td}>Bass</td><td style={td}>Active DI</td><td style={td}>+48V</td><td style={td}>{dot(3)}</td><td style={td}>CH 3</td></tr>
-            <tr><td style={td}>4</td><td style={td}>Keyboard</td><td style={td}>Passive DI</td><td style={td}>—</td><td style={td}>{dot(4)}</td><td style={td}>CH 4</td></tr>
-            <tr><td style={td}>5/6</td><td style={td}>Playback</td><td style={td}>Line, stereo</td><td style={td}>—</td><td style={td}>Direct (no snake)</td><td style={td}>CH 5/6</td></tr>
-          </tbody>
-        </table>
-        {sectionTitle('OUTPUT LIST · SNAKE 5-8 (RETURNS)')}
-        <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
-          <thead><tr>
-            <th style={th}>Signal</th><th style={th}>Snake</th><th style={th}>Destination</th>
-          </tr></thead>
-          <tbody>
-            <tr><td style={td}>MAIN L</td><td style={td}>{dot(5)}</td><td style={td}>PA Left</td></tr>
-            <tr><td style={td}>MAIN R</td><td style={td}>{dot(6)}</td><td style={td}>PA Right</td></tr>
-            <tr><td style={td}>AUX 1</td><td style={td}>{dot(7)}</td><td style={td}>Wedge 1</td></tr>
-            <tr><td style={td}>AUX 2</td><td style={td}>{dot(8)}</td><td style={td}>Wedge 2</td></tr>
-          </tbody>
-        </table>
-        <div style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.5, marginTop: 10 }}>
-          Snake colors follow the standard 8-channel code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray.
+        <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.55, marginTop: 8 }}>
+          Every mic and instrument on stage runs through a cable to a channel on the console. The colored dot is that cable's color, so you can trace it to the board. This is the map of what is connected where.
         </div>
+        {sectionTitle('INPUTS · FROM THE STAGE')}
+        <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
+          <thead><tr>
+            <th style={th}>Channel</th><th style={th}>Source</th><th style={th}>Type</th>
+          </tr></thead>
+          <tbody>
+            <tr><td style={td}>{chCell(1, 'CH 1')}</td><td style={td}>Vocal Mic 1</td><td style={td}>Dynamic mic</td></tr>
+            <tr><td style={td}>{chCell(2, 'CH 2')}</td><td style={td}>Vocal Mic 2</td><td style={td}>Condenser mic · needs +48V</td></tr>
+            <tr><td style={td}>{chCell(3, 'CH 3')}</td><td style={td}>Bass</td><td style={td}>Active DI · needs +48V</td></tr>
+            <tr><td style={td}>{chCell(4, 'CH 4')}</td><td style={td}>Keyboard</td><td style={td}>Passive DI</td></tr>
+            <tr><td style={td}>{chCell(null, 'CH 5/6')}</td><td style={td}>Playback (phone or laptop)</td><td style={td}>Stereo line · plugs straight in</td></tr>
+          </tbody>
+        </table>
+        {sectionTitle('OUTPUTS · TO THE SPEAKERS')}
+        <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
+          <thead><tr>
+            <th style={th}>Signal</th><th style={th}>Goes to</th>
+          </tr></thead>
+          <tbody>
+            <tr><td style={td}>{chCell(5, 'Main L')}</td><td style={td}>The left PA speaker (the room)</td></tr>
+            <tr><td style={td}>{chCell(6, 'Main R')}</td><td style={td}>The right PA speaker (the room)</td></tr>
+            <tr><td style={td}>{chCell(7, 'Aux 1')}</td><td style={td}>Wedge 1 (the singer's monitor)</td></tr>
+            <tr><td style={td}>{chCell(8, 'Aux 2')}</td><td style={td}>Wedge 2 (a second monitor)</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -8346,7 +8355,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           }}>🎛 MONITOR EQ</button>
         )}
         {onOpenIoList && (
-          <button onClick={onOpenIoList} className="mono ui-no-select" title="The show's paperwork: input list, output list, snake channels and colors" style={{ ...navBtn, padding: '6px 12px' }}>📋 I/O LIST</button>
+          <button onClick={onOpenIoList} className="mono ui-no-select" title="What's plugged in: the inputs from the stage and the outputs to your speakers" style={{ ...navBtn, padding: '6px 12px' }}>📋 CONNECTIONS</button>
         )}
         {onOpenProgress && (
           <button onClick={onOpenProgress} className="mono ui-no-select" title="Back up or restore your progress" style={{ ...navBtn, padding: '6px 12px' }}>💾 PROGRESS</button>
