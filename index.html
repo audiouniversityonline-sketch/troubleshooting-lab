@@ -7513,6 +7513,13 @@ function App() {
     setPracticeFaultsState(n);
     if (SCENARIOS[levelIdx] && SCENARIOS[levelIdx].isPractice) loadLevel(levelIdx);
   };
+  // Pick the Practice difficulty (Easy/Medium/Hard = 1/2/3 faults) without
+  // starting a session — just sets the selection the START SESSION button reads.
+  const selectDifficulty = (n) => {
+    focusRef.current = null; drillFocusRef.current = null;
+    practiceFaultsRef.current = n;
+    setPracticeFaultsState(n);
+  };
   // Picking a level from the menu leaves any "practice what needs it" focus.
   const pickLevel = (i) => { focusRef.current = null; loadLevel(i); };
   // Practice what needs it: drill the fault types that need practice, steering
@@ -7789,8 +7796,9 @@ function App() {
         practiceFreeLeft={TIER === 'member' ? null : freeRepsLeft}
         rank={rank} rankClean={rankClean} onTrainRank={(TIER === 'member' && !repShareFree) ? trainRank : null}
         liveShow={liveShow} onSetLiveShow={(TIER === 'member' && !repShareFree) ? toggleLiveShow : null}
-        coverage={coverage} onPracticeFocus={(TIER === 'member' && !repShareFree) ? practiceWhatNeedsIt : null}
+        onSelectDifficulty={(TIER === 'member' && !repShareFree) ? selectDifficulty : null}
         onPracticeFaults={(TIER === 'member' && !repShareFree) ? practiceAtFaults : null} onPracticeLive={(TIER === 'member' && !repShareFree) ? practiceLive : null}
+        startOpen={!shouldWalk && !SCENARIO_PARAM && !REP_PARAM}
       />
 
       <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
@@ -7815,13 +7823,10 @@ function App() {
       <EmailGate
         open={TIER !== 'member' && !emailDone && !tourOpen && levelIdx >= 0 && levelIdx < window.LEVELS.length}
         onSubmit={captureEmail} onSkip={skipEmail}/>
-      {/* Welcome chooser: the first thing a brand-new signup picks. Shows after
-          the tour and (for free) after the email gate, only on a fresh profile
-          parked on an Essentials lesson. Shared links load a higher index, so
-          they skip it. */}
-      <WelcomeChooser
-        open={!pathChosen && !tourOpen && (TIER === 'member' || emailDone) && levelIdx >= 0 && levelIdx < window.LEVELS.length}
-        onQuickFix={chooseQuickFix} onEssentials={chooseEssentials}/>
+      {/* The welcome chooser is retired: a fresh free visitor gets the "Know
+          your console" walkthrough, and everyone else lands with the mode menu
+          open (startOpen on TopBar), so the menu is the single universal entry.
+          The component + handlers remain dormant. */}
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
         wedge={state.outputs.wedge} wedge2={state.outputs.wedge2}
@@ -7881,11 +7886,6 @@ function App() {
                 background: 'linear-gradient(180deg, var(--accent), #c79a1f)', color: '#0a0a0c',
                 border: '1px solid #c79a1f', borderRadius: 4, cursor: 'pointer', textDecoration: 'none',
               }}>JOIN AUDIO UNIVERSITY →</a>
-              <button onClick={() => { setPitchFor(null); setCatalogOpen(true); }} className="mono ui-no-select" style={{
-                padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
-                background: '#1a1a1d', color: 'var(--cool)', border: '1px solid #38383e',
-                borderRadius: 4, cursor: 'pointer',
-              }}>WHAT THIS TRAINS</button>
               <button onClick={() => setPitchFor(null)} className="mono ui-no-select" style={{
                 padding: '7px 14px', fontSize: 10, fontWeight: 800, letterSpacing: 0.8,
                 background: '#1a1a1d', color: 'var(--ink-2)', border: '1px solid #38383e',
@@ -8073,6 +8073,12 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   const curTab = level.isFeedbackMode ? 'feedback' : 'trouble';
   const [mode, setMode] = uS(curMode);
   const [tab, setTab] = uS(curTab);
+  // When the picker is open on load, the resume effect may swap the level in
+  // AFTER this mounted (so curMode was computed from the initial lesson). Follow
+  // the level into its mode so the menu lands where the user left off. Level
+  // changes only happen via resume or onPick (which closes the picker), so this
+  // never fights a manual mode switch.
+  uE(() => { setMode(curMode); }, [levelIdx]);
   const isMember = TIER === 'member';
   const lessons = []; const libraries = [];
   SCENARIOS.forEach((s, i) => { const b = bandOf(s); if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); });
@@ -8128,10 +8134,6 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                 </div>
               );
             })}
-            {onOpenCatalog && (
-              <div onClick={() => { onClose(); onOpenCatalog(); }} className="mono ui-no-select"
-                style={{ marginTop: 'auto', padding: '8px', fontSize: 8.5, color: 'var(--cool)', letterSpacing: 0.8, fontWeight: 700, cursor: 'pointer', borderTop: '1px solid #2a2a2e', textAlign: 'left' }}>◎ WHAT THIS TRAINS</div>
-            )}
           </div>
           <div style={{ flex: 1, padding: '16px 18px', overflowY: 'auto', textAlign: 'left' }}>
             {mode === 'learn' && (
@@ -8166,7 +8168,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                     <div>
                       <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Something in the system is broken. Find it and fix it. Each one has a new fault to find.</div>
                       {practiceFreeLeft != null && practiceFreeLeft > 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>{practiceFreeLeft} FREE TRIES LEFT</div>}
-                      {startBtn('START →', () => go(practiceIdx))}
+                      {startBtn('START SESSION →', () => go(practiceIdx))}
                     </div>
                   ))}
                 {tab === 'feedback' && (
@@ -8209,8 +8211,10 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, coverage, onPracticeFocus, onPracticeFaults, onPracticeLive }) {
-  const [picker, setPicker] = uS(false);
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen }) {
+  // The mode menu opens on load (startOpen) so every visit begins with "what do
+  // you want to do?" instead of dropping the user onto a board with no context.
+  const [picker, setPicker] = uS(!!startOpen);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
   // column width, so this is the reliable "use my whole screen" path: it puts
   // the app's document into the browser's fullscreen (the iframe needs
@@ -8232,63 +8236,36 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
       }
     } catch (e) {}
   };
-  // The freshness panel ("what needs practice") now renders INSIDE the DRILL
-  // group, directly above Practice Mode, so the practice path reads as one
-  // block instead of floating above the whole list. Members only (coverage set).
-  const practicePanel = coverage ? (
-    <div className="ui-no-select" style={{ padding: '2px 11px 10px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <div style={{ flex: 1, height: 6, background: '#1a1a1d', borderRadius: 999, overflow: 'hidden', border: '1px solid #2a2a2e' }}>
-          <div style={{ width: (coverage.total ? Math.round(coverage.solid / coverage.total * 100) : 0) + '%', height: '100%', background: 'var(--green)' }}/>
-        </div>
-        <span className="mono" style={{ fontSize: 10, color: 'var(--ink)', fontWeight: 800, whiteSpace: 'nowrap' }}>{coverage.solid} / {coverage.total}</span>
+  // Members get the Practice panel: pick a difficulty (Easy / Medium / Hard =
+  // 1 / 2 / 3 simultaneous faults) and start a session. No per-fault tracking.
+  const DIFFS = [{ n: 1, l: 'EASY' }, { n: 2, l: 'MEDIUM' }, { n: 3, l: 'HARD' }];
+  const practicePanel = onPracticeFaults ? (
+    <div className="ui-no-select" style={{ padding: '2px 11px 10px', textAlign: 'left' }}>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 12 }}>
+        Something in the system is broken. Find it and fix it. Each session is a new fault in a new place. Pick a difficulty and start.
       </div>
-      <div style={{ fontSize: 10.5, color: 'var(--ink-2)', lineHeight: 1.35, textAlign: 'left', marginBottom: 6 }}>
-        {coverage.needs.length === 0
-          ? <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>every fault type</b>. Keep them current.</>
-          : <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b> fault types. <b style={{ color: 'var(--accent)' }}>{coverage.needs.length}</b> need practice.</>}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {DIFFS.map((d) => (
+          <button key={d.n} onClick={(e) => { e.stopPropagation(); onSelectDifficulty && onSelectDifficulty(d.n); }} className="mono ui-no-select" style={{
+            flex: '1 1 0', padding: '9px 6px', fontSize: 10, fontWeight: 800, letterSpacing: 0.8, borderRadius: 5, cursor: 'pointer',
+            background: practiceFaults === d.n ? 'linear-gradient(180deg, var(--green), #2c9d52)' : '#1a1a1d',
+            color: practiceFaults === d.n ? '#0a0a0c' : 'var(--ink-2)',
+            border: '1px solid ' + (practiceFaults === d.n ? '#2c9d52' : '#38383e'),
+          }}>{d.l}</button>
+        ))}
       </div>
-      <div style={{ fontSize: 9, color: 'var(--ink-3)', lineHeight: 1.35, textAlign: 'left', marginBottom: 8 }}>
-        Fix a fault on your own, no hint, and it turns solid. Solid faults slip back to needs-practice after a few weeks, so a little practice keeps them up.
-      </div>
-      {onPracticeFocus && (
-        <button onClick={(e) => { e.stopPropagation(); onPracticeFocus(); setPicker(false); }} className="mono ui-no-select" style={{
-          width: '100%', padding: '7px 10px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6,
-          background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
-          border: '1px solid #2c9d52', borderRadius: 4, cursor: 'pointer', marginBottom: 8,
-        }}>▶ PRACTICE WHAT NEEDS IT</button>
-      )}
-      {(onPracticeFaults || onPracticeLive) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          {onPracticeFaults && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>OR</span>
-              {[1, 2, 3].map(n => (
-                <button key={n} onClick={(e) => { e.stopPropagation(); onPracticeFaults(n); setPicker(false); }} className="mono ui-no-select" title={n + ' fault' + (n === 1 ? '' : 's') + ' at once'} style={{
-                  ...navBtn, padding: '4px 9px', fontWeight: 800,
-                  background: practiceFaults === n ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d',
-                  color: practiceFaults === n ? '#0a0a0c' : 'var(--ink-2)',
-                  borderColor: practiceFaults === n ? '#2c5d9e' : '#38383e',
-                }}>{n}</button>
-              ))}
-              <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, fontWeight: 700 }}>FAULTS</span>
-            </div>
-          )}
-          {onPracticeLive && (
-            <button onClick={(e) => { e.stopPropagation(); onPracticeLive(!liveShow); setPicker(false); }} className="mono ui-no-select"
-              title="Live Show: the audience is listening, so muting a channel or pulling the master is a dropout. PFL into the cans stays free." style={{
-              ...navBtn, padding: '4px 9px', fontWeight: 800, marginLeft: 'auto',
-              background: liveShow ? 'linear-gradient(180deg, #d8473f, #a8322b)' : '#1a1a1d',
-              color: liveShow ? '#fff' : 'var(--ink-2)',
-              borderColor: liveShow ? '#a8322b' : '#38383e',
-            }}>{liveShow ? '🔴 LIVE SHOW' : 'LIVE SHOW'}</button>
-          )}
-        </div>
-      )}
-      {coverage.lastPracticedDays != null && (
-        <div style={{ fontSize: 9, color: 'var(--ink-3)', textAlign: 'left', marginTop: 8 }}>
-          {coverage.lastPracticedDays === 0 ? 'Practiced today' : 'Last practiced ' + coverage.lastPracticedDays + ' day' + (coverage.lastPracticedDays === 1 ? '' : 's') + ' ago'}
-        </div>
+      <button onClick={(e) => { e.stopPropagation(); onPracticeFaults(practiceFaults); setPicker(false); }} className="mono ui-no-select" style={{
+        width: '100%', padding: '10px 12px', fontSize: 11.5, fontWeight: 800, letterSpacing: 0.6,
+        background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+        border: '1px solid #2c9d52', borderRadius: 5, cursor: 'pointer',
+      }}>START SESSION →</button>
+      {onPracticeLive && (
+        <button onClick={(e) => { e.stopPropagation(); onPracticeLive(!liveShow); setPicker(false); }} className="mono ui-no-select"
+          title="Live Show: the audience is listening, so muting a channel or pulling the master is a dropout the room hears. PFL into the cans stays free." style={{
+          marginTop: 8, width: '100%', padding: '7px 10px', fontSize: 9, fontWeight: 800, letterSpacing: 0.5, borderRadius: 5, cursor: 'pointer',
+          background: liveShow ? 'linear-gradient(180deg, #d8473f, #a8322b)' : '#16161a',
+          color: liveShow ? '#fff' : 'var(--ink-3)', border: '1px solid ' + (liveShow ? '#a8322b' : '#38383e'),
+        }}>{liveShow ? '🔴 LIVE SHOW ON · the room is listening' : 'START WITH LIVE SHOW · the room is listening'}</button>
       )}
     </div>
   ) : null;
@@ -8781,39 +8758,8 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           </div>
         </div>
       )}
-      {/* Practice progress — responds to the rep just finished. A clean solve
-          (no hint, no premature sign-off) marks the fault type solid and the
-          number ticks up; a hint-assisted solve says so and tells you how to
-          earn it. This is the feedback loop that makes the meter legible: the
-          player sees exactly why "X of N" did or didn't move. */}
-      {level.isPractice && coverage && practiceFreeLeft == null && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, borderTop: '1px solid rgba(74,222,128,0.18)', paddingTop: 5 }}>
-          <div className="mono" style={{ fontSize: 8, color: 'var(--accent)', letterSpacing: 1.2, fontWeight: 700 }}>YOUR PRACTICE</div>
-          {(() => {
-            const fk = (debrief && Array.isArray(debrief.faultKeys)) ? debrief.faultKeys : null;
-            const unaided = debrief && debrief.hints === 0 && (debrief.falseSignoffs || 0) === 0;
-            if (fk && fk.length) {
-              const names = fk.map(faultLabel).join(' and ');
-              return unaided ? (
-                <div style={{ fontSize: 9, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-                  ✓ You handled <b style={{ color: 'var(--green)' }}>{names}</b> on your own, so it counts as solid. You can cleanly handle <b style={{ color: 'var(--green)' }}>{coverage.solid} of {coverage.total}</b> fault types now.
-                </div>
-              ) : (
-                <div style={{ fontSize: 9, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-                  You fixed <b style={{ color: 'var(--ink)' }}>{names}</b> with a hint, so it still needs practice. Run it again with no hint and it turns solid. You're at <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b>.
-                </div>
-              );
-            }
-            return (
-              <div style={{ fontSize: 9, color: 'var(--ink-3)', lineHeight: 1.4 }}>
-                {coverage.needs.length === 0
-                  ? <>You can cleanly handle <b style={{ color: 'var(--green)' }}>every fault type</b>. Keep them current.</>
-                  : <>You can cleanly handle <b style={{ color: 'var(--ink)' }}>{coverage.solid} of {coverage.total}</b> fault types. <b style={{ color: 'var(--accent)' }}>{coverage.needs.length}</b> still need practice.</>}
-              </div>
-            );
-          })()}
-        </div>
-      )}
+      {/* The per-fault coverage debrief ("X of N fault types") was removed — the
+          session is just find-and-fix at the chosen difficulty, no tracking. */}
       {(level.isCustom || level.isLibrary) ? (
         /* A custom or library scenario has no "next". For a free viewer who
            arrived from a YouTube link, the real next step is the full Essentials
