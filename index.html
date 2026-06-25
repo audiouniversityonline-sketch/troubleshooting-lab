@@ -6305,7 +6305,10 @@ function App() {
   // dropout the audience heard; PFL and the meters stay free. dropouts mirrors
   // the ref for the live tally; liveShowRef lets the move-diff effect read the
   // current value without re-subscribing.
-  const [liveShow, setLiveShowState] = uS(() => !!profileRef.current.liveShow);
+  // Live Show is disabled for now (not production-ready): forced off regardless
+  // of any persisted value, so the move-diff dropout logic never runs and none
+  // of its UI shows. The toggle is removed from the Practice panel too.
+  const [liveShow, setLiveShowState] = uS(false);
   const liveShowRef = uR(liveShow);
   const [dropouts, setDropouts] = uS(0);
   const dropoutsRef = uR(0);
@@ -7804,10 +7807,10 @@ function App() {
         feedbackByEar={feedbackByEar} onSetFeedbackByEar={setFeedbackByEar}
         practiceFreeLeft={TIER === 'member' ? null : freeRepsLeft}
         rank={rank} rankClean={rankClean} onTrainRank={(TIER === 'member' && !repShareFree) ? trainRank : null}
-        liveShow={liveShow} onSetLiveShow={(TIER === 'member' && !repShareFree) ? toggleLiveShow : null}
+        liveShow={false} onSetLiveShow={null}
         onSelectDifficulty={(TIER === 'member' && !repShareFree) ? selectDifficulty : null}
-        onPracticeFaults={(TIER === 'member' && !repShareFree) ? practiceAtFaults : null} onPracticeLive={(TIER === 'member' && !repShareFree) ? practiceLive : null}
-        startOpen={!shouldWalk && !SCENARIO_PARAM && !REP_PARAM}
+        onPracticeFaults={(TIER === 'member' && !repShareFree) ? practiceAtFaults : null} onPracticeLive={null}
+        startOpen={!shouldWalk && !SCENARIO_PARAM && !REP_PARAM && !tourOpen}
       />
 
       <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
@@ -8223,7 +8226,10 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
 function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
-  const [picker, setPicker] = uS(!!startOpen);
+  // startOpen is held false while the first-run tour is up, then flips true once
+  // the tour is dismissed, so the tour shows alone first and the menu follows.
+  const [picker, setPicker] = uS(false);
+  uE(() => { if (startOpen) setPicker(true); }, [startOpen]);
   // Fullscreen toggle. Embedded in a Circle iframe the app is limited to the
   // column width, so this is the reliable "use my whole screen" path: it puts
   // the app's document into the browser's fullscreen (the iframe needs
