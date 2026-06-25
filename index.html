@@ -4867,36 +4867,61 @@ function rampParam(param, ctx, target) {
   }
 }
 
-function MobileNotice() {
+// Mobile / small-screen visitors can't run the full console, so instead of a
+// dead end this captures the email (the whole point of the lead magnet) and
+// tells them to open it on a computer. onCapture sends to Kit like every other
+// gate. NOTE: the "we'll send you the link" promise needs a Kit welcome
+// automation that emails the link; the capture itself works regardless.
+function MobileNotice({ onCapture }) {
+  const [name, setName] = uS('');
+  const [val, setVal] = uS('');
+  const [err, setErr] = uS(false);
+  const [sent, setSent] = uS(false);
+  const submit = () => {
+    if (!isValidEmail(val)) { setErr(true); return; }
+    if (onCapture) onCapture(val.trim(), name.trim());
+    setSent(true);
+  };
   return (
     <div style={{
-      height: '100vh',
+      minHeight: '100vh',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      padding: '24px',
-      textAlign: 'center',
+      padding: '24px', textAlign: 'center',
       background: 'radial-gradient(ellipse at 30% 0%, #1a1a1f 0%, #0e0e10 50%, #08080a 100%)',
       color: 'var(--ink)',
     }}>
-      <img src={window.AU_LOGO} alt="Audio University"
-           style={{ height: 80, width: 80, display: 'block', marginBottom: 18 }}/>
-      <div className="display" style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.8, lineHeight: 1 }}>Troubleshooting Lab</div>
-      <div className="mono" style={{ fontSize: 9.5, color: 'var(--ink-3)', letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 4 }}>Interactive Mixing Console Trainer</div>
+      <img src={window.AU_LOGO} alt="Audio University" style={{ height: 72, width: 72, display: 'block', marginBottom: 16 }}/>
+      <div className="display" style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.8, lineHeight: 1 }}>Troubleshooting Lab</div>
+      <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 4 }}>Interactive Mixing Console Trainer</div>
       <div style={{
-        marginTop: 28,
-        padding: '14px 18px',
-        background: 'rgba(28,28,32,0.7)',
-        border: '1px solid var(--accent)',
-        borderRadius: 8,
-        maxWidth: 360,
-        boxShadow: '0 0 0 1px rgba(255,201,58,0.15), 0 6px 24px rgba(0,0,0,0.5)',
+        marginTop: 24, padding: '18px', width: '100%', maxWidth: 360, boxSizing: 'border-box',
+        background: 'rgba(14,36,21,0.7)', border: '1px solid var(--green)', borderRadius: 10,
+        boxShadow: '0 0 0 1px rgba(74,222,128,0.18), 0 8px 28px rgba(0,0,0,0.6)',
       }}>
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>BUILT FOR DESKTOP</div>
-        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          This trainer uses precise knob and fader controls and shows the whole stage and the front-of-house mixer at once. It needs more room than a phone has.
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, marginTop: 8 }}>
-          Open this page in a desktop or laptop browser for the full experience.
-        </div>
+        {!sent ? (
+          <>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>BEST ON A COMPUTER</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>
+              This trainer uses a full mixing console, so it needs a desktop or laptop. Enter your email and we'll send you the link to open it on your computer.
+            </div>
+            <input type="text" autoComplete="given-name" placeholder="First name" value={name}
+              onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', fontSize: 13, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid #2c9d52', outline: 'none', marginBottom: 8 }}/>
+            <input type="email" inputMode="email" autoComplete="email" placeholder="you@email.com" value={val}
+              onChange={(e) => { setVal(e.target.value); if (err) setErr(false); }} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', fontSize: 13, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid ' + (err ? '#e05a5a' : '#2c9d52'), outline: 'none' }}/>
+            {err && <div style={{ fontSize: 10.5, color: '#e98a8a', marginTop: 6 }}>That doesn't look like a valid email address.</div>}
+            <button onClick={submit} className="mono ui-no-select" style={{ width: '100%', marginTop: 10, padding: '11px 16px', fontSize: 12, fontWeight: 800, letterSpacing: 1, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>SEND ME THE LINK →</button>
+            <div style={{ fontSize: 9.5, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.4 }}>No spam. Just the link and the occasional lesson.</div>
+          </>
+        ) : (
+          <>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>YOU'RE IN</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+              Thanks{name ? ', ' + name : ''}. Check your inbox for the link, and open it on a desktop or laptop to start the lab.
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -4984,7 +5009,7 @@ function applyCapturedState(s, captured) {
 // isPractice adds the endless-rep behavior (FAULTS difficulty selector,
 // rep counter, "next rep" instead of "next level").
 const SCENARIOS = [
-  ...window.LEVELS,
+  ...window.LEVELS.map((l) => ({ ...l, isLesson: true })),
   ...(window.PRACTICE ? [{ ...window.PRACTICE, isChallenge: true, isPractice: true }] : []),
   ...(window.FEEDBACK_MODE ? [{ ...window.FEEDBACK_MODE, isChallenge: true, isFeedbackMode: true }] : []),
   // Free Play / sandbox. The band is up and the system is healthy; there is no
@@ -5062,13 +5087,18 @@ if (SCENARIO_PARAM) {
     sabotage: (s) => applyCapturedState(s, sp.s),
   });
 }
-const isLocked = (sc) => !!(sc && sc.isChallenge && TIER !== 'member');
+// Lessons ("Run the show") are members-only now, alongside the challenge modes.
+const isLocked = (sc) => !!(sc && (sc.isChallenge || sc.isLesson) && TIER !== 'member');
 
-// Indices of the two unlocked, no-win scenarios the app jumps to directly
-// (the welcome walkthrough and Free Play). Computed once after SCENARIOS is
+// Indices of the unlocked, no-win scenarios the app jumps to directly (the
+// welcome walkthrough and Free Play). Computed once after SCENARIOS is
 // assembled; -1 if absent.
 const SANDBOX_INDEX = SCENARIOS.findIndex((s) => s.isSandbox);
 const WALKTHROUGH_INDEX = SCENARIOS.findIndex((s) => s.isWalkthrough);
+// Where a visitor lands with no resume target: members go to lesson 1 of Run
+// the show; the free tier (lessons locked) lands on Free Play, never on a
+// locked lesson board.
+const HOME_INDEX = (TIER === 'member') ? 0 : (SANDBOX_INDEX >= 0 ? SANDBOX_INDEX : 0);
 
 // Free-tier Practice taste: a free viewer gets this many real Practice reps
 // before the membership gate. The point is to let the endless-mastery value be
@@ -5754,7 +5784,7 @@ function WalkthroughWrap({ open, onEmail, onLessons, onExplore }) {
           <div style={{ fontSize: 12, color: 'var(--green)', lineHeight: 1.5, padding: '10px 12px', background: '#0e2415', border: '1px solid #1e3a2a', borderRadius: 8 }}>Thanks{name ? ', ' + name : ''}. Check your inbox for the next step. Where to now?</div>
         )}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button onClick={onLessons} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 6, cursor: 'pointer' }}>🎓 START THE LESSONS →</button>
+          <button onClick={onLessons} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 6, cursor: 'pointer' }}>🎓 SEE THE FULL COURSE →</button>
           <button onClick={onExplore} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--cool)', border: '1px solid #38383e', borderRadius: 6, cursor: 'pointer' }}>▶ EXPLORE THE BOARD</button>
         </div>
       </div>
@@ -6131,10 +6161,10 @@ function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset,
 }
 
 function App() {
-  const [levelIdx, setLevelIdx] = uS(0);
+  const [levelIdx, setLevelIdx] = uS(HOME_INDEX);
   const [state, setState] = uS(() => {
     const base = window.defaultState();
-    const lv0 = SCENARIOS[0];
+    const lv0 = SCENARIOS[HOME_INDEX];
     base.topology = { ...base.topology, ...(lv0.topology || {}) };
     base.channels = normalizeChannels(base.channels, deriveInvolves(lv0));
     const s = lv0.sabotage(base);
@@ -6187,7 +6217,7 @@ function App() {
   const resumeTargetRef = uR(undefined);
   if (resumeTargetRef.current === undefined) {
     const li = profileRef.current.lastLevel;
-    resumeTargetRef.current = (Number.isInteger(li) && li > 0 && li < SCENARIOS.length && !isLocked(SCENARIOS[li]) && !SCENARIOS[li].isWalkthrough) ? li : 0;
+    resumeTargetRef.current = (Number.isInteger(li) && li > 0 && li < SCENARIOS.length && !isLocked(SCENARIOS[li]) && !SCENARIOS[li].isWalkthrough) ? li : HOME_INDEX;
   }
   const [completed, setCompleted] = uS(() => profileRef.current.completed);
 
@@ -7245,14 +7275,15 @@ function App() {
     // and custom scenarios use the hard lock (the latter is always bypassed via
     // its share link).
     const hardLocked = isLocked(lv) && !(lv && lv.isPractice && practiceSoftOpen);
-    if (!lv || (hardLocked && !bypassLock)) { if (lv) setPitchFor(lv); return; }
+    if (!lv || (hardLocked && !bypassLock)) { if (lv) setPitchFor(lv.isLesson ? { title: 'Run the show', isLesson: true } : lv); return; }
     // Show the first-rep orientation only on the welcome chooser's quick fix,
     // and clear it so the next load (any load) turns it back off.
     const wasFirstFix = firstFixRef.current; firstFixRef.current = false;
     setFirstFix(!!(wasFirstFix && lv.isPractice));
-    // Loading any normal scenario leaves the guided walkthrough (entering it
-    // sets the phase separately, so an isWalkthrough load is left alone).
-    if (lv && !lv.isWalkthrough) setWalkPhase(null);
+    // Loading a normal scenario leaves the guided walkthrough; navigating ONTO
+    // the walkthrough (e.g. the nav arrows) starts its intro so it never lands
+    // in an inert half-state.
+    setWalkPhase(lv && lv.isWalkthrough ? (cur => cur || 'intro') : null);
     const base = window.defaultState();
     base.topology = { ...base.topology, ...(lv.topology || {}) };
     base.channels = normalizeChannels(base.channels, deriveInvolves(lv));
@@ -7598,7 +7629,10 @@ function App() {
     if (!emailDone) setEmailDone(true);
     dismissTour();
     setWalkPhase(null);
-    loadLevel(route === 'lessons' ? 0 : (SANDBOX_INDEX >= 0 ? SANDBOX_INDEX : 0), undefined, true);
+    loadLevel(SANDBOX_INDEX >= 0 ? SANDBOX_INDEX : 0, undefined, true);
+    // "See the full course" pitches Run the show (members); "Explore" just
+    // lands them on Free Play.
+    if (route === 'lessons') setPitchFor({ title: 'Run the show', isLesson: true });
   };
   // Fault-freshness coverage for the picker + debrief (members only). Recomputed
   // each render from the live ledger, so it reflects the rep just solved.
@@ -7663,7 +7697,7 @@ function App() {
     return () => ro.disconnect();
   }, [isMobile]);
 
-  if (isMobile) return <MobileNotice/>;
+  if (isMobile) return <MobileNotice onCapture={captureEmail}/>;
 
   // Verify-each checklist status for the brief. A speaker shows checked if it
   // was already latched (verifiedRef) OR is playing right now, so the display
@@ -7879,7 +7913,9 @@ function App() {
             <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700 }}>🔒 MEMBERS ONLY</div>
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-              {pitchFor.isDigital
+              {pitchFor.isLesson
+                ? 'Run the show is the full course: set up a live system from a cold start and run a real show, step by step. Ten lessons, from patching and powering up in order to setting levels, building a monitor mix, and staying clean through feedback. It is part of the Audio University membership.'
+                : pitchFor.isDigital
                 ? 'The digital console surface teaches the part of modern live sound the analog desk cannot: one shared channel section that follows whatever you SELECT, so the real skill is confirming what is selected before you touch a knob. Same signal flow and faults, a different surface. It is part of the membership.'
                 : pitchFor.isLibrary
                 ? 'The Scenario Library is a growing shelf of real-world situations, each one a specific show that went sideways and the exact board behind it. Members can browse and play the whole library, and it keeps growing. Some land as free links in the videos; the full shelf is part of the membership.'
@@ -7926,7 +7962,7 @@ function App() {
                   {solved
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < SCENARIOS.length && !isLocked(SCENARIOS[levelIdx + 1])}
                         onPracticeAgain={level.isChallenge ? practiceAgain : null}
-                        onGoEssentials={(level.isCustom && TIER !== 'member') ? () => loadLevel(0) : null}
+                        onGoEssentials={(level.isCustom && TIER !== 'member') ? () => { loadLevel(WALKTHROUGH_INDEX, undefined, true); setWalkPhase('intro'); } : null}
                         practiceFreeLeft={(level.isPractice && TIER !== 'member') ? freeRepsLeft : null}
                         onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}
                         rank={rank} rankClean={rankClean} rankUp={rankUp} coverage={coverage}
@@ -8106,7 +8142,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
     }}>{label}</button>
   );
   const MODES = [
-    { key: 'learn', icon: '🎓', label: 'LEARN', sub: 'The Essentials · 10 lessons', accent: 'var(--accent)' },
+    { key: 'learn', icon: '🎓', label: 'LEARN', sub: isMember ? 'Run the show · 10 lessons' : 'Run the show · members', accent: 'var(--accent)' },
     { key: 'practice', icon: '∞', label: 'PRACTICE', sub: 'Endless practice · find the fault', accent: 'var(--green)' },
     { key: 'play', icon: '▶', label: 'FREE PLAY', sub: 'A working system · explore', accent: 'var(--cool)' },
   ];
@@ -8115,8 +8151,8 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 5, cursor: 'pointer', background: i === levelIdx ? '#2a2a2e' : 'transparent' }}
       onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
       onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
-      <div className="mono" style={{ fontSize: 9, width: 20, color: completed[s.id] ? 'var(--green)' : 'var(--ink-3)' }}>{completed[s.id] ? '✓' : String(i + 1).padStart(2, '0')}</div>
-      <div style={{ flex: 1, fontSize: 12, color: 'var(--ink)' }}>{s.title}</div>
+      <div className="mono" style={{ fontSize: 9, width: 20, color: completed[s.id] ? 'var(--green)' : 'var(--ink-3)' }}>{isMember ? (completed[s.id] ? '✓' : String(i + 1).padStart(2, '0')) : '🔒'}</div>
+      <div style={{ flex: 1, fontSize: 12, color: isMember ? 'var(--ink)' : 'var(--ink-2)' }}>{s.title}</div>
     </div>
   );
   return (
@@ -8150,8 +8186,8 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
           <div style={{ flex: 1, padding: '16px 18px', overflowY: 'auto', textAlign: 'left' }}>
             {mode === 'learn' && (
               <div>
-                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--accent)', marginBottom: 5 }}>LEARN · THE ESSENTIALS</div>
-                <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 12 }}>Set up a live system from a cold start and run a full show. Ten lessons, in order.</div>
+                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--accent)', marginBottom: 5 }}>RUN THE SHOW{isMember ? '' : ' · MEMBERS'}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 12 }}>Set up a live system from a cold start and run a full show. Ten lessons, in order.{isMember ? '' : ' Part of the Audio University membership.'}</div>
                 {lessons.map(lessonRow)}
               </div>
             )}
@@ -8786,7 +8822,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
               width: '100%', padding: '7px 10px', fontSize: 10, fontWeight: 800, letterSpacing: 1,
               background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
               border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-            }}>🎧 RUN THE FULL 10 LESSONS →</button>
+            }}>🎧 START THE FREE TOUR →</button>
           )}
           <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
             width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
