@@ -8124,7 +8124,9 @@ function App() {
 function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedbackByEar, onSetFeedbackByEar, onPick, practiceFreeLeft, onOpenCatalog }) {
   // Mounted fresh each time the picker opens (rendered behind `{picker && ...}`),
   // so it always lands on whatever mode the current level belongs to.
-  const curMode = level.isMonitor ? 'monitor' : level.isSandbox ? 'play' : (level.isPractice || level.isFeedbackMode || level.isLibrary) ? 'practice' : 'learn';
+  // Monitor World now lives INSIDE the Learn pane as a third course (alongside
+  // Mixer Tutorial and Run the Show), so its lessons land on the 'learn' mode.
+  const curMode = level.isSandbox ? 'play' : (level.isPractice || level.isFeedbackMode || level.isLibrary) ? 'practice' : 'learn';
   const curTab = level.isFeedbackMode ? 'feedback' : 'trouble';
   const [mode, setMode] = uS(curMode);
   const [tab, setTab] = uS(curTab);
@@ -8149,18 +8151,30 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
     }}>{label}</button>
   );
   const MODES = [
-    { key: 'learn', icon: '🎓', label: 'LEARN', sub: isMember ? 'Run the show · 10 lessons' : 'Run the show · members', accent: 'var(--accent)' },
-    { key: 'monitor', icon: '🎚️', label: 'MONITOR WORLD', sub: isMember ? ('Build monitor mixes · ' + monitors.length + ' lessons') : 'Build monitor mixes · members', accent: 'var(--aux)' },
+    { key: 'learn', icon: '🎓', label: 'LEARN', sub: 'Guided courses · step by step', accent: 'var(--accent)' },
     { key: 'practice', icon: '∞', label: 'PRACTICE', sub: 'Endless practice · find the fault', accent: 'var(--green)' },
     { key: 'play', icon: '▶', label: 'FREE PLAY', sub: 'A working system · explore', accent: 'var(--cool)' },
   ];
-  const lessonRow = ({ s, i }) => (
-    <div key={s.id} onClick={() => go(i)} className="ui-no-select"
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 5, cursor: 'pointer', background: i === levelIdx ? '#2a2a2e' : 'transparent' }}
-      onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
-      onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
-      <div className="mono" style={{ fontSize: 9, width: 20, color: completed[s.id] ? 'var(--green)' : 'var(--ink-3)' }}>{isMember ? (completed[s.id] ? '✓' : String(i + 1).padStart(2, '0')) : '🔒'}</div>
-      <div style={{ flex: 1, fontSize: 12, color: isMember ? 'var(--ink)' : 'var(--ink-2)' }}>{s.title}</div>
+  // A course row in the Learn pane. `num` is the lesson's position WITHIN its
+  // course (01, 02 ...); `free` unlocks it for the free tier (Mixer Tutorial).
+  const courseRow = ({ s, i }, num, free) => {
+    const locked = !isMember && !free;
+    return (
+      <div key={s.id} onClick={() => go(i)} className="ui-no-select"
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 5, cursor: 'pointer', background: i === levelIdx ? '#2a2a2e' : 'transparent' }}
+        onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
+        onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
+        <div className="mono" style={{ fontSize: 9, width: 20, color: completed[s.id] ? 'var(--green)' : 'var(--ink-3)' }}>{locked ? '🔒' : (completed[s.id] ? '✓' : String(num).padStart(2, '0'))}</div>
+        <div style={{ flex: 1, fontSize: 12, color: locked ? 'var(--ink-2)' : 'var(--ink)' }}>{s.title}</div>
+      </div>
+    );
+  };
+  // Course heading inside the Learn pane: a label, an optional MEMBERS/FREE tag,
+  // and a one-line blurb.
+  const courseHead = (label, color, blurb, tag) => (
+    <div style={{ marginBottom: 6 }}>
+      <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color, marginBottom: 4 }}>{label}{tag ? ' · ' + tag : ''}</div>
+      {blurb && <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.45, marginBottom: 8 }}>{blurb}</div>}
     </div>
   );
   return (
@@ -8194,25 +8208,22 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
           <div style={{ flex: 1, padding: '16px 18px', overflowY: 'auto', textAlign: 'left' }}>
             {mode === 'learn' && (
               <div>
-                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--accent)', marginBottom: 5 }}>RUN THE SHOW{isMember ? '' : ' · MEMBERS'}</div>
-                <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 12 }}>Set up a live system from a cold start and run a full show. Ten lessons, in order.{isMember ? '' : ' Part of the Audio University membership.'}</div>
-                {lessons.map(lessonRow)}
-              </div>
-            )}
-            {mode === 'monitor' && (
-              <div>
-                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--aux)', marginBottom: 5 }}>MONITOR WORLD{isMember ? '' : ' · MEMBERS'}</div>
-                <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 12 }}>Build a separate mix for each performer on the aux sends: their own source, the right references, a sensible level, rung out so it stays clean.{isMember ? '' : ' Part of the Audio University membership.'}</div>
-                {monitors.map(({ s, i }, n) => (
-                  <div key={s.id} onClick={() => go(i)} className="ui-no-select"
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 5, cursor: 'pointer', background: i === levelIdx ? '#2a2a2e' : 'transparent' }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
-                    <div className="mono" style={{ fontSize: 9, width: 20, color: completed[s.id] ? 'var(--green)' : 'var(--ink-3)' }}>{isMember ? (completed[s.id] ? '✓' : String(n + 1).padStart(2, '0')) : '🔒'}</div>
-                    <div style={{ flex: 1, fontSize: 12, color: isMember ? 'var(--ink)' : 'var(--ink-2)' }}>{s.title}</div>
+                {WALKTHROUGH_INDEX >= 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    {courseHead('MIXER TUTORIAL', 'var(--cool)', 'A quick guided tour of the console on a system that is already working. Start here.', 'FREE')}
+                    {courseRow({ s: SCENARIOS[WALKTHROUGH_INDEX], i: WALKTHROUGH_INDEX }, 1, true)}
                   </div>
-                ))}
-                {monitors.length === 0 && <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>No lessons yet.</div>}
+                )}
+                <div style={{ marginBottom: monitors.length > 0 ? 16 : 0 }}>
+                  {courseHead('RUN THE SHOW', 'var(--accent)', 'Set up a live system from a cold start and run a full show. Ten lessons, in order.', isMember ? null : 'MEMBERS')}
+                  {lessons.map((row, n) => courseRow(row, n + 1, false))}
+                </div>
+                {monitors.length > 0 && (
+                  <div>
+                    {courseHead('MONITOR WORLD', 'var(--aux)', 'Build a separate mix for each performer: their own source, a bit of the vocals, a sensible level, rung out so it stays clean.', isMember ? null : 'MEMBERS')}
+                    {monitors.map((row, n) => courseRow(row, n + 1, false))}
+                  </div>
+                )}
               </div>
             )}
             {mode === 'play' && (
