@@ -5264,6 +5264,8 @@ const isLocked = (sc) => !!(sc && (sc.isChallenge || sc.isLesson) && TIER !== 'm
 // assembled; -1 if absent.
 const SANDBOX_INDEX = SCENARIOS.findIndex((s) => s.isSandbox);
 const WALKTHROUGH_INDEX = SCENARIOS.findIndex((s) => s.isWalkthrough);
+// The Mixer Tutorial lessons in order, so finishing one can lead into the next.
+const MIXER_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isMixerLesson);
 // Where a visitor lands with no resume target: members go to lesson 1 of Run
 // the show; the free tier (lessons locked) lands on Free Play, never on a
 // locked lesson board.
@@ -5801,49 +5803,49 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
 const WALK_LEAD = 0; // lead vocal channel — the strip the whole tour anchors on
 const WALK_STEPS = [
   {
-    act: 'Where the sound goes out', title: 'The master section', target: 'master-section',
-    teach: "Start where the sound leaves the console. This whole column under MASTER is where each output gets its overall level. The MAIN fader at the bottom is the volume for the room, and the MUTE MAIN button just above it cuts the mains completely. The AUX masters up top each set the overall level of one aux output: AUX 1 for Wedge 1, AUX 2 for Wedge 2, and so on. Every output the console sends has its own control right here.",
-    prompt: "Ease the MAIN fader down and hear the room get quieter, then bring it back up. Try an AUX master too, the overall level for that wedge.",
-    takeaway: "The master section sets each output's overall level: the MAIN fader for the room, MUTE MAIN to cut it, and an AUX master for each wedge.",
+    act: 'The outputs', title: 'The master section', target: 'master-section',
+    teach: "Every output on the mixer has its own control, and they all live here in the master section. The MAIN fader is the overall volume for the speakers facing the audience. Just above it is a mute button that cuts everything coming out of the mains. The AUX masters each set the level of an aux output: AUX 1 is the overall level going to Wedge 1, AUX 2 to Wedge 2, and so on. Once you see that every output has one control right here, the master section is simple.",
+    prompt: "Bring the MAIN fader down and the room gets quieter, then bring it back up. Try an AUX master too, that is the overall level for that wedge.",
+    takeaway: "Every output has its own control in the master section: the MAIN fader for the room, the mute to cut it, and an AUX master for each wedge.",
     test: (s, b) => Math.abs((s.master.fader ?? 0) - b.mfader) > 0.08
       || Math.abs((s.master.aux1 ?? 0.75) - b.maux1) > 0.05 || Math.abs((s.master.aux2 ?? 0.75) - b.maux2) > 0.05
       || Math.abs((s.master.aux3 ?? 0.75) - b.maux3) > 0.05 || Math.abs((s.master.aux4 ?? 0.75) - b.maux4) > 0.05
       || (!!s.master.mute) !== b.mmute,
   },
   {
-    act: 'Following one channel', title: 'PFL and the meter', target: 'ch-pfl',
-    teach: "Before the room hears a channel, you can check it yourself. PFL, for pre-fade listen, sends just that channel to your headphones, whatever its fader is doing. Watch the meter while you listen: yellow is fine, red is too hot.",
-    prompt: "Press PFL on the lead vocal to hear it on its own. Press it again to drop back to the full mix.",
-    takeaway: "PFL checks any channel in your headphones, and on the meter, before the room hears it.",
+    act: 'The channel strip', title: 'PFL and the meter', target: 'ch-pfl',
+    teach: "Before you send a channel to the speakers, you can check it in your headphones first. That is what the PFL button does, at the bottom of the channel strip. PFL stands for pre-fader listen, so what you hear is the channel itself, no matter where the fader sits. The whole point is to check the audio before the audience ever hears it. While you listen, watch the meter: yellow is fine, red is too hot.",
+    prompt: "Press PFL on the lead vocal to hear just that channel in your headphones. Press it again to drop back to the full mix.",
+    takeaway: "PFL sends a channel to your headphones and the meter so you can check it before the room hears it. It is pre-fader, so the fader does not change what you hear.",
     test: (s, b) => (!!s.channels[WALK_LEAD].solo) !== b.solo,
   },
   {
-    act: 'Following one channel', title: 'Gain', target: 'ch-gain',
-    teach: "If a channel is weak on the meter, set its level with the gain knob at the top of the strip. Gain is how strong the input is before anything else. Bring it up while you watch the meter, leaving room before the red. You set gain by the meter, not by ear.",
-    prompt: "Turn the lead vocal gain up slowly and watch the meter climb. Ease it back if it hits the red.",
-    aside: "The +48V button powers mics that need it, like condensers. The stage mics already have it on, so leave it.",
-    takeaway: "Gain is the input level, set at the top of the strip by the meter.",
+    act: 'The channel strip', title: 'Gain', target: 'ch-gain',
+    teach: "If a channel reads weak on the meter, you bring it up with the preamp gain knob at the top of the channel strip. Gain sets how strong the signal is right at the input, before anything else. Turn it up while you watch the meter and aim for healthy peaks with a little room before the red. You set gain by the meter, not by ear.",
+    prompt: "With the lead vocal in PFL, bring its gain up slowly and watch the meter climb. Ease it back if it hits the red.",
+    aside: "The 48V button powers condenser mics. A dynamic mic like this lead vocal does not need it, so it stays off.",
+    takeaway: "Gain is the input level, set with the knob at the top of the channel strip, by the meter.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].gain ?? 0) - b.gain) > 0.05,
   },
   {
-    act: 'Following one channel', title: 'The channel fader', target: 'ch-fader',
-    teach: "Now let the room hear it. The channel fader is that channel's level in the main mix. If the lead vocal is still soloed, tap PFL to drop back first. The mute button sits with the fader, the channel's on and off. Keep faders near the U mark, unity, where small moves give the finest control.",
-    prompt: "Move the lead vocal fader. Try the mute button too: the singer drops out of the room, then comes back when you unmute.",
-    takeaway: "The channel fader is the channel's level in the room. Unity (U) is home. Mute is its on and off.",
+    act: 'The channel strip', title: 'The channel fader', target: 'ch-fader',
+    teach: "The channel fader is this channel's level in the main mix. This is the control you ride during the show to blend the channels and bring an instrument up or down when it needs it. Try to keep it near the U mark, unity. The fader scale is not linear, so up near unity a small move makes a small change, which is where you get the finest control. The mute button next to it is the channel's on and off.",
+    prompt: "Bring the lead vocal fader up into the room. Try the mute too: the singer drops out, then comes back when you unmute.",
+    takeaway: "The channel fader is that channel's level in the mix. Keep it near unity (U) for the finest control. Mute is its on and off.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].fader ?? 0) - b.cfader) > 0.05 || (!!s.channels[WALK_LEAD].mute) !== b.mute,
   },
   {
-    act: 'Following one channel', title: 'Pan', target: 'ch-pan',
-    teach: "The pan knob sets where the channel sits between the left and right speakers. All the way left sends it to the left speaker, all the way right to the right, and center sends it to both evenly.",
-    prompt: "Pan the lead vocal left, then right, then back to center. It clicks at center.",
-    takeaway: "Pan places the channel left to right across the room.",
+    act: 'The channel strip', title: 'Pan', target: 'ch-pan',
+    teach: "The pan knob sets where the channel sits between the left and right speakers. All the way left sends it to the left speaker, all the way right sends it to the right, and in the center it goes to both evenly.",
+    prompt: "Pan the lead vocal left, then right, then back to center. It clicks when it reaches center.",
+    takeaway: "Pan places the channel across the room, left to right. Center sends it to both sides evenly.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].pan ?? 0.5) - b.pan) > 0.04,
   },
   {
-    act: 'The second mix', title: 'The monitor send', target: 'ch-aux',
-    teach: "The console builds more than one mix at once. The main mix goes to the room; the AUX sends build separate mixes for the people on stage. This channel has four of them, and each one feeds a different output. AUX 1 goes out the aux 1 output to Wedge 1, AUX 2 out to Wedge 2, AUX 3 to Wedge 3, and AUX 4 to Wedge 4. Turning up AUX 1 here sends this channel to the first wedge, and the room never changes.",
-    prompt: "Turn the lead vocal's AUX 1 up and you are listening at Wedge 1. Then try AUX 2, AUX 3, AUX 4, each one feeds its own wedge.",
-    takeaway: "Each AUX send goes to its own output and speaker: AUX 1 to Wedge 1, AUX 2 to Wedge 2, AUX 3 to Wedge 3, AUX 4 to Wedge 4. The room mix stays separate.",
+    act: 'The aux sends', title: 'The monitor send', target: 'ch-aux',
+    teach: "Further down the channel strip are the AUX send knobs. Each one sets how much of this channel goes out a different aux output. AUX 1 feeds the aux 1 output and the speaker on it, which is Wedge 1. AUX 2 feeds Wedge 2, AUX 3 feeds Wedge 3, and AUX 4 feeds Wedge 4. That is how you build a separate mix for each person on stage. Turn up AUX 1 here and this channel gets louder in Wedge 1, while the main mix in the room never changes.",
+    prompt: "Turn the lead vocal's AUX 1 up, and you are listening at Wedge 1. Then try AUX 2, AUX 3, and AUX 4. Each one feeds its own wedge.",
+    takeaway: "Each aux send goes out its own output to its own speaker: AUX 1 to Wedge 1, AUX 2 to Wedge 2, AUX 3 to Wedge 3, AUX 4 to Wedge 4. The room mix stays separate.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].aux1 ?? 0) - b.aux1) > 0.04
       || Math.abs((s.channels[WALK_LEAD].aux2 ?? 0) - b.aux2) > 0.04
       || Math.abs((s.channels[WALK_LEAD].aux3 ?? 0) - b.aux3) > 0.04
@@ -5865,7 +5867,7 @@ function walkSnap(s) {
 // so the console stays reachable while the panel guides. It snapshots the
 // relevant controls when a step begins (or when the steps go live), then
 // watches the live board and lights up NEXT once the prompted control moves.
-function WalkthroughPanel({ step, steps, total, state, active, onNext, onSkip }) {
+function WalkthroughPanel({ step, steps, total, state, active, onNext, onSkip, lastLesson }) {
   const STEPS = (Array.isArray(steps) && steps.length) ? steps : WALK_STEPS;
   const S = STEPS[step] || STEPS[0];
   const baseRef = uR(null);
@@ -5901,7 +5903,7 @@ function WalkthroughPanel({ step, steps, total, state, active, onNext, onSkip })
           background: done ? 'linear-gradient(180deg, var(--green), #2c9d52)' : '#1a1a1d',
           color: done ? '#0a0a0c' : 'var(--ink-3)', border: '1px solid ' + (done ? '#2c9d52' : '#2a2a2e'),
           borderRadius: 4, cursor: done ? 'pointer' : 'default', opacity: done ? 1 : 0.6,
-        }}>{last ? 'FINISH →' : 'NEXT →'}</button>
+        }}>{(last && lastLesson) ? 'FINISH →' : 'NEXT →'}</button>
         {!done && <span style={{ fontSize: 10, color: 'var(--ink-3)' }}>Try the control to continue.</span>}
         <button onClick={onSkip} className="ui-no-select" style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--ink-3)', cursor: 'pointer', fontSize: 10, textDecoration: 'underline', padding: 0 }}>Close</button>
       </div>
@@ -7828,6 +7830,10 @@ function App() {
   // next part.
   const finishMixerLesson = () => {
     if (level && level.id) setCompleted((c) => ({ ...c, [level.id]: true }));
+    // Bleed straight into the next lesson in the course, the way the other
+    // courses advance. After the last one, drop into Free Play to explore.
+    const pos = MIXER_INDEXES.indexOf(levelIdx);
+    if (pos >= 0 && pos + 1 < MIXER_INDEXES.length) { loadLevel(MIXER_INDEXES[pos + 1]); return; }
     setWalkPhase(null);
     if (SANDBOX_INDEX >= 0) loadLevel(SANDBOX_INDEX);
   };
@@ -8194,7 +8200,7 @@ function App() {
                         } : null}
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : level.isWalkthrough
-                    ? <WalkthroughPanel step={walkStep} steps={walkSteps} total={walkSteps.length} state={state} active={walkPhase === 'steps'} onNext={walkNext} onSkip={walkSkip}/>
+                    ? <WalkthroughPanel step={walkStep} steps={walkSteps} total={walkSteps.length} state={state} active={walkPhase === 'steps'} onNext={walkNext} onSkip={walkSkip} lastLesson={MIXER_INDEXES.length > 0 && MIXER_INDEXES[MIXER_INDEXES.length - 1] === levelIdx}/>
                     : <BriefCard level={level} conditions={effConditions} audio={audioBaseline} phantomPop={state.phantomPop} onReset={restart}
                         liveShow={TIER === 'member' && liveShow} dropouts={dropouts}
                         pendingHints={pendingHints} hintCount={hintCount} onRevealHint={() => { hintsUsedRef.current += 1; setHintCount(c => c + 1); }}
