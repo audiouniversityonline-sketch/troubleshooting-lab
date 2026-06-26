@@ -1751,9 +1751,9 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
           tip="High-pass filter. Cuts the low rumble below the useful range of this source."/>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center', gap: 5, maxWidth: 78 }}>
-        {walk('ch-aux1', <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={26} color="var(--aux)"
-          tip="How much of this channel goes to Wedge 1, the lead singer's monitor. Doesn't change the PA." />)}
+      <div data-walk={idx === 0 ? 'ch-aux' : undefined} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center', gap: 5, maxWidth: 78 }}>
+        <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={26} color="var(--aux)"
+          tip="How much of this channel goes to Wedge 1, the lead singer's monitor. Doesn't change the PA." />
         <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={26} color="var(--cool)"
           tip="How much of this channel goes to Wedge 2, the second singer's monitor. Doesn't change the PA." />
         <K value={ch.aux3 || 0} onChange={(v) => { set({ aux3: v }); insp('wedge3'); }} label="AUX3" size={26} color="var(--green)"
@@ -1809,7 +1809,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
 
 function MasterSection({ master, onChange, paLevel, paRLevel, powered = true, onInspect }) {
   return (
-    <div style={{
+    <div data-walk="master-section" style={{
       background: 'linear-gradient(180deg,#2a2a30 0%, #1f1f23 8%, #1c1c20 100%)',
       border: '1px solid #0a0a0c',
       borderTop: '1px solid #45454d',
@@ -5190,7 +5190,18 @@ const SCENARIOS = [
     ...m, isWalkthrough: true, isMixerLesson: true,
     symptom: 'A guided tour of one part of the console.',
     conditions: [], involves: [1, 2, 3, 4], defaultInspect: 'pa',
-    sabotage: (s) => { if (s.channels[2]) s.channels[2].phantom = true; return s; },
+    sabotage: (s) => {
+      if (s.channels[2]) s.channels[2].phantom = true;
+      // This course is about the mixer, so everything downstream is already set
+      // up: the PA and all four wedges are on at a nominal level, so sound flows
+      // the moment the student sends a channel there. (The wedges sit at 0 in the
+      // default board, which would make the monitor-send lesson silent.)
+      s.outputs.pa_l.volume = 0.7; s.outputs.pa_r.volume = 0.7;
+      ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => {
+        if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.6; }
+      });
+      return s;
+    },
   })),
 ];
 
@@ -5790,11 +5801,14 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
 const WALK_LEAD = 0; // lead vocal channel — the strip the whole tour anchors on
 const WALK_STEPS = [
   {
-    act: 'Where the sound goes out', title: 'The master section', target: 'master-fader',
-    teach: "Start where the sound leaves the console. Every output has its own level control here in the master section. The MAIN fader is the overall volume for the room, and the mute beside it cuts the mains. The monitor master sets the level going to the singer's wedge.",
-    prompt: "Ease the MAIN fader down and hear the whole room get quieter, then bring it back up.",
-    takeaway: "Every output has a control in the master section. The MAIN fader is the room's volume.",
-    test: (s, b) => Math.abs((s.master.fader ?? 0) - b.mfader) > 0.08,
+    act: 'Where the sound goes out', title: 'The master section', target: 'master-section',
+    teach: "Start where the sound leaves the console. This whole column under MASTER is where each output gets its overall level. The MAIN fader at the bottom is the volume for the room, and the MUTE MAIN button just above it cuts the mains completely. The AUX masters up top each set the overall level of one aux output: AUX 1 for Wedge 1, AUX 2 for Wedge 2, and so on. Every output the console sends has its own control right here.",
+    prompt: "Ease the MAIN fader down and hear the room get quieter, then bring it back up. Try an AUX master too, the overall level for that wedge.",
+    takeaway: "The master section sets each output's overall level: the MAIN fader for the room, MUTE MAIN to cut it, and an AUX master for each wedge.",
+    test: (s, b) => Math.abs((s.master.fader ?? 0) - b.mfader) > 0.08
+      || Math.abs((s.master.aux1 ?? 0.75) - b.maux1) > 0.05 || Math.abs((s.master.aux2 ?? 0.75) - b.maux2) > 0.05
+      || Math.abs((s.master.aux3 ?? 0.75) - b.maux3) > 0.05 || Math.abs((s.master.aux4 ?? 0.75) - b.maux4) > 0.05
+      || (!!s.master.mute) !== b.mmute,
   },
   {
     act: 'Following one channel', title: 'PFL and the meter', target: 'ch-pfl',
@@ -5826,17 +5840,25 @@ const WALK_STEPS = [
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].pan ?? 0.5) - b.pan) > 0.04,
   },
   {
-    act: 'The second mix', title: 'The monitor send', target: 'ch-aux1',
-    teach: "The console builds more than one mix at once. The main mix goes to the room. The monitor send on each channel sets how much of that channel goes to the singer's wedge, a separate mix so the band can hear themselves. Turn it up and the singer gets more, while the room does not change. The monitor master in the master section sets the wedge's overall level.",
-    prompt: "Turn the lead vocal's monitor send (AUX 1) up. The singer gets more of themselves in the wedge, and the room never hears it change.",
-    takeaway: "The room mix and the monitor mix are separate. The send feeds the wedge, the monitor master sets its level.",
-    test: (s, b) => Math.abs((s.channels[WALK_LEAD].aux1 ?? 0) - b.aux1) > 0.04,
+    act: 'The second mix', title: 'The monitor send', target: 'ch-aux',
+    teach: "The console builds more than one mix at once. The main mix goes to the room; the AUX sends build separate mixes for the people on stage. This channel has four of them, and each one feeds a different output. AUX 1 goes out the aux 1 output to Wedge 1, AUX 2 out to Wedge 2, AUX 3 to Wedge 3, and AUX 4 to Wedge 4. Turning up AUX 1 here sends this channel to the first wedge, and the room never changes.",
+    prompt: "Turn the lead vocal's AUX 1 up and you are listening at Wedge 1. Then try AUX 2, AUX 3, AUX 4, each one feeds its own wedge.",
+    takeaway: "Each AUX send goes to its own output and speaker: AUX 1 to Wedge 1, AUX 2 to Wedge 2, AUX 3 to Wedge 3, AUX 4 to Wedge 4. The room mix stays separate.",
+    test: (s, b) => Math.abs((s.channels[WALK_LEAD].aux1 ?? 0) - b.aux1) > 0.04
+      || Math.abs((s.channels[WALK_LEAD].aux2 ?? 0) - b.aux2) > 0.04
+      || Math.abs((s.channels[WALK_LEAD].aux3 ?? 0) - b.aux3) > 0.04
+      || Math.abs((s.channels[WALK_LEAD].aux4 ?? 0) - b.aux4) > 0.04,
   },
 ];
 function walkSnap(s) {
   const c = (s.channels && s.channels[WALK_LEAD]) || {};
   const m = s.master || {};
-  return { mfader: m.fader ?? 0, solo: !!c.solo, mute: !!c.mute, gain: c.gain ?? 0, cfader: c.fader ?? 0, pan: c.pan ?? 0.5, aux1: c.aux1 ?? 0 };
+  return {
+    mfader: m.fader ?? 0, mmute: !!m.mute,
+    maux1: m.aux1 ?? 0.75, maux2: m.aux2 ?? 0.75, maux3: m.aux3 ?? 0.75, maux4: m.aux4 ?? 0.75,
+    solo: !!c.solo, mute: !!c.mute, gain: c.gain ?? 0, cfader: c.fader ?? 0, pan: c.pan ?? 0.5,
+    aux1: c.aux1 ?? 0, aux2: c.aux2 ?? 0, aux3: c.aux3 ?? 0, aux4: c.aux4 ?? 0,
+  };
 }
 
 // The step panel — lives in the board sidebar (where the BriefCard normally is),
