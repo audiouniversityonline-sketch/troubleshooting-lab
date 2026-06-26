@@ -91,7 +91,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=3"></script>
+<script src="content-staging.js?v=4"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -181,8 +181,10 @@ function nioshExposure(db) {
 
 const DESTINATIONS = {
   pa:     { label: 'Main PA',         short: 'PA',      stereo: true,  description: 'House speakers. What the audience hears.' },
-  wedge:  { label: 'Wedge 1',         short: 'WEDGE 1', stereo: false, description: 'Floor wedge for Vocal Mic 1.' },
-  wedge2: { label: 'Wedge 2',         short: 'WEDGE 2', stereo: false, description: 'Floor wedge for Vocal Mic 2.' },
+  wedge:  { label: 'Wedge 1',         short: 'WEDGE 1', stereo: false, description: 'Floor wedge for the lead singer (Vocal 1).' },
+  wedge2: { label: 'Wedge 2',         short: 'WEDGE 2', stereo: false, description: 'Floor wedge for the second singer (Vocal 2).' },
+  wedge3: { label: 'Wedge 3',         short: 'WEDGE 3', stereo: false, description: 'Floor wedge for the bass player.' },
+  wedge4: { label: 'Wedge 4',         short: 'WEDGE 4', stereo: false, description: 'Floor wedge for the keys player.' },
 };
 
 // Snake channel colors — the US 8-channel color-coding standard for
@@ -193,7 +195,9 @@ const DESTINATIONS = {
 // chips all carry these colors, because on a real multicore the color tells
 // you the CHANNEL NUMBER, not what's plugged in. Verified against
 // ProSoundWeb / industry practice.
-const SNAKE_COLORS = ['#a8703a', '#ff4630', '#ff8e2a', '#ffd23a', '#4ade80', '#5a8cff', '#b88dff', '#9aa0a8'];
+// Channels 9-10 carry the two extra monitor sends (Aux 3, Aux 4). The 8-channel
+// standard stops at gray, so 9-10 use neutral off-standard colors.
+const SNAKE_COLORS = ['#a8703a', '#ff4630', '#ff8e2a', '#ffd23a', '#4ade80', '#5a8cff', '#b88dff', '#9aa0a8', '#e0e0e6', '#46c7b8'];
 
 // The OUTPUT path has two patch points, mirroring the input path:
 //   outFan  — FOH end: which console output (mainL/mainR/aux1/aux2) is
@@ -203,9 +207,9 @@ const SNAKE_COLORS = ['#a8703a', '#ff4630', '#ff8e2a', '#ffd23a', '#4ade80', '#5
 //             each speaker's line is plugged into. null = unplugged.
 // Mis-patching either end is real and audible: a wedge whose line lands on
 // the channel carrying MAIN L plays the house mix.
-const DEFAULT_OUT_FAN = { 5: 'mainL', 6: 'mainR', 7: 'aux1', 8: 'aux2' };
-const DEFAULT_OUT_PATCH = { pa_l: 5, pa_r: 6, wedge: 7, wedge2: 8 };
-const OUT_PORT_LABELS = { mainL: 'MAIN L', mainR: 'MAIN R', aux1: 'AUX 1', aux2: 'AUX 2' };
+const DEFAULT_OUT_FAN = { 5: 'mainL', 6: 'mainR', 7: 'aux1', 8: 'aux2', 9: 'aux3', 10: 'aux4' };
+const DEFAULT_OUT_PATCH = { pa_l: 5, pa_r: 6, wedge: 7, wedge2: 8, wedge3: 9, wedge4: 10 };
+const OUT_PORT_LABELS = { mainL: 'MAIN L', mainR: 'MAIN R', aux1: 'AUX 1', aux2: 'AUX 2', aux3: 'AUX 3', aux4: 'AUX 4' };
 
 // Graphic EQ on the monitor sends — ISO mid-octave centre frequencies. A cut on
 // the band a wedge rings at (its ringBand) drops the feedback loop at that
@@ -249,6 +253,8 @@ const DEFAULT_CHANNEL = {
   pan: 0.5,
   aux1: 0.0,
   aux2: 0.0,
+  aux3: 0.0,
+  aux4: 0.0,
   mute: false,
   solo: false,
   fader: 0.0,
@@ -279,7 +285,7 @@ function defaultState() {
     // Master fader default sits below unity — compensates for the
     // pan law's louder summing at center so a typical mix doesn't peg
     // the master meter into red just by opening the desk.
-    master: { fader: 0.55, mute: false, aux1: 0.75, aux2: 0.75 },
+    master: { fader: 0.55, mute: false, aux1: 0.75, aux2: 0.75, aux3: 0.75, aux4: 0.75 },
     outputs: {
       pa_l:   { on: true, mute: false, volume: 0.7 },
       pa_r:   { on: true, mute: false, volume: 0.7 },
@@ -290,6 +296,10 @@ function defaultState() {
       // feeds back, as an index into FULL_EQ_HZ (15 = 2 kHz, 12 = 1 kHz).
       wedge:  { on: true, mute: false, volume: 0.0, eq: new Array(FULL_EQ_BANDS.length).fill(0), ringBand: 15 },
       wedge2: { on: true, mute: false, volume: 0.0, eq: new Array(FULL_EQ_BANDS.length).fill(0), ringBand: 12 },
+      // Wedges 3 and 4 (bass + keys). Same engine as 1/2; distinct ring bands so
+      // each wedge feeds back at its own frequency when pushed too hard.
+      wedge3: { on: true, mute: false, volume: 0.0, eq: new Array(FULL_EQ_BANDS.length).fill(0), ringBand: 17 },
+      wedge4: { on: true, mute: false, volume: 0.0, eq: new Array(FULL_EQ_BANDS.length).fill(0), ringBand: 10 },
       amp:    { on: true },
     },
     cables: {
@@ -517,6 +527,8 @@ function computeAudio(s, envelope) {
   // before it leaves the desk (in addition to per-channel aux send + destination volume).
   const aux1MasterGain = s.master.aux1 != null ? s.master.aux1 : 1;
   const aux2MasterGain = s.master.aux2 != null ? s.master.aux2 : 1;
+  const aux3MasterGain = s.master.aux3 != null ? s.master.aux3 : 1;
+  const aux4MasterGain = s.master.aux4 != null ? s.master.aux4 : 1;
 
   const aux1 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
@@ -543,6 +555,22 @@ function computeAudio(s, envelope) {
   const wedge2Mix = Math.sqrt(aux2.reduce((a, b) => a + b * b, 0)) * aux2MasterGain * (mixerOn ? 1 : 0);
   const w2 = o.wedge2 || { on: true, mute: false, volume: 0 };
 
+  // AUX 3 / AUX 4 — the bass player's and keys player's monitor sends. Same
+  // pre-fader, power-summed, mixer-gated math as aux 1/2.
+  const aux3 = s.channels.map((ch, i) => {
+    if (ch.mute || chMutedByGroup(s, i)) return 0;
+    return chanIn[i].level * (ch.aux3 || 0);
+  });
+  const wedge3Mix = Math.sqrt(aux3.reduce((a, b) => a + b * b, 0)) * aux3MasterGain * (mixerOn ? 1 : 0);
+  const w3 = o.wedge3 || { on: true, mute: false, volume: 0 };
+
+  const aux4 = s.channels.map((ch, i) => {
+    if (ch.mute || chMutedByGroup(s, i)) return 0;
+    return chanIn[i].level * (ch.aux4 || 0);
+  });
+  const wedge4Mix = Math.sqrt(aux4.reduce((a, b) => a + b * b, 0)) * aux4MasterGain * (mixerOn ? 1 : 0);
+  const w4 = o.wedge4 || { on: true, mute: false, volume: 0 };
+
   // OUTPUT PATH — two patch points, like the inputs. At FOH, each console
   // output plugs into a snake return channel (outFan: channel 5-8 → output
   // key). At the stage box, each speaker's line plugs into an out port,
@@ -551,9 +579,9 @@ function computeAudio(s, envelope) {
   // end is real and audible, which is the point of the patching lessons.
   const outFan = s.outFan || DEFAULT_OUT_FAN;
   const outPatch = s.outPatch || DEFAULT_OUT_PATCH;
-  const busSignal = { mainL: mainBusL, mainR: mainBusR, aux1: wedgeMix, aux2: wedge2Mix };
+  const busSignal = { mainL: mainBusL, mainR: mainBusR, aux1: wedgeMix, aux2: wedge2Mix, aux3: wedge3Mix, aux4: wedge4Mix };
   const retSignal = {};
-  for (const ch of [5, 6, 7, 8]) {
+  for (const ch of [5, 6, 7, 8, 9, 10]) {
     const outKey = outFan[ch];
     retSignal[ch] = outKey ? (busSignal[outKey] || 0) : 0;
   }
@@ -567,11 +595,15 @@ function computeAudio(s, envelope) {
   // cuts audibly shrink the wedge. Ring out surgically.
   const wedgeEqGain = eqLevelGain(o.wedge);
   const wedge2EqGain = eqLevelGain(w2);
+  const wedge3EqGain = eqLevelGain(w3);
+  const wedge4EqGain = eqLevelGain(w4);
   const spkChain = {
     pa_l: paLOn && !o.pa_l.mute ? o.pa_l.volume * 1.3 * paGate : 0,
     pa_r: paROn && !o.pa_r.mute ? o.pa_r.volume * 1.3 * paGate : 0,
     wedge: o.wedge.on && !o.wedge.mute ? o.wedge.volume * 1.6 * wedgeEqGain : 0,
     wedge2: w2.on && !w2.mute ? w2.volume * 1.6 * wedge2EqGain : 0,
+    wedge3: w3.on && !w3.mute ? w3.volume * 1.6 * wedge3EqGain : 0,
+    wedge4: w4.on && !w4.mute ? w4.volume * 1.6 * wedge4EqGain : 0,
   };
   // SPEAKER OUTPUTS — patched bus × the speaker's own chain. This is what
   // each box is actually producing; the on-speaker LED meter reads from
@@ -580,11 +612,13 @@ function computeAudio(s, envelope) {
   const paR = sigAt('pa_r') * spkChain.pa_r;
   const wedge = sigAt('wedge') * spkChain.wedge;
   const wedge2 = sigAt('wedge2') * spkChain.wedge2;
+  const wedge3 = sigAt('wedge3') * spkChain.wedge3;
+  const wedge4 = sigAt('wedge4') * spkChain.wedge4;
 
   const contributions = {};
   const mixerGateNum = mixerOn ? 1 : 0;
   for (const srcKey of Object.keys(SOURCES)) {
-    let cL = 0, cR = 0, cA1 = 0, cA2 = 0;
+    let cL = 0, cR = 0, cA1 = 0, cA2 = 0, cA3 = 0, cA4 = 0;
     for (let i = 0; i < s.channels.length; i++) {
       if (chanIn[i].srcKey !== srcKey) continue;
       const ch = s.channels[i];
@@ -593,6 +627,8 @@ function computeAudio(s, envelope) {
       cR += post[i] * g.R;
       cA1 += aux1[i];
       cA2 += aux2[i];
+      cA3 += aux3[i];
+      cA4 += aux4[i];
     }
     // This source's level on each desk bus (linear per source — power
     // summing applies to the combined bus, not to one source's own level),
@@ -602,9 +638,11 @@ function computeAudio(s, envelope) {
       mainR: cR * masterGate,
       aux1: cA1 * aux1MasterGain * mixerGateNum,
       aux2: cA2 * aux2MasterGain * mixerGateNum,
+      aux3: cA3 * aux3MasterGain * mixerGateNum,
+      aux4: cA4 * aux4MasterGain * mixerGateNum,
     };
     const srcRet = {};
-    for (const ch of [5, 6, 7, 8]) {
+    for (const ch of [5, 6, 7, 8, 9, 10]) {
       const outKey = outFan[ch];
       srcRet[ch] = outKey ? (srcBus[outKey] || 0) : 0;
     }
@@ -613,6 +651,8 @@ function computeAudio(s, envelope) {
       pa_r: (outPatch.pa_r ? (srcRet[outPatch.pa_r] || 0) : 0) * spkChain.pa_r,
       wedge: (outPatch.wedge ? (srcRet[outPatch.wedge] || 0) : 0) * spkChain.wedge,
       wedge2: (outPatch.wedge2 ? (srcRet[outPatch.wedge2] || 0) : 0) * spkChain.wedge2,
+      wedge3: (outPatch.wedge3 ? (srcRet[outPatch.wedge3] || 0) : 0) * spkChain.wedge3,
+      wedge4: (outPatch.wedge4 ? (srcRet[outPatch.wedge4] || 0) : 0) * spkChain.wedge4,
     };
   }
 
@@ -645,12 +685,12 @@ function computeAudio(s, envelope) {
     // meters read from these so the desk reflects what it's putting out
     // regardless of what's happening at the speaker.
     mainBus: { L: mainBusL, R: mainBusR },
-    // wedgeMix / wedge2Mix already include their respective aux master gains.
-    auxBus:  { wedge: wedgeMix, wedge2: wedge2Mix },
+    // wedgeMix .. wedge4Mix already include their respective aux master gains.
+    auxBus:  { wedge: wedgeMix, wedge2: wedge2Mix, wedge3: wedge3Mix, wedge4: wedge4Mix },
     // outputs = what each downstream speaker is actually producing (with the
     // speaker's volume, on/mute, and amp gate folded in). The on-speaker LED
     // meters read from these.
-    outputs: { pa_l: paL, pa_r: paR, wedge, wedge2 },
+    outputs: { pa_l: paL, pa_r: paR, wedge, wedge2, wedge3, wedge4 },
     // speakerInput = what's ARRIVING at each speaker, BEFORE the speaker's own
     // volume / on / mute. This is what a real powered speaker's "signal" LED
     // shows: signal is reaching the box regardless of where the speaker's
@@ -661,12 +701,14 @@ function computeAudio(s, envelope) {
       pa_r: sigAt('pa_r') * paGate,
       wedge:  sigAt('wedge'),
       wedge2: sigAt('wedge2'),
+      wedge3: sigAt('wedge3'),
+      wedge4: sigAt('wedge4'),
     },
     paGate,
     contributions,
     // EQ level multipliers, so detectFeedback can recover the PRE-EQ wedge
     // feed (the loop math applies per-band relief itself).
-    eqGain: { wedge: wedgeEqGain, wedge2: wedge2EqGain },
+    eqGain: { wedge: wedgeEqGain, wedge2: wedge2EqGain, wedge3: wedge3EqGain, wedge4: wedge4EqGain },
     // PFL only monitors when the console is powered; an off desk has no live
     // headphone bus, so anyPfl reads false even with a solo button down.
     anyPfl: anyPfl && mixerOn,
@@ -739,6 +781,16 @@ function traceTo(s, srcKey, dest) {
     add('Wedge Out', w2p.ok && w2.on && !w2.mute,
       !w2p.ok ? w2p.detail : !w2.on ? 'wedge off' : w2.mute ? 'wedge muted' : 'powered');
     add('Wedge Vol', w2.volume > 0.05, w2.volume <= 0.05 ? 'volume down' : `${Math.round(w2.volume * 100)}%`);
+  } else if (dest === 'wedge3' || dest === 'wedge4') {
+    const n = dest === 'wedge3' ? 3 : 4;
+    const auxKey = 'aux' + n;
+    const auxVal = channel ? (channel[auxKey] || 0) : 0;
+    add('Aux ' + n, auxVal > 0.05, channel ? (auxVal <= 0.05 ? 'aux ' + n + ' at 0' : `${Math.round(auxVal * 100)}%`) : '—');
+    const wN = s.outputs[dest] || { on: true, mute: false, volume: 0 };
+    const wNp = outPathDetail(dest, auxKey);
+    add('Wedge Out', wNp.ok && wN.on && !wN.mute,
+      !wNp.ok ? wNp.detail : !wN.on ? 'wedge off' : wN.mute ? 'wedge muted' : 'powered');
+    add('Wedge Vol', wN.volume > 0.05, wN.volume <= 0.05 ? 'volume down' : `${Math.round(wN.volume * 100)}%`);
   } else if (dest === 'pa') {
     add('Fader', channel ? channel.fader > 0.05 : false, channel ? (channel.fader <= 0.001 ? 'at -∞' : faderDb(channel.fader)) : '—');
     if (channel) {
@@ -765,6 +817,8 @@ function traceTo(s, srcKey, dest) {
   if (dest === 'pa') level = Math.max(c.pa_l, c.pa_r);
   else if (dest === 'wedge') level = c.wedge;
   else if (dest === 'wedge2') level = c.wedge2;
+  else if (dest === 'wedge3') level = c.wedge3;
+  else if (dest === 'wedge4') level = c.wedge4;
 
   return { stages, faultStage: stages.findIndex(s => !s.ok && s.reachable), level };
 }
@@ -896,6 +950,8 @@ function detectClipping(audio, state) {
       { key: 'pa_r',   label: 'PA R',     fix: 'Turn the PA R volume down.' },
       { key: 'wedge',  label: 'Wedge 1',  fix: 'Turn the Wedge 1 volume down.' },
       { key: 'wedge2', label: 'Wedge 2',  fix: 'Turn the Wedge 2 volume down.' },
+      { key: 'wedge3', label: 'Wedge 3',  fix: 'Turn the Wedge 3 volume down.' },
+      { key: 'wedge4', label: 'Wedge 4',  fix: 'Turn the Wedge 4 volume down.' },
     ];
     const speakerClips = [];
     for (const s of speakers) {
@@ -931,11 +987,15 @@ function wouldPopPhantom(s, channelIdx) {
   const paRLive = o.pa_r && o.pa_r.on && !o.pa_r.mute && o.pa_r.volume > 0.05 && pathTo('pa_r');
   // Wedge can also pop if the channel's aux send is up — same DC transient
   // hits the aux bus.
-  const auxOpen = ch.aux1 > 0.05 || ch.aux2 > 0.05;
-  const wedgeLive  = auxOpen && o.wedge  && o.wedge.on  && !o.wedge.mute  && o.wedge.volume  > 0.05 && pathTo('wedge');
-  const wedge2Live = auxOpen && o.wedge2 && o.wedge2.on && !o.wedge2.mute && o.wedge2.volume > 0.05 && pathTo('wedge2');
-  const speakerLive = paLLive || paRLive || wedgeLive || wedge2Live;
-  return channelOpen && (masterOpen ? speakerLive : (wedgeLive || wedge2Live));
+  const auxOpen = ch.aux1 > 0.05 || ch.aux2 > 0.05 || (ch.aux3 || 0) > 0.05 || (ch.aux4 || 0) > 0.05;
+  const wLive = (key, auxVal) => (auxVal || 0) > 0.05 && o[key] && o[key].on && !o[key].mute && o[key].volume > 0.05 && pathTo(key);
+  const wedgeLive  = wLive('wedge',  ch.aux1);
+  const wedge2Live = wLive('wedge2', ch.aux2);
+  const wedge3Live = wLive('wedge3', ch.aux3);
+  const wedge4Live = wLive('wedge4', ch.aux4);
+  const anyWedgeLive = wedgeLive || wedge2Live || wedge3Live || wedge4Live;
+  const speakerLive = paLLive || paRLive || anyWedgeLive;
+  return channelOpen && (masterOpen ? speakerLive : anyWedgeLive);
 }
 
 // Amp turn-on safety check. Real-world passive rig: console is on, master
@@ -1239,9 +1299,11 @@ function detectFeedback(s, audio) {
     if (srcDef.kind === 'condenser' && !ch.phantom) continue;
     const c = audio.contributions[srcKey];
     if (!c) continue;
-    const eqg = audio.eqGain || { wedge: 1, wedge2: 1 };
+    const eqg = audio.eqGain || { wedge: 1, wedge2: 1, wedge3: 1, wedge4: 1 };
     checkWedge('wedge', o.wedge, (c.wedge || 0) / (eqg.wedge || 1), ch.highpass, i);
     checkWedge('wedge2', o.wedge2, (c.wedge2 || 0) / (eqg.wedge2 || 1), ch.highpass, i);
+    checkWedge('wedge3', o.wedge3, (c.wedge3 || 0) / (eqg.wedge3 || 1), ch.highpass, i);
+    checkWedge('wedge4', o.wedge4, (c.wedge4 || 0) / (eqg.wedge4 || 1), ch.highpass, i);
     // Mains loop — no single band; the ring tone falls back to 2 kHz.
     const mainsLoop = ((c.pa_l || 0) + (c.pa_r || 0)) * MAINS_COUPLING * (ch.highpass ? 0.6 : 1.0);
     const mKey = 'mains:' + i;
@@ -1689,11 +1751,15 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
           tip="High-pass filter. Cuts the low rumble below the useful range of this source."/>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-        {walk('ch-aux1', <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={30} color="var(--aux)"
-          tip="How much of this channel goes to Wedge 1 (the monitor mix). Doesn't change the PA." />)}
-        <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={30} color="var(--cool)"
-          tip="How much of this channel goes to Wedge 2. Doesn't change the PA." />
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center', gap: 5, maxWidth: 78 }}>
+        {walk('ch-aux1', <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={26} color="var(--aux)"
+          tip="How much of this channel goes to Wedge 1, the lead singer's monitor. Doesn't change the PA." />)}
+        <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={26} color="var(--cool)"
+          tip="How much of this channel goes to Wedge 2, the second singer's monitor. Doesn't change the PA." />
+        <K value={ch.aux3 || 0} onChange={(v) => { set({ aux3: v }); insp('wedge3'); }} label="AUX3" size={26} color="var(--green)"
+          tip="How much of this channel goes to Wedge 3, the bass player's monitor. Doesn't change the PA." />
+        <K value={ch.aux4 || 0} onChange={(v) => { set({ aux4: v }); insp('wedge4'); }} label="AUX4" size={26} color="var(--amber)"
+          tip="How much of this channel goes to Wedge 4, the keys player's monitor. Doesn't change the PA." />
       </div>
 
       {walk('ch-pan', <K value={ch.pan} onChange={(v) => set({ pan: v })} label={ch.stereo ? 'BAL' : 'PAN'} size={32} color="var(--ink)" detentAt={0.5}
@@ -1758,14 +1824,21 @@ function MasterSection({ master, onChange, paLevel, paRLevel, powered = true, on
       </div>
 
       {/* Aux send masters — sit alongside the main master, each controlling
-          the overall level of its aux bus before it leaves the desk. */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'center' }}>
+          the overall level of its aux bus (one per wedge) before it leaves the
+          desk. Four wedges, four masters, wrapped 2x2. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
         <K value={master.aux1 != null ? master.aux1 : 0.75}
            onChange={(v) => onChange({ ...master, aux1: v })}
-           label="AUX 1" size={32} color="var(--aux)" />
+           label="AUX 1" size={28} color="var(--aux)" />
         <K value={master.aux2 != null ? master.aux2 : 0.75}
            onChange={(v) => onChange({ ...master, aux2: v })}
-           label="AUX 2" size={32} color="var(--cool)" />
+           label="AUX 2" size={28} color="var(--cool)" />
+        <K value={master.aux3 != null ? master.aux3 : 0.75}
+           onChange={(v) => onChange({ ...master, aux3: v })}
+           label="AUX 3" size={28} color="var(--green)" />
+        <K value={master.aux4 != null ? master.aux4 : 0.75}
+           onChange={(v) => onChange({ ...master, aux4: v })}
+           label="AUX 4" size={28} color="var(--amber)" />
       </div>
 
       <div style={{ width: '100%', height: 1, background: '#0a0a0c', boxShadow: '0 1px 0 #3a3a40' }}/>
@@ -2070,11 +2143,15 @@ function DigitalChannelEditor({ ch, idx, srcLabel, pflLevel, onChange, onPhantom
 
         <div style={tile}>
           <div className="mono" style={tileLabel}>BUS SENDS</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="WEDGE 1" size={36} color="var(--aux)"
-              tip="How much of this channel goes to Wedge 1. Does not change the PA." />
-            <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="WEDGE 2" size={36} color="var(--cool)"
-              tip="How much of this channel goes to Wedge 2. Does not change the PA." />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 104 }}>
+            <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="WEDGE 1" size={32} color="var(--aux)"
+              tip="How much of this channel goes to Wedge 1, the lead singer's monitor. Does not change the PA." />
+            <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="WEDGE 2" size={32} color="var(--cool)"
+              tip="How much of this channel goes to Wedge 2, the second singer's monitor. Does not change the PA." />
+            <K value={ch.aux3 || 0} onChange={(v) => { set({ aux3: v }); insp('wedge3'); }} label="WEDGE 3" size={32} color="var(--green)"
+              tip="How much of this channel goes to Wedge 3, the bass player's monitor. Does not change the PA." />
+            <K value={ch.aux4 || 0} onChange={(v) => { set({ aux4: v }); insp('wedge4'); }} label="WEDGE 4" size={32} color="var(--amber)"
+              tip="How much of this channel goes to Wedge 4, the keys player's monitor. Does not change the PA." />
           </div>
         </div>
 
@@ -2853,7 +2930,7 @@ function EqStrip({ eq, onChange, ringBands, accent, height, width }) {
 // Exposable "Monitor EQ" panel — the graphic EQs for the two aux/monitor sends,
 // the way they'd sit at FOH (outboard rack, or a screen on a digital desk). It
 // auto-opens when a wedge starts ringing and can be toggled by hand otherwise.
-function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge, ringBand, rings, toneGate, byEar }) {
+function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandChange, ringWedge, ringBand, rings, toneGate, byEar }) {
   if (!open) return null;
   const ringsFor = (key) => (rings || []).filter(r => r.wedge === key).map(r => r.band);
   const col = (key, w, label, accent) => {
@@ -2911,9 +2988,11 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, onBandChange, ringWedge,
             </div>
           );
         })()}
-        <div style={{ display: 'flex', gap: 14 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
           {col('wedge', wedge, 'WEDGE 1', 'var(--aux)')}
           {col('wedge2', wedge2, 'WEDGE 2', 'var(--cool)')}
+          {wedge3 && col('wedge3', wedge3, 'WEDGE 3', 'var(--green)')}
+          {wedge4 && col('wedge4', wedge4, 'WEDGE 4', 'var(--amber)')}
         </div>
       </div>
     </div>
@@ -3082,7 +3161,8 @@ function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive }) {
   // colors (5 green, 6 blue, 7 violet, 8 gray). What signal rides each
   // channel is decided at the FOH end (outFan); `active` lights when its
   // channel is carrying signal.
-  const outs = [5, 6, 7, 8].map(ch => ({
+  // Six returns now: 5-6 carry Main L/R, 7-10 carry Aux 1-4 (one per wedge).
+  const outs = [5, 6, 7, 8, 9, 10].map(ch => ({
     key: ch,
     label: String(ch),
     color: (window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52',
@@ -3295,7 +3375,7 @@ function ZoneHeader({ label, sublabel, badge, accent, badgeColor }) {
   );
 }
 
-function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, paLRef, paRRef, stageBoxRef }) {
+function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef }) {
   const topo = state.topology || {};
   const isPassive = topo.paRig === 'amp+passive';
   // In passive mode the cabinets are dumb — the external amp powers them, so a
@@ -3389,6 +3469,32 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               ringing={ringingWedge === 'wedge2'}
               isInspected={state.inspect === 'wedge2'}
               onSelect={() => setState({ ...state, inspect: 'wedge2' })}/>
+          </div>
+        )}
+
+        {/* Wedge 3 + 4 sit upstage at the bass and keys players' feet, in front
+            of each instrument (bass upstage-left, keys upstage-right). */}
+        {topo.wedgeLocation === 'stage' && (
+          <div ref={wedge3OnStageRef} style={{ position: 'absolute', top: 132, left: '14%', transform: 'translateX(-50%)' }}>
+            <Wedge label="WEDGE 3" accent="var(--green)" on={state.outputs.wedge3.on} mute={state.outputs.wedge3.mute} volume={state.outputs.wedge3.volume} level={audio.outputs.wedge3}
+              onTogglePower={() => setOut('wedge3', { on: !state.outputs.wedge3.on })}
+              onToggleMute={() => setOut('wedge3', { mute: !state.outputs.wedge3.mute })}
+              onVolume={(v) => setOutInspect('wedge3', { volume: v }, 'wedge3')}
+              ringing={ringingWedge === 'wedge3'}
+              isInspected={state.inspect === 'wedge3'}
+              onSelect={() => setState({ ...state, inspect: 'wedge3' })}/>
+          </div>
+        )}
+
+        {topo.wedgeLocation === 'stage' && (
+          <div ref={wedge4OnStageRef} style={{ position: 'absolute', top: 132, left: '72%', transform: 'translateX(-50%)' }}>
+            <Wedge label="WEDGE 4" accent="var(--amber)" on={state.outputs.wedge4.on} mute={state.outputs.wedge4.mute} volume={state.outputs.wedge4.volume} level={audio.outputs.wedge4}
+              onTogglePower={() => setOut('wedge4', { on: !state.outputs.wedge4.on })}
+              onToggleMute={() => setOut('wedge4', { mute: !state.outputs.wedge4.mute })}
+              onVolume={(v) => setOutInspect('wedge4', { volume: v }, 'wedge4')}
+              ringing={ringingWedge === 'wedge4'}
+              isInspected={state.inspect === 'wedge4'}
+              onSelect={() => setState({ ...state, inspect: 'wedge4' })}/>
           </div>
         )}
 
@@ -3736,6 +3842,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   const paRRef = useR2(null);
   const wedgeOnStageRef = useR2(null);
   const wedge2OnStageRef = useR2(null);
+  const wedge3OnStageRef = useR2(null);
+  const wedge4OnStageRef = useR2(null);
   const fanOutRef = useR2(null);
   const snakeOutRef = useR2(null);
   const [paths, setPaths] = useS2({
@@ -4180,6 +4288,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         { spk: 'pa_r',   sref: paRRef,           name: 'PA R', rail: 16 },
         { spk: 'wedge',  sref: wedgeOnStageRef,  name: 'W 1',  rail: 0  },
         { spk: 'wedge2', sref: wedge2OnStageRef, name: 'W 2',  rail: 8  },
+        { spk: 'wedge3', sref: wedge3OnStageRef, name: 'W 3',  rail: -8 },
+        { spk: 'wedge4', sref: wedge4OnStageRef, name: 'W 4',  rail: -16 },
       ];
       const patch = state.outPatch || window.DEFAULT_OUT_PATCH;
       const outCables = OUT_SPEAKERS.map(({ spk, sref, name, rail }, idx) => {
@@ -4273,6 +4383,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             <StageRow state={state} setState={setState} audio={audio}
               sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
               snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
+              wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
               paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef}/>
           </div>
           {sidebarContent}
@@ -7150,6 +7261,8 @@ function App() {
     const paClipped   = ((audio.outputs?.pa_l || 0) > 1.03) || ((audio.outputs?.pa_r || 0) > 1.03);
     const wedgeClipped  = (audio.outputs?.wedge  || 0) > 1.03;
     const wedge2Clipped = (audio.outputs?.wedge2 || 0) > 1.03;
+    const wedge3Clipped = (audio.outputs?.wedge3 || 0) > 1.03;
+    const wedge4Clipped = (audio.outputs?.wedge4 || 0) > 1.03;
     for (const k of Object.keys(chainsRef.current)) {
       // Compute per-side levels so the playback is genuinely stereo. When
       // monitoring PA, the L/R contributions split per the pan law and the
@@ -7211,6 +7324,8 @@ function App() {
         if (dest === 'pa' && paClipped) drive = Math.max(drive, 5);
         if (dest === 'wedge'  && wedgeClipped)  drive = Math.max(drive, 5);
         if (dest === 'wedge2' && wedge2Clipped) drive = Math.max(drive, 5);
+        if (dest === 'wedge3' && wedge3Clipped) drive = Math.max(drive, 5);
+        if (dest === 'wedge4' && wedge4Clipped) drive = Math.max(drive, 5);
       }
       rampParam(chainsRef.current[k].drive.gain, ctx, drive);
       // Makeup inverse-compensates so the clean signal isn't louder just
@@ -7236,8 +7351,8 @@ function App() {
     if (bank) {
       let eqArr = null;
       if (!audio.anyPfl) {
-        if (dest === 'wedge' && state.outputs.wedge && state.outputs.wedge.eq) eqArr = state.outputs.wedge.eq;
-        else if (dest === 'wedge2' && state.outputs.wedge2 && state.outputs.wedge2.eq) eqArr = state.outputs.wedge2.eq;
+        if ((dest === 'wedge' || dest === 'wedge2' || dest === 'wedge3' || dest === 'wedge4')
+            && state.outputs[dest] && state.outputs[dest].eq) eqArr = state.outputs[dest].eq;
       }
       const full = !!(eqArr && eqArr.length === FULL_EQ_HZ.length);
       for (let bi = 0; bi < bank.length; bi++) {
@@ -7809,9 +7924,9 @@ function App() {
       console: state.mixer ? state.mixer.on !== false : true,
       paStage: passive ? !!(o.amp && o.amp.on) : (!!(o.pa_l && o.pa_l.on) && !!(o.pa_r && o.pa_r.on)),
       paLabel: passive ? 'Power amp on' : 'PA speakers on',
-      wedges: !!(o.wedge && o.wedge.on && o.wedge2 && o.wedge2.on),
+      wedges: !!(o.wedge && o.wedge.on && o.wedge2 && o.wedge2.on && o.wedge3 && o.wedge3.on && o.wedge4 && o.wedge4.on),
       masterDown: state.master.fader <= 0.1,
-      wedgesOff: !(o.wedge && o.wedge.on) && !(o.wedge2 && o.wedge2.on),
+      wedgesOff: !(o.wedge && o.wedge.on) && !(o.wedge2 && o.wedge2.on) && !(o.wedge3 && o.wedge3.on) && !(o.wedge4 && o.wedge4.on),
       paOff: passive ? !(o.amp && o.amp.on) : (!(o.pa_l && o.pa_l.on) && !(o.pa_r && o.pa_r.on)),
       paOffLabel: passive ? 'Power amp off' : 'PA speakers off',
     };
@@ -7883,6 +7998,7 @@ function App() {
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
         wedge={state.outputs.wedge} wedge2={state.outputs.wedge2}
+        wedge3={state.outputs.wedge3} wedge4={state.outputs.wedge4}
         onBandChange={setMonitorEqBand}
         ringWedge={feedback ? feedback.ringWedge : null}
         ringBand={feedback ? feedback.ringBand : null}
@@ -8033,6 +8149,8 @@ function App() {
             { id: 'pa',     label: 'MAIN PA' },
             { id: 'wedge',  label: 'WEDGE 1' },
             { id: 'wedge2', label: 'WEDGE 2' },
+            { id: 'wedge3', label: 'WEDGE 3' },
+            { id: 'wedge4', label: 'WEDGE 4' },
             { id: 'pfl',    label: 'HEADPHONES (PFL)' },
           ];
           return (
