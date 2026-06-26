@@ -2274,14 +2274,14 @@ function DigitalPatch({ channels, inputPatch, onRepatch, powered }) {
 // is the real-world skill: a digital op reads I/O separately from the soft,
 // layer-able fader surface. These jacks hold the cable anchor refs, which frees
 // the fader bank to sit at the bottom like a real desk.
-function DigitalIORow({ state, setState, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref }) {
+function DigitalIORow({ state, setState, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, aux3Ref, aux4Ref }) {
   const fanOut = state.fanOut || [1, 2, 3, 4];
   const snakeColors = window.SNAKE_COLORS || [];
   const ofan = state.outFan || window.DEFAULT_OUT_FAN || {};
   const playbackMode = state.playbackMode || 'music';
   const blue = (window.SOURCES && window.SOURCES.playback ? window.SOURCES.playback.color : '#6aa9ff');
   const chipColorFor = (outKey) => {
-    const ch = [5, 6, 7, 8].find(c2 => ofan[c2] === outKey);
+    const ch = [5, 6, 7, 8, 9, 10].find(c2 => ofan[c2] === outKey);
     return ch ? (snakeColors[ch - 1] || '#4a4a52') : '#4a4a52';
   };
   const jack = (attachRef, label, sub, color, key) => (
@@ -2306,6 +2306,8 @@ function DigitalIORow({ state, setState, channelRefs, masterLRef, masterRRef, au
     jack(masterRRef, 'MAIN R', 'PA · R', chipColorFor('mainR'), 'o-r'),
     jack(aux1Ref, 'AUX 1', 'WED 1', chipColorFor('aux1'), 'o-1'),
     jack(aux2Ref, 'AUX 2', 'WED 2', chipColorFor('aux2'), 'o-2'),
+    jack(aux3Ref, 'AUX 3', 'WED 3', chipColorFor('aux3'), 'o-3'),
+    jack(aux4Ref, 'AUX 4', 'WED 4', chipColorFor('aux4'), 'o-4'),
   ];
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, padding: '10px 12px 9px', background: 'linear-gradient(180deg,#141417,#0e0e10)', borderBottom: '1px solid #0a0a0c' }}>
@@ -2389,7 +2391,7 @@ function DigitalMainStrip({ master, onChange, onInspect, paLevel, paRLevel, powe
   );
 }
 
-function DigitalConsole({ state, setState, audio, faultChannelIdx, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref }) {
+function DigitalConsole({ state, setState, audio, faultChannelIdx, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, aux3Ref, aux4Ref }) {
   const [selected, setSelected] = useState(0);
   const [screenView, setScreenView] = useState('channel'); // channel | groups | scenes | patch
   const [faderLayer, setFaderLayer] = useState('inputs');  // inputs | buses
@@ -2528,7 +2530,7 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx, channelRefs, 
       </div>
 
       {/* I/O ROW — fixed physical inputs/outputs; the snake lands here. */}
-      <DigitalIORow state={state} setState={setState} channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref} />
+      <DigitalIORow state={state} setState={setState} channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref} />
 
       <div style={{ padding: '8px 10px 10px' }}>
         {/* SCREEN — one view at a time, switched by the view tabs. Real desks do
@@ -2943,15 +2945,22 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
     const full = !!(w.eq && w.eq.length === FULL_EQ_BANDS.length);
     const tone = full ? eqLevelGain(w) : 1;
     const toneBad = full && toneGate ? tone < toneGate : false;
+    // One wedge = one horizontal rack unit: a left-hand name plate, then the
+    // graphic EQ bands running across. Four of these stack vertically, like a
+    // rack of outboard graphic EQs (and it saves the horizontal space the
+    // side-by-side layout ate up).
     return (
-    <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#141418', border: '1px solid ' + (isRinging ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6, boxShadow: isRinging ? '0 0 0 1px rgba(255,70,48,0.4)' : 'none' }}>
-      <div className="mono" style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: isRinging ? 'var(--hot)' : accent }}>{label}{isRinging ? (hot.length > 1 ? ' · RINGING ×' + hot.length : ' · RINGING') : ''}</div>
-      <EqStrip eq={w.eq} onChange={(band, v) => onBandChange(key, band, v)} ringBands={byEar ? [] : hot} accent={accent} height={104} width={20}/>
-      {full && toneGate ? (
-        <div className="mono" style={{ fontSize: 8, letterSpacing: 1, fontWeight: 700, color: toneBad ? 'var(--hot)' : 'var(--ink-2)' }}>
-          TONE {Math.round(tone * 100)}%{toneBad ? ' · TOO MUCH CUT' : ''}
-        </div>
-      ) : null}
+    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 12px', background: '#141418', border: '1px solid ' + (isRinging ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6, boxShadow: isRinging ? '0 0 0 1px rgba(255,70,48,0.4)' : 'none' }}>
+      <div style={{ width: 80, flexShrink: 0 }}>
+        <div className="mono" style={{ fontSize: 9.5, letterSpacing: 1, fontWeight: 700, color: isRinging ? 'var(--hot)' : accent }}>{label}</div>
+        {isRinging ? <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: 'var(--hot)', marginTop: 2 }}>{hot.length > 1 ? 'RINGING ×' + hot.length : 'RINGING'}</div> : null}
+        {full && toneGate ? (
+          <div className="mono" style={{ fontSize: 7.5, letterSpacing: 0.5, fontWeight: 700, color: toneBad ? 'var(--hot)' : 'var(--ink-3)', marginTop: 2 }}>
+            TONE {Math.round(tone * 100)}%{toneBad ? ' · CUT' : ''}
+          </div>
+        ) : null}
+      </div>
+      <EqStrip eq={w.eq} onChange={(band, v) => onBandChange(key, band, v)} ringBands={byEar ? [] : hot} accent={accent} height={66} width={20}/>
     </div>
     );
   };
@@ -2988,7 +2997,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
             </div>
           );
         })()}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {col('wedge', wedge, 'WEDGE 1', 'var(--aux)')}
           {col('wedge2', wedge2, 'WEDGE 2', 'var(--cool)')}
           {wedge3 && col('wedge3', wedge3, 'WEDGE 3', 'var(--green)')}
@@ -3592,9 +3601,11 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 mainR: ((audio.mainBus?.L || 0) + (audio.mainBus?.R || 0)) > 0.05,
                 aux1: (audio.auxBus?.wedge || 0) > 0.05,
                 aux2: (audio.auxBus?.wedge2 || 0) > 0.05,
+                aux3: (audio.auxBus?.wedge3 || 0) > 0.05,
+                aux4: (audio.auxBus?.wedge4 || 0) > 0.05,
               };
               const ra = {};
-              for (const ch of [5, 6, 7, 8]) ra[ch] = ofan[ch] ? !!busAct[ofan[ch]] : false;
+              for (const ch of [5, 6, 7, 8, 9, 10]) ra[ch] = ofan[ch] ? !!busAct[ofan[ch]] : false;
               return ra;
             })()}
           />
@@ -3604,7 +3615,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   );
 }
 
-function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, fanOutRef, sourceKeys, surface, onSetSurface, canDigital }) {
+function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, aux3Ref, aux4Ref, fanOutRef, sourceKeys, surface, onSetSurface, canDigital }) {
   // Effective surface: free tier can never land on digital even if a stale
   // profile says so (the toggle gates it, this is the belt-and-suspenders).
   const sfc = (surface === 'digital' && canDigital) ? 'digital' : 'analog';
@@ -3656,15 +3667,15 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         {sfc === 'digital'
           ? <DigitalConsoleWithRefs state={state} setState={setState} audio={audio}
-              channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref}/>
+              channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref}/>
           : <ConsoleWithRefs state={state} setState={setState} audio={audio}
-              channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref}/>}
+              channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref}/>}
       </div>
     </div>
   );
 }
 
-function ChannelAnchors({ state, setState, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref }) {
+function ChannelAnchors({ state, setState, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, aux3Ref, aux4Ref }) {
   const stripWidth = 100, gap = 8, padding = 14, dividerWidth = 1, masterWidth = 150;
   const anchors = [];
   const masterLeft = padding + state.channels.length * (stripWidth + gap) + dividerWidth + 4 + masterWidth / 2;
@@ -3730,14 +3741,18 @@ function ChannelAnchors({ state, setState, channelRefs, masterLRef, masterRRef, 
   // connected to that output yet.
   const ofanChips = state.outFan || window.DEFAULT_OUT_FAN;
   const chipColorFor = (outKey) => {
-    const ch = [5, 6, 7, 8].find(c2 => ofanChips[c2] === outKey);
+    const ch = [5, 6, 7, 8, 9, 10].find(c2 => ofanChips[c2] === outKey);
     return ch ? ((window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52') : '#4a4a52';
   };
+  // Six console outputs now: Main L/R plus an aux send per wedge. Spaced tight
+  // and centered over the master so the six chips don't overrun its width.
   const outputs = [
-    { ref: masterLRef, x: masterLeft - 54, label: 'MAIN L', dest: 'PA · L',  color: chipColorFor('mainL') },
-    { ref: masterRRef, x: masterLeft - 18, label: 'MAIN R', dest: 'PA · R',  color: chipColorFor('mainR') },
-    { ref: aux1Ref,    x: masterLeft + 18, label: 'AUX 1',  dest: 'WEDGE 1', color: chipColorFor('aux1') },
-    { ref: aux2Ref,    x: masterLeft + 54, label: 'AUX 2',  dest: 'WEDGE 2', color: chipColorFor('aux2') },
+    { ref: masterLRef, x: masterLeft - 75, label: 'MAIN L', dest: 'PA · L',  color: chipColorFor('mainL') },
+    { ref: masterRRef, x: masterLeft - 45, label: 'MAIN R', dest: 'PA · R',  color: chipColorFor('mainR') },
+    { ref: aux1Ref,    x: masterLeft - 15, label: 'AUX 1',  dest: 'WEDGE 1', color: chipColorFor('aux1') },
+    { ref: aux2Ref,    x: masterLeft + 15, label: 'AUX 2',  dest: 'WEDGE 2', color: chipColorFor('aux2') },
+    { ref: aux3Ref,    x: masterLeft + 45, label: 'AUX 3',  dest: 'WEDGE 3', color: chipColorFor('aux3') },
+    { ref: aux4Ref,    x: masterLeft + 75, label: 'AUX 4',  dest: 'WEDGE 4', color: chipColorFor('aux4') },
   ];
   outputs.forEach(o => {
     anchors.push(chip('out-' + o.label, o.ref, o.x, o.label, o.dest, o.color));
@@ -3802,11 +3817,11 @@ function ChannelAnchors({ state, setState, channelRefs, masterLRef, masterRRef, 
   return <>{anchors}{playbackDevice}</>;
 }
 
-function ConsoleWithRefs({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref }) {
+function ConsoleWithRefs({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, aux3Ref, aux4Ref }) {
   return (
     <div style={{ position: 'relative' }}>
       <window.Console state={state} setState={setState} audio={audio} faultChannelIdx={-1}/>
-      <ChannelAnchors state={state} setState={setState} channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref}/>
+      <ChannelAnchors state={state} setState={setState} channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref}/>
     </div>
   );
 }
@@ -3814,13 +3829,13 @@ function ConsoleWithRefs({ state, setState, audio, channelRefs, masterLRef, mast
 // Digital twin of ConsoleWithRefs. Renders the digital surface but reuses the
 // SAME ChannelAnchors, so the input/output chips (and therefore the whole cable
 // overlay measured in Chain) attach to identical positions over the fader bay.
-function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref }) {
+function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, aux3Ref, aux4Ref }) {
   // No ChannelAnchors here: the digital console owns its own fixed I/O row,
   // which holds the cable anchor refs. That decouples the cables from the fader
   // strips (correct for a digital desk) and lets the faders sit at the bottom.
   return (
     <window.DigitalConsole state={state} setState={setState} audio={audio} faultChannelIdx={-1}
-      channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref}/>
+      channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef} aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref}/>
   );
 }
 
@@ -3838,6 +3853,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   const masterRRef = useR2(null);
   const aux1Ref = useR2(null);
   const aux2Ref = useR2(null);
+  const aux3Ref = useR2(null);
+  const aux4Ref = useR2(null);
   const paLRef = useR2(null);
   const paRRef = useR2(null);
   const wedgeOnStageRef = useR2(null);
@@ -4253,11 +4270,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       // to one of the console's output chips. Same drag model as the input
       // tails: the chip-end is the handle, loose tails dangle to the RIGHT
       // of the snake point wearing their channel number.
-      const chipRefFor = { mainL: masterLRef, mainR: masterRRef, aux1: aux1Ref, aux2: aux2Ref };
+      const chipRefFor = { mainL: masterLRef, mainR: masterRRef, aux1: aux1Ref, aux2: aux2Ref, aux3: aux3Ref, aux4: aux4Ref };
       const ofanState = state.outFan || window.DEFAULT_OUT_FAN;
       const outFanCables = [];
       if (fanOutOrigin) {
-        for (const ch of [5, 6, 7, 8]) {
+        for (const ch of [5, 6, 7, 8, 9, 10]) {
           const outKey = ofanState[ch];
           const ref = outKey ? chipRefFor[outKey] : null;
           let to = (ref && ref.current) ? anchorPos(ref.current, 'top') : null;
@@ -4345,6 +4362,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   const mainBusActive = ((audio.mainBus?.L || 0) + (audio.mainBus?.R || 0)) > 0.05;
   const wedgeActive   = (audio.auxBus?.wedge  || 0) > 0.05;
   const wedge2Active  = (audio.auxBus?.wedge2 || 0) > 0.05;
+  const wedge3Active  = (audio.auxBus?.wedge3 || 0) > 0.05;
+  const wedge4Active  = (audio.auxBus?.wedge4 || 0) > 0.05;
   // PER-CABLE liveness at the speaker side — the snake channel the line is
   // patched to must be carrying a live bus (two hops: the channel needs a
   // desk output plugged in at FOH, and that bus needs signal). An unplugged
@@ -4354,6 +4373,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
     outKey === 'mainL' || outKey === 'mainR' ? mainBusActive
     : outKey === 'aux1' ? wedgeActive
     : outKey === 'aux2' ? wedge2Active
+    : outKey === 'aux3' ? wedge3Active
+    : outKey === 'aux4' ? wedge4Active
     : false;
   const retLive = (ch) => (ch && ofanLive[ch]) ? busActiveFor(ofanLive[ch]) : false;
   const topo = state.topology || {};
@@ -4391,7 +4412,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         <div style={{ flexShrink: 0, display: 'flex' }}>
           <ConsolePanel state={state} setState={setState} audio={audio}
             channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef}
-            aux1Ref={aux1Ref} aux2Ref={aux2Ref}
+            aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref}
             fanOutRef={fanOutRef} sourceKeys={sourceKeys}
             surface={surface} onSetSurface={onSetSurface} canDigital={canDigital}/>
         </div>
@@ -6644,6 +6665,12 @@ function App() {
   // frame. Envelope-driven detection made the warning strobe at onset as
   // peaks crossed the threshold and troughs fell back under it.
   const audioBaseline = uM(() => window.computeAudio(state), [state]);
+  // Clip detection on the STEADY signal (no per-frame envelope). Drives the win
+  // and the brief's objectives so a dynamic source (a vocal peaking) doesn't
+  // flip the objective on and off as it rides above and below the threshold.
+  // The live `clips` (enveloped, above) still feeds the bouncing meters + the
+  // transient clip warning; only the win logic reads this stable version.
+  const clipsStable = uM(() => (window.detectClipping ? window.detectClipping(audioBaseline, state) : []), [audioBaseline, state]);
   const feedback = (window.detectFeedback ? window.detectFeedback(state, audioBaseline) : null);
   // Push the risk amount into a ref so the audio animation loop can read
   // it without taking a dependency on state. 0 when no loop is hot.
@@ -6701,7 +6728,7 @@ function App() {
     const pflEachOk = !level.requirePflEach || level.requirePflEach.every(ch => pflChannelsRef.current[ch]);
     // Distortion blocks the win for as long as anything is in the red. The
     // moment the user backs off, the block lifts. No reset required.
-    const clean = clips.length === 0;
+    const clean = clipsStable.length === 0;
     const balanced = !paBalanceIssue;
     const noFeedback = !feedback;
     // Tone gate (Feedback Mode): the wedge still has to sound like the
@@ -8104,7 +8131,7 @@ function App() {
                         coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : level.isWalkthrough
                     ? <WalkthroughPanel step={walkStep} total={WALK_STEPS.length} state={state} active={walkPhase === 'steps'} onNext={walkNext} onSkip={walkSkip}/>
-                    : <BriefCard level={level} conditions={effConditions} audio={audio} phantomPop={state.phantomPop} onReset={restart}
+                    : <BriefCard level={level} conditions={effConditions} audio={audioBaseline} phantomPop={state.phantomPop} onReset={restart}
                         liveShow={TIER === 'member' && liveShow} dropouts={dropouts}
                         pendingHints={pendingHints} hintCount={hintCount} onRevealHint={() => { hintsUsedRef.current += 1; setHintCount(c => c + 1); }}
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
@@ -8248,6 +8275,11 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   const curTab = level.isFeedbackMode ? 'feedback' : 'trouble';
   const [mode, setMode] = uS(curMode);
   const [tab, setTab] = uS(curTab);
+  // Which Learn course is expanded. Defaults to the one holding the current
+  // level (a returning member lands on their open course); otherwise every
+  // course starts collapsed so the Learn tab opens as a clean list of titles.
+  const initialOpenCourse = level ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : (bandOf(level) === 'LEARN' ? 'show' : null)) : null;
+  const [openCourse, setOpenCourse] = uS(initialOpenCourse);
   // When the picker is open on load, the resume effect may swap the level in
   // AFTER this mounted (so curMode was computed from the initial lesson). Follow
   // the level into its mode so the menu lands where the user left off. Level
@@ -8287,14 +8319,13 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
       </div>
     );
   };
-  // Course heading inside the Learn pane: a label, an optional MEMBERS/FREE tag,
-  // and a one-line blurb.
-  const courseHead = (label, color, blurb, tag) => (
-    <div style={{ marginBottom: 6 }}>
-      <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color, marginBottom: 4 }}>{label}{tag ? ' · ' + tag : ''}</div>
-      {blurb && <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.45, marginBottom: 8 }}>{blurb}</div>}
-    </div>
-  );
+  // The Learn tab's courses, each a collapsible card. Mixer Tutorial is free;
+  // the other two are gated, and a free viewer sees a lock instead of an
+  // expander on them.
+  const COURSES = [];
+  if (WALKTHROUGH_INDEX >= 0) COURSES.push({ key: 'mixer', label: 'MIXER TUTORIAL', color: 'var(--cool)', tag: 'FREE', free: true, blurb: 'A quick guided tour of the console on a system that is already working. Start here.', rows: [{ s: SCENARIOS[WALKTHROUGH_INDEX], i: WALKTHROUGH_INDEX }] });
+  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a live system from a cold start and run a full show. Ten lessons, in order.', rows: lessons });
+  if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MONITOR WORLD', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build a separate mix for each performer: their own source, a bit of the vocals, a sensible level, rung out so it stays clean.', rows: monitors });
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 680, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>
@@ -8325,23 +8356,36 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
           </div>
           <div style={{ flex: 1, padding: '16px 18px', overflowY: 'auto', textAlign: 'left' }}>
             {mode === 'learn' && (
-              <div>
-                {WALKTHROUGH_INDEX >= 0 && (
-                  <div style={{ marginBottom: 16 }}>
-                    {courseHead('MIXER TUTORIAL', 'var(--cool)', 'A quick guided tour of the console on a system that is already working. Start here.', 'FREE')}
-                    {courseRow({ s: SCENARIOS[WALKTHROUGH_INDEX], i: WALKTHROUGH_INDEX }, 1, true)}
-                  </div>
-                )}
-                <div style={{ marginBottom: monitors.length > 0 ? 16 : 0 }}>
-                  {courseHead('RUN THE SHOW', 'var(--accent)', 'Set up a live system from a cold start and run a full show. Ten lessons, in order.', isMember ? null : 'MEMBERS')}
-                  {lessons.map((row, n) => courseRow(row, n + 1, false))}
-                </div>
-                {monitors.length > 0 && (
-                  <div>
-                    {courseHead('MONITOR WORLD', 'var(--aux)', 'Build a separate mix for each performer: their own source, a bit of the vocals, a sensible level, rung out so it stays clean.', isMember ? null : 'MEMBERS')}
-                    {monitors.map((row, n) => courseRow(row, n + 1, false))}
-                  </div>
-                )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {COURSES.map((co) => {
+                  const lockedCourse = !isMember && !co.free;
+                  const isOpen = openCourse === co.key && !lockedCourse;
+                  const doneCount = co.rows.filter((r) => completed[r.s.id]).length;
+                  return (
+                    <div key={co.key} style={{ border: '1px solid ' + (isOpen ? '#38383e' : '#2a2a2e'), borderRadius: 8, overflow: 'hidden', background: '#16161a' }}>
+                      <div onClick={() => { if (!lockedCourse) setOpenCourse(isOpen ? null : co.key); }} className="ui-no-select"
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: lockedCourse ? 'default' : 'pointer' }}
+                        onMouseEnter={(e) => { if (!lockedCourse && !isOpen) e.currentTarget.style.background = '#1d1d22'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                        <div className="mono" style={{ fontSize: 10.5, letterSpacing: 1.1, fontWeight: 700, color: co.color, flex: 1 }}>
+                          {co.label}{co.tag ? <span style={{ color: 'var(--ink-3)' }}>{' · ' + co.tag}</span> : null}
+                        </div>
+                        {isMember && co.rows.length > 0 && !lockedCourse && (
+                          <div className="mono" style={{ fontSize: 9, color: doneCount === co.rows.length ? 'var(--green)' : 'var(--ink-3)' }}>{doneCount}/{co.rows.length}</div>
+                        )}
+                        <div style={{ fontSize: 11, color: 'var(--ink-3)', width: 14, textAlign: 'center' }}>
+                          {lockedCourse ? '🔒' : <span style={{ display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▸</span>}
+                        </div>
+                      </div>
+                      {isOpen && (
+                        <div style={{ padding: '0 10px 8px', borderTop: '1px solid #222226' }}>
+                          {co.blurb && <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.45, margin: '8px 2px' }}>{co.blurb}</div>}
+                          {co.rows.map((row, n) => courseRow(row, n + 1, co.free))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {mode === 'play' && (
@@ -8603,7 +8647,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
     else if (c.max != null) pass = lvl <= c.max;
     else if (c.min != null) pass = lvl >= c.min;
     else pass = lvl >= 0.3;
-    const destLabel = c.dest === 'pa' ? 'PA' : c.dest === 'pa_l' ? 'PA · L' : c.dest === 'pa_r' ? 'PA · R' : c.dest === 'wedge' ? 'WEDGE 1' : c.dest === 'wedge2' ? 'WEDGE 2' : c.dest.toUpperCase();
+    const destLabel = c.dest === 'pa' ? 'PA' : c.dest === 'pa_l' ? 'PA · L' : c.dest === 'pa_r' ? 'PA · R' : c.dest === 'wedge' ? 'WEDGE 1' : c.dest === 'wedge2' ? 'WEDGE 2' : c.dest === 'wedge3' ? 'WEDGE 3' : c.dest === 'wedge4' ? 'WEDGE 4' : c.dest.toUpperCase();
     const srcLabel = window.SOURCES[c.source]?.label || c.source;
     const targetTxt = c.max != null && c.min == null ? `≤ ${Math.round(c.max * 100)}%` :
                       c.min != null && c.max == null ? `≥ ${Math.round(c.min * 100)}%` :
