@@ -295,7 +295,7 @@ window.LEVELS = [
       // Carried from Set the Input Level: good input, faders at unity, PA set.
       // The wedges are not up yet: sends closed, wedge volumes down.
       s.channels[4].mute = false;
-      s.channels[4].gain = 0.5;
+      s.channels[4].gain = 0.42;
       s.channels[4].fader = 0.75;
       s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
       s.master.fader = 0.75; s.master.mute = false;
@@ -373,8 +373,8 @@ window.LEVELS = [
     ],
     sabotage: (s) => {
       // Mics from the last level kept as set, but muted so the audio stops.
-      s.channels[0].mute = true; s.channels[0].fader = 0.72; s.channels[0].gain = 0.5; s.channels[0].phantom = false;
-      s.channels[1].mute = true; s.channels[1].fader = 0.72; s.channels[1].gain = 0.5; s.channels[1].phantom = true;
+      s.channels[0].mute = true; s.channels[0].fader = 0.72; s.channels[0].gain = 0.42; s.channels[0].phantom = false;
+      s.channels[1].mute = true; s.channels[1].fader = 0.72; s.channels[1].gain = 0.42; s.channels[1].phantom = true;
       // Both DI channels start muted, faders down, gain low. The active DI
       // (bass, ch3) has phantom off so the student has to power it.
       s.channels[2].mute = true; s.channels[2].fader = 0; s.channels[2].gain = 0.2; s.channels[2].phantom = false;
@@ -616,7 +616,7 @@ function bandUp(s) {
   for (let i = 0; i < 4; i++) {
     s.channels[i].mute = false;
     s.channels[i].fader = 0.6;
-    s.channels[i].gain = 0.4;
+    s.channels[i].gain = 0.42; // healthy input: baseline ~0.81, clean on peaks (see defaultState note)
     // Condenser (ch2) and active DI (ch3) need +48V to pass signal.
     s.channels[i].phantom = (i === 1 || i === 2);
   }
@@ -798,7 +798,7 @@ window.PRACTICE_GOALS = [
       // passing signal, the PA and both wedges, one at a time. This checks the
       // OUTPUTS — it is NOT a line check (a line check verifies the inputs).
       for (let i = 0; i < 4; i++) { s.channels[i].mute = true; }
-      s.channels[4].mute = false; s.channels[4].gain = 0.5; s.channels[4].fader = 0.75; s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
+      s.channels[4].mute = false; s.channels[4].gain = 0.42; s.channels[4].fader = 0.75; s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
       s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.6 };
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, mute: false, volume: 0.6 };
       return {

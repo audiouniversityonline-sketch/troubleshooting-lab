@@ -91,7 +91,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=7"></script>
+<script src="content-staging.js?v=8"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -270,11 +270,19 @@ function makeChannel(o = {}) { return { ...DEFAULT_CHANNEL, ...o }; }
 function defaultState() {
   return {
     channels: [
-      makeChannel({ id: 1, label: 'Vocal 1', gain: 0.55, phantom: false, fader: 0.72, pan: 0.5, aux1: 0.0 }),
-      makeChannel({ id: 2, label: 'Vocal 2', gain: 0.55, phantom: true,  fader: 0.72, pan: 0.5, aux1: 0.0 }),
-      makeChannel({ id: 3, label: 'Bass',    gain: 0.50,                 fader: 0.65, pan: 0.5, aux1: 0.0 }),
-      makeChannel({ id: 4, label: 'Keys',    gain: 0.45,                 fader: 0.60, pan: 0.5, aux1: 0.0 }),
-      makeChannel({ id: 5, label: '5/6',     gain: 0.55, stereo: true,   fader: 0.70, pan: 0.5, aux1: 0.0 }),
+      // Default input gains sit at 0.42 (baseline chanIn ~0.81, the lower-middle
+      // of the healthy band [0.80,1.00]). This is the highest gain that stays
+      // CLEAN on peaks: live chanIn = baseline x the meter wiggle, which caps at
+      // 1.25, so 0.81 x 1.25 = 1.01, just under the 1.03 where the preamp starts
+      // to saturate audibly. The input meter then averages ~77% and peaks ~96%,
+      // which is textbook gain staging. Higher (0.55) put the average near the
+      // top and made the dynamic vocal stems distort on every loud syllable.
+      // The fader (not the gain) carries the mix balance below.
+      makeChannel({ id: 1, label: 'Vocal 1', gain: 0.42, phantom: false, fader: 0.72, pan: 0.5, aux1: 0.0 }),
+      makeChannel({ id: 2, label: 'Vocal 2', gain: 0.42, phantom: true,  fader: 0.72, pan: 0.5, aux1: 0.0 }),
+      makeChannel({ id: 3, label: 'Bass',    gain: 0.42,                 fader: 0.65, pan: 0.5, aux1: 0.0 }),
+      makeChannel({ id: 4, label: 'Keys',    gain: 0.42,                 fader: 0.60, pan: 0.5, aux1: 0.0 }),
+      makeChannel({ id: 5, label: '5/6',     gain: 0.42, stereo: true,   fader: 0.70, pan: 0.5, aux1: 0.0 }),
     ],
     // Mixer / console power state. Default ON for all existing levels.
     // The Power-On Sequence lesson sabotages this to false and teaches the
