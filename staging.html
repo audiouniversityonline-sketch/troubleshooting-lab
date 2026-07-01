@@ -7331,14 +7331,18 @@ function App() {
     }
 
     // STAGE SOURCE LOOPS — swap the placeholder synth for the real recorded
-    // stems. The four files are identical-length (19.2 s) mono loops, so once
+    // stems. The four files are identical-length (~19.8 s) mono loops, so once
     // they all start on the same context clock with loop=true they stay
     // sample-accurately locked to each other forever (no drift). The synth
     // chain (filter, drive, gain staging) stays in place downstream, so a clip
     // still responds to gain, fader, EQ, and clipping exactly like the synth
     // did. Oscillators keep playing until the buffers decode, then hand off; a
-    // failed load just leaves the synth running for that source.
-    const CLIP_SOURCES = { guitar: 'audio/bass.wav', laptop: 'audio/keys.wav', vocal: 'audio/vocal1.wav', vocal2: 'audio/vocal2.wav' };
+    // failed load just leaves the synth running for that source. NOTE the source
+    // KEYS are legacy: `guitar` is the Bass channel, `laptop` is the Keys
+    // channel (the labels the student sees live in defaultState/SOURCES). The
+    // ?v= tag cache-busts the audio when a stem is replaced (browsers/CDN cache
+    // the bare filename); bump it whenever the .wav bytes change.
+    const CLIP_SOURCES = { guitar: 'audio/bass.wav?v=2', laptop: 'audio/keys.wav?v=2', vocal: 'audio/vocal1.wav?v=2', vocal2: 'audio/vocal2.wav?v=2' };
     Promise.all(Object.keys(CLIP_SOURCES).map(k =>
       fetch(CLIP_SOURCES[k])
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
