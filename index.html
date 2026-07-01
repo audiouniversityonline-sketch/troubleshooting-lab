@@ -4933,6 +4933,10 @@ const CTA_KEY = 'audiou-troubleshooting-lab-essentials-cta-v1';
 // a zero-backend product gets, so each link tags where the click came from.
 const JOIN_URL = 'https://audiouniversityonline.com/products-2/live-sound-program/';
 const joinUrl = (content) => JOIN_URL + '?utm_source=troubleshooting-lab&utm_medium=app&utm_content=' + content;
+// Where the full members' version lives. A paying member who lands on the free
+// embed (a shared link, the free Circle page) uses this to jump to what they
+// already have, instead of hitting a join wall for content they own.
+const MEMBER_URL = 'https://community.audiouniversityonline.com/troubleshooting-lab';
 
 // ── Email gate (free tier) ──────────────────────────────────────────────
 // Before a free viewer starts the 10-lesson Essentials, ask for an email so it
@@ -8289,6 +8293,9 @@ function App() {
                 borderRadius: 4, cursor: 'pointer',
               }}>BACK TO THE LESSONS</button>
             </div>
+            <a href={MEMBER_URL} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
+              fontSize: 10.5, color: 'var(--ink-3)', textDecoration: 'underline', textUnderlineOffset: 3, marginTop: 2,
+            }}>Already a member? Open the full version →</a>
           </div>
         </div>
       )}
@@ -8549,6 +8556,14 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
           </div>
           <button onClick={onClose} className="mono ui-no-select" style={{ ...navBtn, padding: '4px 10px' }}>✕</button>
         </div>
+        {!isMember && (
+          <a href={MEMBER_URL} target="_blank" rel="noopener noreferrer" className="mono ui-no-select"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid #2a2a2e', background: '#16161a', color: 'var(--accent)', textDecoration: 'none', fontSize: 11, fontWeight: 700, letterSpacing: 0.4 }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#1d1d22'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#16161a'}>
+            <span>Already a member? Open the full version</span><span>→</span>
+          </a>
+        )}
         <div style={{ display: 'flex', minHeight: 330, maxHeight: 'calc(88vh - 54px)' }}>
           <div style={{ width: 210, borderRight: '1px solid #2a2a2e', padding: 10, display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
             {MODES.map((m) => {
