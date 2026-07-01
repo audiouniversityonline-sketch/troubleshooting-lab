@@ -8144,8 +8144,16 @@ function App() {
   // so a hint for something already handled (phantom already on, a channel
   // already up) never appears. Levels with only a legacy hint string fall back
   // to a single on-request hint.
+  // Objectives read the SETTLED signal (audioBaseline = computeAudio(state), no
+  // per-frame envelope), the exact signal checkWin uses. A real vocal's live
+  // level swings above and below the send threshold every frame; evaluating the
+  // guide on the live `audio` made a step read done/undone frame-to-frame, so
+  // the active step (and its spotlight box) bounced back and forth. On the
+  // baseline the level is fixed for a given knob setting, so a completed step
+  // stays completed and the box holds — and the guide never disagrees with the
+  // win. (Same reason the BriefCard objectives use audioBaseline.)
   const hintCtx = {
-    state, audio, powerStatus, gainStatus, verifyStatus, pflEachStatus,
+    state, audio: audioBaseline, powerStatus, gainStatus, verifyStatus, pflEachStatus,
     zeroStatus, patchStatus, feedback,
     pflChannels: pflChannelsRef.current, pflChecked: pflCheckedRef.current,
   };
