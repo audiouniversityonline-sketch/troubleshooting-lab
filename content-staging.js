@@ -202,7 +202,7 @@ window.LEVELS = [
     hint: 'Power on the console first, then the powered speakers last. If you turn a PA speaker or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the wedges and the PA speakers.',
     hints: [
       { title: 'Console on first', target: 'mixer-power', teach: 'Always power up from the source outward. The console goes on first so its own switch-on thump has nowhere to go yet, no speaker is live to play it.', text: 'Turn the console on first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
-      { title: 'Then the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'out-wedge3', 'out-wedge4'], teach: 'With the console already on and settled, the speakers come up last. Nothing pops, because the thump already passed.', text: 'Now bring up the rest: both PA speakers and all four wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
+      { title: 'Then the speakers', target: null, teach: 'With the console already on and settled, the speakers come up last. Nothing pops, because the thump already passed.', text: 'Now bring up the rest: both PA speakers and all four wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
     ],
     conditions: [],
     // Active speakers: powered PA boxes with their own on/off, no power amp.
@@ -288,8 +288,8 @@ window.LEVELS = [
     symptom: 'The PA is set. Now bring up your monitor wedges. AUX 1 feeds Wedge 1, AUX 2 feeds Wedge 2.',
     hint: 'Turn up AUX 1 on the playback channel and bring up the Wedge 1 volume on stage until it plays. Do the same with AUX 2 for Wedge 2. Each wedge gets checked off once it is playing.',
     hints: [
-      { title: 'Wedge 1', target: ['ch5-aux', 'out-wedge1'], teach: 'A wedge only plays what you send it. AUX 1 is the feed to Wedge 1, and the wedge has its own volume on stage.', text: 'Wedge 1: turn up AUX 1 on the playback, then raise the Wedge 1 volume until it plays.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
-      { title: 'Wedge 2', target: ['ch5-aux', 'out-wedge2'], teach: 'Same idea on the next monitor: AUX 2 feeds Wedge 2. Proving each speaker now means no surprises once the band is on.', text: 'Wedge 2: same again with AUX 2 and the Wedge 2 volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
+      { title: 'Wedge 1', target: 'ch5-aux', teach: 'A wedge only plays what you send it. AUX 1 is the feed to Wedge 1, and the wedge has its own volume on stage.', text: 'Wedge 1: turn up AUX 1 on the playback, then raise the Wedge 1 volume until it plays.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
+      { title: 'Wedge 2', target: 'ch5-aux', teach: 'Same idea on the next monitor: AUX 2 feeds Wedge 2. Proving each speaker now means no surprises once the band is on.', text: 'Wedge 2: same again with AUX 2 and the Wedge 2 volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
     ],
     sabotage: (s) => {
       // Carried from Set the Input Level: good input, faders at unity, PA set.
@@ -555,7 +555,7 @@ window.LEVELS = [
     hints: [
       { title: 'Zero the console', target: null, teach: 'You leave the desk the way you would want to find it. Every control back to its resting place so the next power-up is predictable.', text: 'Zero the console: gains, sends, faders down; mute; pans centered; HPF and +48V off.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus.slice(0, 7).every((z) => z.pass) },
       { title: 'Drop the master', target: 'master-fader', teach: 'The main output comes all the way down and muted, so nothing can sneak out while you shut the rest down.', text: 'Then the master: all the way down and muted.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus[7] && ctx.zeroStatus[7].pass },
-      { title: 'Speakers off first', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'out-wedge3', 'out-wedge4'], teach: 'Power-down is power-up in reverse. The speakers go off first so they are dead before the console makes its switch-off thump.', text: 'Power off in reverse: PA speakers and wedges off first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paOff && ctx.powerStatus.wedgesOff },
+      { title: 'Speakers off first', target: null, teach: 'Power-down is power-up in reverse. The speakers go off first so they are dead before the console makes its switch-off thump.', text: 'Power off in reverse: PA speakers and wedges off first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paOff && ctx.powerStatus.wedgesOff },
       { title: 'Console off last', target: 'mixer-power', teach: 'With every speaker already dead, the console goes off last and its thump plays to nobody.', text: 'Console off last (it pops on shutoff, and a live speaker would play it).', done: (ctx) => ctx.powerStatus && !ctx.powerStatus.console },
     ],
     sabotage: (s) => {
@@ -1124,6 +1124,7 @@ window.MONITOR_WORLD = [
     hints: [
       { title: 'Her own voice up front', target: 'ch2-aux', teach: 'Wedge 2 is the second singer\'s monitor, and it runs off AUX 2. Her own voice goes up first and loudest in her own wedge.', text: 'Her own voice: AUX 2 on the Vocal 2 channel.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge2', 0.35) },
       { title: 'Add the lead singer', target: 'ch1-aux', teach: 'Same as the lead\'s wedge, in reverse: she wants the other singer next to her, tucked under her own voice.', text: 'Add the lead singer: AUX 2 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge2', 0.22) },
+      { title: 'A little keys', target: 'ch4-aux', teach: 'A touch of keys under the vocals helps her stay in tune, same as the lead\'s wedge. Keep it low, well under her own voice.', text: 'Add a little keys: AUX 2 on the Keyboard channel.', done: (ctx) => hintReaches(ctx, 'laptop', 'wedge2', 0.18) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
@@ -1143,8 +1144,8 @@ window.MONITOR_WORLD = [
     symptom: 'The singers are sorted. Now the players. The bass player\'s wedge sits at their feet (Wedge 3, on AUX 3); the keys player\'s wedge sits at theirs (Wedge 4, on AUX 4). Each one needs their own instrument up, with the vocals so they can follow the song.',
     hint: 'Wedge 3 on AUX 3: bass up, a bit of the lead vocal. Wedge 4 on AUX 4: keys up, a bit of the lead vocal. The instrument is loudest in its own player\'s wedge.',
     hints: [
-      { title: 'The bass player\'s wedge', target: ['ch3-aux', 'out-wedge3'], teach: 'Wedge 3 is at the bass player\'s feet, on AUX 3. Their own instrument is loudest, with a little lead vocal so they can follow the song.', text: 'Bass wedge (Wedge 3): AUX 3 on the Bass channel, plus a little lead vocal on AUX 3.', done: (ctx) => hintReaches(ctx, 'guitar', 'wedge3', 0.35) && hintReaches(ctx, 'vocal', 'wedge3', 0.18) },
-      { title: 'The keys player\'s wedge', target: ['ch4-aux', 'out-wedge4'], teach: 'Same for the keys player: Wedge 4 on AUX 4, their keys up, a little lead vocal underneath.', text: 'Keys wedge (Wedge 4): AUX 4 on the Keyboard channel, plus a little lead vocal on AUX 4.', done: (ctx) => hintReaches(ctx, 'laptop', 'wedge4', 0.35) && hintReaches(ctx, 'vocal', 'wedge4', 0.18) },
+      { title: 'The bass player\'s wedge', target: 'ch3-aux', teach: 'Wedge 3 is at the bass player\'s feet, on AUX 3. Their own instrument is loudest, with a little lead vocal so they can follow the song.', text: 'Bass wedge (Wedge 3): AUX 3 on the Bass channel, plus a little lead vocal on AUX 3.', done: (ctx) => hintReaches(ctx, 'guitar', 'wedge3', 0.35) && hintReaches(ctx, 'vocal', 'wedge3', 0.18) },
+      { title: 'The keys player\'s wedge', target: 'ch4-aux', teach: 'Same for the keys player: Wedge 4 on AUX 4, their keys up, a little lead vocal underneath.', text: 'Keys wedge (Wedge 4): AUX 4 on the Keyboard channel, plus a little lead vocal on AUX 4.', done: (ctx) => hintReaches(ctx, 'laptop', 'wedge4', 0.35) && hintReaches(ctx, 'vocal', 'wedge4', 0.18) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
@@ -1165,7 +1166,7 @@ window.MONITOR_WORLD = [
     symptom: 'Someone kept asking for more, and now the lead singer\'s wedge is cranked: loud enough to strain her voice, start a volume war, and ring. Bring her vocal back to a useful level: loud enough to hear, not blasting.',
     hint: 'Pull AUX 1 on the Vocal 1 channel down. She should hear herself clearly without the wedge dominating the stage. If it is ringing, bringing it down stops that too.',
     hints: [
-      { title: 'Pull her wedge back', target: 'ch1-aux', teach: 'A quieter stage is a better stage: less strain, less feedback, a cleaner room mix. Bring her vocal send down to where she can hear herself without it dominating.', text: 'Bring AUX 1 on the Vocal 1 channel down to a sensible level, not cranked.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; return c ? (c.wedge || 0) <= 0.45 : false; } },
+      { title: 'Pull her wedge back', target: 'ch1-aux', teach: 'A quieter stage is a better stage: less strain, less feedback, a cleaner room mix. Bring her vocal send down to where she can hear herself without it dominating, not so far she loses it.', text: 'Bring AUX 1 on the Vocal 1 channel down to a sensible level, not cranked and not gone.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.28 && l <= 0.45; } },
     ],
     involves: [1, 2, 3, 4],
     conditions: [

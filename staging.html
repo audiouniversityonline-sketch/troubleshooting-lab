@@ -91,7 +91,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=5"></script>
+<script src="content-staging.js?v=6"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -221,7 +221,7 @@ const EQ_BANDS = ['250', '500', '1k', '2k', '4k'];
 // you see (and cut) are always the same note. Index-aligned with EQ_BANDS.
 const EQ_BAND_HZ = [250, 500, 1000, 2000, 4000];
 // FULL graphic EQ — the ISO third-octave centers from 63 Hz to 16 kHz, the
-// band layout of a real 31-band graphic (minus the sub-63 Hz bottom octave a
+// band layout of a real 25-band graphic (minus the sub-63 Hz bottom octave a
 // wedge can't reproduce anyway). Used by Feedback Mode, where ringing out a
 // wedge across the whole spectrum is the training. The Essentials keep the
 // simpler 5-band EQ. A wedge carries the full EQ when its eq array length
@@ -291,7 +291,7 @@ function defaultState() {
       pa_r:   { on: true, mute: false, volume: 0.7 },
       // eq: per-band cut on the monitor send, 0 (flat) .. 1 (full -12 dB cut),
       // one entry per FULL_EQ_BANDS frequency. Every wedge now carries the full
-      // 31-band graphic EQ (consistent across all levels and modes, and the
+      // 25-band graphic EQ (consistent across all levels and modes, and the
       // realistic monitor tool). ringBand: the band this wedge rings at when it
       // feeds back, as an index into FULL_EQ_HZ (15 = 2 kHz, 12 = 1 kHz).
       wedge:  { on: true, mute: false, volume: 0.0, eq: new Array(FULL_EQ_BANDS.length).fill(0), ringBand: 15 },
@@ -2923,7 +2923,7 @@ function EqBand({ value, onChange, label, ringing, accent, height = 96, width = 
 
 function EqStrip({ eq, onChange, ringBands, accent, height, width }) {
   // 25 entries = the full ISO third-octave EQ (63 Hz .. 16 kHz, Feedback
-  // Mode): narrow sliders, vertical labels, like the face of a real 31-band
+  // Mode): narrow sliders, vertical labels, like the face of a real 25-band
   // graphic. 5 entries = the simpler Essentials EQ. Any number can ring.
   const full = !!(eq && eq.length === FULL_EQ_BANDS.length);
   const labels = full ? FULL_EQ_BANDS : EQ_BANDS;
@@ -3622,9 +3622,12 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   );
 }
 
-function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, aux3Ref, aux4Ref, fanOutRef, sourceKeys, surface, onSetSurface, canDigital }) {
+function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterRRef, aux1Ref, aux2Ref, aux3Ref, aux4Ref, fanOutRef, sourceKeys, surface, onSetSurface, canDigital, surfaceLocked }) {
   // Effective surface: free tier can never land on digital even if a stale
   // profile says so (the toggle gates it, this is the belt-and-suspenders).
+  // Guided content (walkthrough/lesson) is authored against the analog strip
+  // and its spotlight anchors, so those force analog and hide the toggle
+  // (surfaceLocked) — the App passes surface='analog' in that case too.
   const sfc = (surface === 'digital' && canDigital) ? 'digital' : 'analog';
   return (
     <div style={{
@@ -3643,7 +3646,11 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
       />
       {/* SURFACE toggle — same scenario, analog strip layout or digital
           select-then-edit. Digital is a member feature; on the free tier the
-          DIGITAL button opens the member pitch instead of switching. */}
+          DIGITAL button opens the member pitch instead of switching. Hidden
+          during guided content (surfaceLocked), which is authored for the
+          analog strip and would show a coach pointing at controls the digital
+          surface has no spotlight anchors for. */}
+      {!surfaceLocked && (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
         <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 1.5, fontWeight: 700 }}>SURFACE</div>
         <div style={{ display: 'flex', border: '1px solid #38383e', borderRadius: 4, overflow: 'hidden' }}>
@@ -3662,6 +3669,7 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
           })}
         </div>
       </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <FanOutPoint fanOutRef={fanOutRef}/>
       </div>
@@ -3846,7 +3854,7 @@ function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRe
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital }) {
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked }) {
   const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
   const isMobile = useViewport();
   const containerRef = useR2(null);
@@ -4428,7 +4436,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef}
             aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref}
             fanOutRef={fanOutRef} sourceKeys={sourceKeys}
-            surface={surface} onSetSurface={onSetSurface} canDigital={canDigital}/>
+            surface={surface} onSetSurface={onSetSurface} canDigital={canDigital} surfaceLocked={surfaceLocked}/>
         </div>
       </div>
 
@@ -5943,7 +5951,7 @@ function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
       background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
       border: '1px solid ' + (popped ? 'var(--hot)' : (allDone ? 'var(--green)' : '#38383e')), borderRadius: 8, padding: '12px 14px',
       display: 'flex', flexDirection: 'column', gap: 8,
-      boxShadow: '0 4px 14px rgba(0,0,0,0.4)', maxHeight: 300, overflowY: 'auto',
+      boxShadow: '0 4px 14px rgba(0,0,0,0.4)', maxHeight: 380, overflowY: 'auto',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.3, fontWeight: 700, textTransform: 'uppercase' }}>{level.title}</div>
@@ -6231,7 +6239,7 @@ function FaultCatalog({ open, onClose, tier }) {
           <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
         </div>
 
-        {sectionTitle('var(--ink-3)', 'THE ESSENTIALS · FREE')}
+        {sectionTitle('var(--accent)', 'RUN THE SHOW · MEMBERS')}
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 5 }}>
           Ten guided lessons that build one full show, start to finish.
         </div>
@@ -6263,7 +6271,7 @@ function FaultCatalog({ open, onClose, tier }) {
         {tier !== 'member' && (
           <div style={{ marginTop: 14, borderTop: '1px solid #2a2a2e', paddingTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 11, color: 'var(--ink)', lineHeight: 1.5, flex: 1, minWidth: 180 }}>
-              The Essentials are free. Practice Mode and Mic Feedback Mode are part of the Audio University membership.
+              The Mixer Tutorial is free. Run the Show, Practice Mode, and Mic Feedback Mode are part of the Audio University membership.
             </div>
             <a href={joinUrl('catalog')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
               padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
@@ -6887,7 +6895,7 @@ function App() {
     const poweredUp = !level.requirePowerOn || (() => {
       const o = state.outputs;
       const consoleOn = state.mixer ? state.mixer.on !== false : true;
-      const wedgesOn = !!(o.wedge && o.wedge.on) && !!(o.wedge2 && o.wedge2.on);
+      const wedgesOn = !!(o.wedge && o.wedge.on) && !!(o.wedge2 && o.wedge2.on) && !!(o.wedge3 && o.wedge3.on) && !!(o.wedge4 && o.wedge4.on);
       // Passive rig: the power amp is the PA's switch. Active rig: each PA
       // speaker is its own powered box. Check whichever applies.
       const passive = (state.topology && state.topology.paRig) === 'amp+passive';
@@ -7926,11 +7934,18 @@ function App() {
   const finishMixerLesson = () => {
     if (level && level.id) setCompleted((c) => ({ ...c, [level.id]: true }));
     // Bleed straight into the next lesson in the course, the way the other
-    // courses advance. After the last one, drop into Free Play to explore.
+    // courses advance.
     const pos = MIXER_INDEXES.indexOf(levelIdx);
     if (pos >= 0 && pos + 1 < MIXER_INDEXES.length) { loadLevel(MIXER_INDEXES[pos + 1]); return; }
-    setWalkPhase(null);
+    // Last lesson done. The Mixer Tutorial is the free tier's end of guided
+    // content, so a free viewer gets the wrap here: a recap, the email capture
+    // (the lead magnet's ask at the moment of peak interest), and where to next
+    // (see the full course / explore). Members have no gate or pitch, so they
+    // just drop onto Free Play. Land on Free Play first so the wrap sits over a
+    // working board.
     if (SANDBOX_INDEX >= 0) loadLevel(SANDBOX_INDEX);
+    if (TIER !== 'member') { setWalkPhase('wrap'); return; }
+    setWalkPhase(null);
   };
   const walkNext = () => { setWalkStep((s) => { if (s + 1 >= walkSteps.length) { finishMixerLesson(); return s; } return s + 1; }); };
   const walkSkip = () => { setWalkPhase(null); if (SANDBOX_INDEX >= 0) loadLevel(SANDBOX_INDEX); };
@@ -8280,7 +8295,8 @@ function App() {
             <div ref={designRef} style={{ width: DESIGN_W, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={fitScale}
-                surface={surface} onSetSurface={setSurfacePref} canDigital={canDigital}
+                surface={(level.isWalkthrough || level.isLesson) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital}
+                surfaceLocked={level.isWalkthrough || level.isLesson}
                 sidebarContent={
                   <StableSlot levelKey={levelIdx}>
                   {solved
@@ -8696,7 +8712,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
       }}>START SESSION →</button>
       {onPracticeLive && (
         <button onClick={(e) => { e.stopPropagation(); onPracticeLive(!liveShow); setPicker(false); }} className="mono ui-no-select"
-          title="Live Show: the audience is listening, so muting a channel or pulling the master is a dropout the room hears. PFL into the cans stays free." style={{
+          title="Live Show: the audience is listening, so muting a channel or pulling the master is a dropout the room hears. PFL into your headphones stays free." style={{
           marginTop: 8, width: '100%', padding: '7px 10px', fontSize: 9, fontWeight: 800, letterSpacing: 0.5, borderRadius: 5, cursor: 'pointer',
           background: liveShow ? 'linear-gradient(180deg, #d8473f, #a8322b)' : '#16161a',
           color: liveShow ? '#fff' : 'var(--ink-3)', border: '1px solid ' + (liveShow ? '#a8322b' : '#38383e'),
@@ -8956,7 +8972,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
           {zoneLabel(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? '▸ TASK' : '⚠ SYMPTOM')}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {liveShow && level.isPractice && (
-              <div className="mono" title="The audience is listening. Muting a channel or pulling the master is a dropout the room hears. PFL into the cans is free." style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 1, padding: '3px 7px', borderRadius: 12, background: 'rgba(216,71,63,0.16)', color: '#ff6a5e', border: '1px solid #a8322b' }}>🔴 LIVE · ROOM IS LISTENING</div>
+              <div className="mono" title="The audience is listening. Muting a channel or pulling the master is a dropout the room hears. PFL into your headphones is free." style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 1, padding: '3px 7px', borderRadius: 12, background: 'rgba(216,71,63,0.16)', color: '#ff6a5e', border: '1px solid #a8322b' }}>🔴 LIVE · ROOM IS LISTENING</div>
             )}
             {statusPill}
             {workChip}
@@ -9190,7 +9206,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           <div className="mono" style={{ fontSize: 8, color: dropouts > 0 ? 'var(--hot)' : 'var(--green)', letterSpacing: 1.2, fontWeight: 700 }}>🔴 LIVE SHOW</div>
           <div style={{ fontSize: 9, color: 'var(--ink-2)', lineHeight: 1.4 }}>
             {dropouts > 0
-              ? <>The room heard <b style={{ color: 'var(--hot)' }}>{dropouts} dropout{dropouts === 1 ? '' : 's'}</b> while you worked. PFL lets you check a channel in the cans without the audience hearing it, and the master never needs to move.</>
+              ? <>The room heard <b style={{ color: 'var(--hot)' }}>{dropouts} dropout{dropouts === 1 ? '' : 's'}</b> while you worked. PFL lets you check a channel in your headphones without the audience hearing it, and the master never needs to move.</>
               : <>The room <b style={{ color: 'var(--green)' }}>never heard you working</b>. You found it with PFL and the meters. That's the live-show standard.</>}
           </div>
         </div>
