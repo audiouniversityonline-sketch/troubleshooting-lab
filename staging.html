@@ -1402,6 +1402,55 @@ function detectFeedback(s, audio) {
   return { channelIdx: primary.channelIdx, riskAmount: primary.risk, ringWedge: primary.wedge, ringBand: primary.band, rings };
 }
 window.detectFeedback = detectFeedback;
+// Per-wedge FEEDBACK MARGIN: how much louder (dB) the hottest mic->wedge loop
+// could get before it hits the ring line. Positive = headroom (pros run monitors
+// ~6 dB below feedback, not on the edge), 0 = on the edge, negative = ringing.
+// Same loop math as detectFeedback, read-only (no hysteresis), reporting the
+// tallest band per wedge so a persistent readout can teach headroom discipline.
+function feedbackMargins(s, audio) {
+  const out = { wedge: 0, wedge2: 0, wedge3: 0, wedge4: 0 };
+  if (!s || !s.channels || !audio || !audio.contributions) return out;
+  const o = s.outputs || {};
+  const eqg = audio.eqGain || { wedge: 1, wedge2: 1, wedge3: 1, wedge4: 1 };
+  const keys = ['wedge', 'wedge2', 'wedge3', 'wedge4'];
+  const maxLoopFor = (wKey, w, feed, hpf) => {
+    if (!w || !feed) return 0;
+    const has25 = !!(w.eq && w.eq.length === FULL_EQ_HZ.length);
+    const prof = (w.fbProfile && w.eq && w.eq.length === w.fbProfile.length) ? w.fbProfile : (has25 ? wedgeProfileFor(wKey) : null);
+    const hzOf = (b) => has25 ? FULL_EQ_HZ[b] : EQ_BAND_HZ[b];
+    const bands = prof ? prof.map((p, b) => ({ b, p })) : [{ b: (w.ringBand != null ? w.ringBand : 2), p: 1.0 }];
+    let m = 0;
+    for (const { b, p } of bands) {
+      const hpfRelief = (hpf && hzOf(b) <= 250) ? 0.6 : 1.0;
+      const loop = feed * 1.0 * p * (w.eq ? eqBandRelief(w.eq[b]) : 1.0) * hpfRelief;
+      if (loop > m) m = loop;
+    }
+    return m;
+  };
+  for (let i = 0; i < s.channels.length; i++) {
+    const ch = s.channels[i]; if (ch.mute) continue;
+    const srcKey = sourceFor(s, i); if (!srcKey) continue;
+    const srcDef = SOURCES[srcKey];
+    if (!srcDef || (srcDef.kind !== 'dynamic' && srcDef.kind !== 'condenser')) continue;
+    if (srcDef.kind === 'condenser' && !ch.phantom) continue;
+    const c = audio.contributions[srcKey]; if (!c) continue;
+    for (const wKey of keys) {
+      const m = maxLoopFor(wKey, o[wKey], (c[wKey] || 0) / (eqg[wKey] || 1), ch.highpass);
+      if (m > out[wKey]) out[wKey] = m;
+    }
+  }
+  return out;
+}
+window.feedbackMargins = feedbackMargins;
+// Convert a wedge's hottest loop to a margin in dB (headroom before the 0.55
+// ring line) and a status band. Returns null when no mic feeds the wedge.
+function feedbackMarginInfo(maxLoop) {
+  if (!(maxLoop > 0.02)) return null; // no live mic on this wedge -> no risk to show
+  const db = 20 * Math.log10(0.55 / maxLoop);
+  const status = db < 0 ? 'ring' : (db < 3 ? 'edge' : (db < 6 ? 'low' : 'ok'));
+  return { db, status };
+}
+window.feedbackMarginInfo = feedbackMarginInfo;
 window.wouldPopOnPlug = wouldPopOnPlug;
 window.detectClipping = detectClipping;
 window.detectPaBalanceIssue = detectPaBalanceIssue;
@@ -3109,7 +3158,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
 }
 window.MonitorEqPanel = MonitorEqPanel;
 
-function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, label = 'STAGE WEDGE', accent = 'var(--aux)', ringing }) {
+function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, label = 'STAGE WEDGE', accent = 'var(--aux)', ringing, marginInfo }) {
   const animate = on && !mute && level > 0.05;
   const intensity = Math.min(1, level);
   // Resolve the accent var to an rgba glow color so we can reuse the variable
@@ -3149,10 +3198,19 @@ function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume,
         </svg>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 2 }}>
-        <div className="mono" style={{
-          fontSize: 7.5, letterSpacing: 1.5, fontWeight: 700,
-          color: on ? accent : '#ff8676',
-        }}>{label}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 4 }}>
+          <div className="mono" style={{
+            fontSize: 7.5, letterSpacing: 1.5, fontWeight: 700,
+            color: on ? accent : '#ff8676',
+          }}>{label}</div>
+          {on && marginInfo && (
+            <div className="mono" title="How much louder this monitor can get before it feeds back. Pros leave about 6 dB. Green is safe, red is on the edge."
+              style={{ fontSize: 7, fontWeight: 800, letterSpacing: 0.3, whiteSpace: 'nowrap',
+                color: marginInfo.status === 'ok' ? 'var(--green)' : marginInfo.status === 'low' ? 'var(--accent)' : 'var(--hot)' }}>
+              {marginInfo.db < 0 ? 'FEEDING BACK' : (marginInfo.db >= 12 ? '+12+' : '+' + marginInfo.db.toFixed(0)) + ' dB to F/B'}
+            </div>
+          )}
+        </div>
         <div onClick={onSelect} style={{
           cursor: 'pointer',
           padding: '1px 2px', borderRadius: 3,
@@ -3484,7 +3542,7 @@ function ZoneHeader({ label, sublabel, badge, accent, badgeColor }) {
   );
 }
 
-function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef }) {
+function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef, wedgeMargins }) {
   const topo = state.topology || {};
   const isPassive = topo.paRig === 'amp+passive';
   // In passive mode the cabinets are dumb — the external amp powers them, so a
@@ -3564,6 +3622,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
               onVolume={(v) => setOutInspect('wedge', { volume: v }, 'wedge')}
               ringing={ringingWedge === 'wedge'}
+              marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.wedge) : null}
               isInspected={state.inspect === 'wedge'}
               onSelect={() => setState({ ...state, inspect: 'wedge' })}/>
           </div>
@@ -3576,6 +3635,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
               onVolume={(v) => setOutInspect('wedge2', { volume: v }, 'wedge2')}
               ringing={ringingWedge === 'wedge2'}
+              marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.wedge2) : null}
               isInspected={state.inspect === 'wedge2'}
               onSelect={() => setState({ ...state, inspect: 'wedge2' })}/>
           </div>
@@ -3590,6 +3650,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onToggleMute={() => setOut('wedge3', { mute: !state.outputs.wedge3.mute })}
               onVolume={(v) => setOutInspect('wedge3', { volume: v }, 'wedge3')}
               ringing={ringingWedge === 'wedge3'}
+              marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.wedge3) : null}
               isInspected={state.inspect === 'wedge3'}
               onSelect={() => setState({ ...state, inspect: 'wedge3' })}/>
           </div>
@@ -3602,6 +3663,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onToggleMute={() => setOut('wedge4', { mute: !state.outputs.wedge4.mute })}
               onVolume={(v) => setOutInspect('wedge4', { volume: v }, 'wedge4')}
               ringing={ringingWedge === 'wedge4'}
+              marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.wedge4) : null}
               isInspected={state.inspect === 'wedge4'}
               onSelect={() => setState({ ...state, inspect: 'wedge4' })}/>
           </div>
@@ -3947,7 +4009,7 @@ function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRe
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked }) {
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins }) {
   const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
   const isMobile = useViewport();
   const containerRef = useR2(null);
@@ -4520,7 +4582,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
               sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
               snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
               wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
-              paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef}/>
+              paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins}/>
           </div>
           {sidebarContent}
         </div>
@@ -6945,6 +7007,10 @@ function App() {
   // transient clip warning; only the win logic reads this stable version.
   const clipsStable = uM(() => (window.detectClipping ? window.detectClipping(audioBaseline, state) : []), [audioBaseline, state]);
   const feedback = (window.detectFeedback ? window.detectFeedback(state, audioBaseline) : null);
+  // Per-wedge feedback margin (dB of headroom before the ring line), from the
+  // settled signal so it doesn't flicker with program material. Fed to the stage
+  // wedges so the student can see how close to the edge each monitor is running.
+  const fbMargins = uM(() => (window.feedbackMargins ? window.feedbackMargins(state, audioBaseline) : null), [state, audioBaseline]);
   // Push the risk amount into a ref so the audio animation loop can read
   // it without taking a dependency on state. 0 when no loop is hot.
   feedbackRiskRef.current = feedback ? feedback.riskAmount : 0;
@@ -8474,7 +8540,7 @@ function App() {
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             <div ref={designRef} style={{ width: DESIGN_W, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
               <window.Chain
-                state={state} setState={setState} audio={audio} fitScale={fitScale}
+                state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins}
                 surface={(level.isWalkthrough || level.isLesson) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital}
                 surfaceLocked={level.isWalkthrough || level.isLesson}
                 sidebarContent={
