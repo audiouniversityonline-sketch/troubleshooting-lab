@@ -91,7 +91,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=6"></script>
+<script src="content-staging.js?v=7"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -4931,7 +4931,7 @@ const CTA_KEY = 'audiou-troubleshooting-lab-essentials-cta-v1';
 // completion card after The Gig, and the pitch overlay when a free user
 // clicks a locked member mode) link here. UTM tags are the only attribution
 // a zero-backend product gets, so each link tags where the click came from.
-const JOIN_URL = 'https://audiouniversityonline.com/products-2/join-now-live/';
+const JOIN_URL = 'https://audiouniversityonline.com/products-2/live-sound-program/';
 const joinUrl = (content) => JOIN_URL + '?utm_source=troubleshooting-lab&utm_medium=app&utm_content=' + content;
 
 // ── Email gate (free tier) ──────────────────────────────────────────────
@@ -5315,13 +5315,12 @@ function bandOf(l) {
 // rides the profile envelope: rank + rankClean persist and travel in the save
 // code. (By-ear rungs were removed 2026-06-13: the meters are a primary tool.)
 const RANK_GATE = 3;
-const HIGHEST_LIVE_RANK = 5;
+const HIGHEST_LIVE_RANK = 4;
 const RANKS = [
   { n: 1, label: 'Find one',   blurb: 'Spot a single hidden fault.',       faults: 1, need: (d) => d.faults >= 1 },
   { n: 2, label: 'Find two',   blurb: 'Two faults at once, no answer key.', faults: 2, need: (d) => d.faults >= 2 },
   { n: 3, label: 'Find three', blurb: 'A full stack of three.',            faults: 3, need: (d) => d.faults >= 3 },
-  { n: 4, label: 'Sign-off',   blurb: 'Know when nothing is broken.',      faults: 1, signoff: true,  need: (d) => d.zeroFault },
-  { n: 5, label: 'Live show',  blurb: 'Diagnose without the room paying.', faults: 2, liveShow: true, need: (d) => d.liveShow && d.faults >= 1 && d.dropouts === 0 },
+  { n: 4, label: 'Live show',  blurb: 'Diagnose without the room paying.', faults: 2, liveShow: true, need: (d) => d.liveShow && d.faults >= 1 && d.dropouts === 0 },
 ];
 const rankByN = (n) => RANKS.find((r) => r.n === n) || RANKS[0];
 
@@ -5815,8 +5814,8 @@ const WALK_LEAD = 0; // lead vocal channel — the strip the whole tour anchors 
 const WALK_STEPS = [
   {
     act: 'The outputs', title: 'The master section', target: 'master-section',
-    teach: "Every output on the mixer has its own control, and they all live here in the master section. The MAIN fader is the overall volume for the speakers facing the audience. Just above it is a mute button that cuts everything coming out of the mains. The AUX masters each set the level of an aux output: AUX 1 is the overall level going to Wedge 1, AUX 2 to Wedge 2, and so on. Once you see that every output has one control right here, the master section is simple.",
-    prompt: "Bring the MAIN fader down and the room gets quieter, then bring it back up. Try an AUX master too, that is the overall level for that wedge.",
+    teach: "Every output has one control here in the master section. The MAIN fader is the overall volume to the audience. The mute above it cuts the mains. Each AUX master sets the level of one aux output: AUX 1 to Wedge 1, AUX 2 to Wedge 2, and so on.",
+    prompt: "Bring the MAIN fader down, then back up. Try an AUX master too.",
     takeaway: "Every output has its own control in the master section: the MAIN fader for the room, the mute to cut it, and an AUX master for each wedge.",
     test: (s, b) => Math.abs((s.master.fader ?? 0) - b.mfader) > 0.08
       || Math.abs((s.master.aux1 ?? 0.75) - b.maux1) > 0.05 || Math.abs((s.master.aux2 ?? 0.75) - b.maux2) > 0.05
@@ -5825,36 +5824,36 @@ const WALK_STEPS = [
   },
   {
     act: 'The channel strip', title: 'PFL and the meter', target: 'ch1-pfl',
-    teach: "Before you send a channel to the speakers, you can check it in your headphones first. That is what the PFL button does, at the bottom of the channel strip. PFL stands for pre-fader listen, so what you hear is the channel itself, no matter where the fader sits. The whole point is to check the audio before the audience ever hears it. While you listen, watch the meter: yellow is fine, red is too hot.",
-    prompt: "Press PFL on the lead vocal to hear just that channel in your headphones. Press it again to drop back to the full mix.",
+    teach: "PFL, at the bottom of the strip, checks a channel in your headphones before the room hears it. It stands for pre-fader listen, so you hear the channel no matter where the fader sits. Watch the meter while you listen: yellow is fine, red is too hot.",
+    prompt: "Press PFL on the lead vocal to hear just that channel. Press it again to drop back.",
     takeaway: "PFL sends a channel to your headphones and the meter so you can check it before the room hears it. It is pre-fader, so the fader does not change what you hear.",
     test: (s, b) => (!!s.channels[WALK_LEAD].solo) !== b.solo,
   },
   {
     act: 'The channel strip', title: 'Gain', target: 'ch1-gain',
-    teach: "If a channel reads weak on the meter, you bring it up with the preamp gain knob at the top of the channel strip. Gain sets how strong the signal is right at the input, before anything else. Turn it up while you watch the meter and aim for healthy peaks with a little room before the red. You set gain by the meter, not by ear.",
-    prompt: "With the lead vocal in PFL, bring its gain up slowly and watch the meter climb. Ease it back if it hits the red.",
-    aside: "The 48V button powers condenser mics. A dynamic mic like this lead vocal does not need it, so it stays off.",
+    teach: "Gain is the preamp knob at the top of the strip. It sets the signal strength right at the input. Turn it up while you watch the meter, aiming for healthy peaks with a little room before the red. Set gain by the meter, not by ear.",
+    prompt: "With the lead vocal in PFL, bring its gain up slowly and watch the meter. Ease it back if it hits the red.",
+    aside: "The 48V button powers condenser mics. A dynamic mic like this lead vocal does not need it.",
     takeaway: "Gain is the input level, set with the knob at the top of the channel strip, by the meter.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].gain ?? 0) - b.gain) > 0.05,
   },
   {
     act: 'The channel strip', title: 'The channel fader', target: 'ch1-fader',
-    teach: "The channel fader is this channel's level in the main mix. This is the control you ride during the show to blend the channels and bring an instrument up or down when it needs it. Try to keep it near the U mark, unity. The fader scale is not linear, so up near unity a small move makes a small change, which is where you get the finest control. The mute button next to it is the channel's on and off.",
-    prompt: "Bring the lead vocal fader up into the room. Try the mute too: the singer drops out, then comes back when you unmute.",
+    teach: "The channel fader is this channel's level in the main mix, the control you ride to blend the band during the show. Keep it near the U mark, unity: the scale is finer up there, so small moves make small changes. The mute next to it is the channel's on and off.",
+    prompt: "Bring the lead vocal fader up into the room. Try the mute too: the singer drops out, then comes back.",
     takeaway: "The channel fader is that channel's level in the mix. Keep it near unity (U) for the finest control. Mute is its on and off.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].fader ?? 0) - b.cfader) > 0.05 || (!!s.channels[WALK_LEAD].mute) !== b.mute,
   },
   {
     act: 'The channel strip', title: 'Pan', target: 'ch1-pan',
-    teach: "The pan knob sets where the channel sits between the left and right speakers. All the way left sends it to the left speaker, all the way right sends it to the right, and in the center it goes to both evenly.",
+    teach: "Pan sets where the channel sits between the left and right speakers: full left, full right, or center for both evenly.",
     prompt: "Pan the lead vocal left, then right, then back to center. It clicks when it reaches center.",
     takeaway: "Pan places the channel across the room, left to right. Center sends it to both sides evenly.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].pan ?? 0.5) - b.pan) > 0.04,
   },
   {
     act: 'The aux sends', title: 'The monitor send', target: 'ch1-aux',
-    teach: "Further down the channel strip are the AUX send knobs. Each one sets how much of this channel goes out a different aux output. AUX 1 feeds the aux 1 output and the speaker on it, which is Wedge 1. AUX 2 feeds Wedge 2, AUX 3 feeds Wedge 3, and AUX 4 feeds Wedge 4. That is how you build a separate mix for each person on stage. Turn up AUX 1 here and this channel gets louder in Wedge 1, while the main mix in the room never changes.",
+    teach: "The AUX send knobs set how much of this channel goes to each aux output: AUX 1 to Wedge 1, AUX 2 to Wedge 2, AUX 3 to Wedge 3, AUX 4 to Wedge 4. That is how you build a separate mix for each person on stage. Turn AUX 1 up and this channel gets louder in Wedge 1, while the room mix stays the same.",
     prompt: "Turn the lead vocal's AUX 1 up, and you are listening at Wedge 1. Then try AUX 2, AUX 3, and AUX 4. Each one feeds its own wedge.",
     takeaway: "Each aux send goes out its own output to its own speaker: AUX 1 to Wedge 1, AUX 2 to Wedge 2, AUX 3 to Wedge 3, AUX 4 to Wedge 4. The room mix stays separate.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].aux1 ?? 0) - b.aux1) > 0.04
@@ -6056,7 +6055,7 @@ function WalkthroughWrap({ open, onEmail, onLessons, onExplore }) {
       <div style={{ width: 520, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, padding: '24px 26px', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: 13 }}>
         <div className="display" style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.1 }}>That's the whole console</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You found where the sound goes out, checked a channel in your headphones, set its level with the gain, brought it into the room with the fader, placed it with the pan, and fed the singer's monitor. Every channel on the board works exactly the same way. That is all a console is.
+          You know how the console works. Next, become a member and put those skills into action.
         </div>
         {!sent ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '13px 14px', background: '#0e2415', border: '1px solid #1e3a2a', borderRadius: 8 }}>
@@ -6168,7 +6167,7 @@ function IoListPanel({ open, onClose }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>What's plugged in</div>
+            <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>Input List</div>
             <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>the inputs from the stage and the outputs to your speakers</div>
           </div>
           <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
@@ -6595,6 +6594,9 @@ function App() {
   // groups, DCA) carry digital:true and are skipped by the draw unless this is
   // 'digital', so an analog player never gets a fault they can't reach.
   uE(() => { window.PRACTICE_SURFACE = surface; }, [surface]);
+  // Free tier flag for the Practice rep generator: the free taste drops the
+  // "check the speakers" verify goal so the sample reads as pure fault-finding.
+  uE(() => { window.PRACTICE_FREE = (TIER !== 'member'); }, []);
   const practiceInfoRef = uR(null);
 
   // Drill ladder (member retention): current rung + clean solves banked toward
@@ -6974,7 +6976,7 @@ function App() {
     // Patch gate (the patch lesson + every practice rep): sources on their
     // listed ports, snake tails on their numbered channels, console outputs
     // into snake 5-8, speaker lines on their planned ports. A pro's patch
-    // matches the paperwork (the I/O LIST).
+    // matches the paperwork (the Input List).
     const patchOk = !level.requirePatch || (() => {
       const c = state.cables || {};
       const cablesOk = c.vocal === 1 && c.vocal2 === 2 && c.guitar === 3 && c.laptop === 4;
@@ -7599,12 +7601,9 @@ function App() {
     base.channels = normalizeChannels(base.channels, deriveInvolves(lv));
     const seed = reuseSeed != null ? reuseSeed : ((Math.random() * 0xffffffff) >>> 0);
     seedRef.current = seed;
-    // Drill ladder: when the member is training the sign-off rung, bias the
-    // draw toward healthy systems and drop goal tasks so the rep is a clean
-    // "broken or fine?" call. Any other time these are unset and content.js
-    // uses its defaults.
-    if (drillFocusRef.current === 4) { window.PRACTICE_ZEROFAULT_CHANCE = 0.5; window.PRACTICE_GOAL_CHANCE = 0; }
-    else { window.PRACTICE_ZEROFAULT_CHANCE = undefined; window.PRACTICE_GOAL_CHANCE = undefined; }
+    // The zero-fault "sign off" rep was removed, so content.js uses its own
+    // defaults for the goal-task chance.
+    window.PRACTICE_GOAL_CHANCE = undefined;
     window.PRACTICE_FOCUS = (focusRef.current && focusRef.current.length) ? focusRef.current : null;
     // A fresh rep clears the one-rep "rank up" banner from the prior solve.
     setRankUp(null);
@@ -8205,7 +8204,10 @@ function App() {
         onEmail={captureEmail}
         onLessons={() => finishWalkthrough('lessons')}
         onExplore={() => finishWalkthrough('explore')}/>
-      <WalkthroughSpotlight target={walkPhase === 'steps' ? (walkSteps[walkStep] && walkSteps[walkStep].target) : (guideTarget || null)}/>
+      {/* Any pop-up (Monitor EQ, Input List, catalog, pitch, CTA) owns the top
+          layer: the spotlight ring hides while one is open so it can't draw in
+          front of the window. */}
+      <WalkthroughSpotlight target={(eqPanelOpen || ioListOpen || catalogOpen || pitchFor || ctaOpen) ? null : (walkPhase === 'steps' ? (walkSteps[walkStep] && walkSteps[walkStep].target) : (guideTarget || null))}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
       {/* Free-tier email gate: blocks the board only while the viewer is on an
@@ -8337,7 +8339,7 @@ function App() {
                         pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
                         verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus} patchStatus={patchStatus}
                         powerStatus={powerStatus}
-                        onSignOff={(level.isPractice && !(practiceInfoRef.current && practiceInfoRef.current.goalKey)) ? attemptSignOff : null} signoffMsg={signoffMsg}
+                        onSignOff={null} signoffMsg={null}
                         onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied} firstFix={firstFix}/>}
                   </StableSlot>
                 }
@@ -8807,7 +8809,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           }}>🎛 MONITOR EQ</button>
         )}
         {onOpenIoList && (
-          <button onClick={onOpenIoList} className="mono ui-no-select" title="What's plugged in: the inputs from the stage and the outputs to your speakers" style={{ ...navBtn, padding: '6px 12px' }}>📋 CONNECTIONS</button>
+          <button onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>📋 INPUT LIST</button>
         )}
         {onOpenProgress && (
           <button onClick={onOpenProgress} className="mono ui-no-select" title="Back up or restore your progress" style={{ ...navBtn, padding: '6px 12px' }}>💾 PROGRESS</button>

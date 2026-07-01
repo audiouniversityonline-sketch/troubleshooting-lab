@@ -98,7 +98,7 @@
 // 5/6 playback is a FOH line input on channel 5 (no snake port).
 // Extra contract field (2026-06-11):
 //   - requirePatch : win requires the physical patch to match the paperwork
-//                (the I/O LIST): sources on snake inputs 1-4, input tails on
+//                (the Input List): sources on snake inputs 1-4, input tails on
 //                their console channels, console outputs into snake returns
 //                5-8 (outFan), and speaker lines on their numbered out ports
 //                (outPatch). Used by Patch the System and every practice rep.
@@ -125,7 +125,7 @@ window.LEVELS = [
     id: 1,
     title: 'Patch the System',
     // THE FIRST LESSON (Kyle, 2026-06-11): before anything gets powered on,
-    // the system gets CONNECTED, per paperwork (the I/O LIST in the top
+    // the system gets CONNECTED, per paperwork (the Input List in the top
     // bar), the way a pro does it. One 8-channel snake: inputs ride
     // channels 1-4, outputs (returns) ride 5-8, colors per the standard
     // code (1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet,
@@ -146,10 +146,10 @@ window.LEVELS = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'Connect the whole system from the paperwork, with everything still powered off. Open the I/O LIST in the top bar for the plan, then patch each cable to the port it calls for.',
+    symptom: 'Connect the whole system from the paperwork, with everything still powered off. Open the Input List in the top bar for the plan, then patch each cable to the port it calls for.',
     hint: 'Drag a cable end and drop it on a port or an output chip. Dropping on a taken spot swaps the two cables. The colors follow the standard 8-channel snake code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray. Patch with the power off so nothing can pop while the system is dead.',
     hints: [
-      { title: 'Patch the inputs', target: null, teach: 'Patching is just following the paperwork. Open the I/O LIST in the top bar and wire what it tells you, starting at the stage.', text: 'Inputs first: drag each source cable onto its numbered stage-box port. Drop on a taken spot to swap.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
+      { title: 'Patch the inputs', target: null, teach: 'Patching is just following the paperwork. Open the Input List in the top bar and wire what it tells you, starting at the stage.', text: 'Inputs first: drag each source cable onto its numbered stage-box port. Drop on a taken spot to swap.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
       { title: 'Land the snake at the console', target: null, teach: 'The snake carries those inputs from the stage back to you at front of house. Each tail lands on its own channel.', text: 'Drop snake tails 1-4 onto their matching console channels.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[1] && ctx.patchStatus[1].pass },
       { title: 'Send the outputs down the snake', target: null, teach: 'The same snake carries your mix back out. The console outputs ride channels 5-8.', text: 'Console outs into snake 5-8: L to 5, R to 6, AUX 1 to 7, AUX 2 to 8.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
       { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'Last, the speakers pick up those same snake channels at the stage end. Match each speaker to the output feeding it.', text: 'Each speaker line to its out port: PA L to 5, PA R to 6, Wedge 1 to 7, Wedge 2 to 8.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
@@ -201,7 +201,7 @@ window.LEVELS = [
     symptom: 'Everything is connected and the console is zeroed: every channel is back at its starting position. Power the system up in the right order. The wrong order pops the speakers.',
     hint: 'Power on the console first, then the powered speakers last. If you turn a PA speaker or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the wedges and the PA speakers.',
     hints: [
-      { title: 'Console on first', target: 'mixer-power', teach: 'Always power up from the source outward. The console goes on first so its own switch-on thump has nowhere to go yet, no speaker is live to play it.', text: 'Turn the console on first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
+      { title: 'Console on first', target: 'mixer-power', teach: 'Power up from the source outward. The console goes on first, so its switch-on thump has no live speaker to play it.', text: 'Turn the console on first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
       { title: 'Then the speakers', target: null, teach: 'With the console already on and settled, the speakers come up last. Nothing pops, because the thump already passed.', text: 'Now bring up the rest: both PA speakers and all four wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
     ],
     conditions: [],
@@ -250,8 +250,8 @@ window.LEVELS = [
     hints: [
       { title: 'Check it in PFL', target: 'ch5-pfl', teach: 'PFL lets you hear and meter a channel in your headphones before the room does. Always set a level in PFL first.', text: 'PFL the playback so you can set it in your headphones first.', done: (ctx) => ctx.pflChecked || (ctx.state.channels[4] && ctx.state.channels[4].solo) },
       { title: 'Set the gain', target: 'ch5-gain', teach: 'Gain sets how hard the source hits the console. You want it strong on the meter with a little room to spare, set by the meter, not by ear.', text: 'Set the GAIN so the input meter sits in the healthy zone.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.input },
-      { title: 'Faders to unity', target: ['ch5-fader', 'master-fader'], teach: 'With the gain right, the channel and master faders live at unity, the U mark. That is the spot they are built to run, with the most control under your hand.', text: 'Release PFL, unmute the playback and the master, and bring both faders up to unity.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.fader && ctx.gainStatus.master },
-      { title: 'Set the room level', target: ['out-pa-l', 'out-pa-r'], teach: 'Gain is set and the faders are at unity, so now you set how loud the room is with the PA volume, not by shoving a fader.', text: 'Set how loud the room is with the PA volume, watching the loudness meter.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.50; } },
+      { title: 'Faders to unity', target: ['ch5-fader', 'master-fader'], teach: 'With the gain set, the channel and master faders live at unity, the U mark. That is where they are built to run.', text: 'Release PFL, unmute the playback and the master, and bring both faders up to unity.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.fader && ctx.gainStatus.master },
+      { title: 'Set the room level', target: ['out-pa-l', 'out-pa-r'], teach: 'Gain and faders are set, so set the room volume with the PA, not by pushing a fader.', text: 'Set how loud the room is with the PA volume, watching the loudness meter.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.50; } },
     ],
     sabotage: (s) => {
       // Continuous with Power-On: rig on, console fully zeroed. Channel muted,
@@ -853,30 +853,19 @@ window.PRACTICE = {
         return s;
       }
     }
-    // Sometimes nothing is broken. The band is playing and the system is
-    // healthy; the call is to recognize that and sign off, not to invent a
-    // fault and start fiddling with a working mix. Knowing when to leave it
-    // alone is half of real troubleshooting judgment, and no other sim trains
-    // it. Seeded like everything else, so Reset replays the same clean rep.
-    // Drawn before the fault loop so the seed stays deterministic.
-    // The app can raise this when a member is training the sign-off rung of the
-    // drill ladder (window.PRACTICE_ZEROFAULT_CHANCE), so healthy systems show
-    // up often enough to drill the call. Unset by default, so normal reps keep
-    // the 12% surprise rate.
-    const ZERO_FAULT_CHANCE = (typeof window.PRACTICE_ZEROFAULT_CHANCE === 'number') ? window.PRACTICE_ZEROFAULT_CHANCE : 0.12;
-    if (r() < ZERO_FAULT_CHANCE) {
-      window.PRACTICE_LAST = { par: 0, faults: [], zeroFault: true, extraConditions: [] };
-      return s; // bandUp() already left it healthy
-    }
     // Sometimes the call is a positive task, not a fault: build a monitor mix,
     // fix the gain, check the speakers. These ignore the FAULTS count (a task is
     // a task), carry their own win conditions + prompt text (winSpec), and make
     // Practice train the whole job instead of only diagnosis.
-    // Also overridable (window.PRACTICE_GOAL_CHANCE): the sign-off drill sets it
-    // to 0 so a rep is a clean "broken or fine?" call, not a build-a-mix task.
     const GOAL_TASK_CHANCE = (typeof window.PRACTICE_GOAL_CHANCE === 'number') ? window.PRACTICE_GOAL_CHANCE : 0.25;
-    if (window.PRACTICE_GOALS && window.PRACTICE_GOALS.length && r() < GOAL_TASK_CHANCE) {
-      const g = window.PRACTICE_GOALS[Math.floor(r() * window.PRACTICE_GOALS.length)];
+    // The free-tier Practice taste leaves out the "check the speakers" verify
+    // task — a free sample should read as "find what's broken," not a
+    // nothing-is-wrong check. Members get the full goal pool.
+    const goalPool = window.PRACTICE_FREE
+      ? window.PRACTICE_GOALS.filter((g) => g.key !== 'speaker-check')
+      : window.PRACTICE_GOALS;
+    if (goalPool && goalPool.length && r() < GOAL_TASK_CHANCE) {
+      const g = goalPool[Math.floor(r() * goalPool.length)];
       const winSpec = g.apply(s, r);
       window.PRACTICE_LAST = { par: g.par, faults: [], goalKey: g.key, goalLabel: g.label, winSpec: winSpec, extraConditions: [] };
       return s;
@@ -1166,7 +1155,7 @@ window.MONITOR_WORLD = [
     symptom: 'Someone kept asking for more, and now the lead singer\'s wedge is cranked: loud enough to strain her voice, start a volume war, and ring. Bring her vocal back to a useful level: loud enough to hear, not blasting.',
     hint: 'Pull AUX 1 on the Vocal 1 channel down. She should hear herself clearly without the wedge dominating the stage. If it is ringing, bringing it down stops that too.',
     hints: [
-      { title: 'Pull her wedge back', target: 'ch1-aux', teach: 'A quieter stage is a better stage: less strain, less feedback, a cleaner room mix. Bring her vocal send down to where she can hear herself without it dominating, not so far she loses it.', text: 'Bring AUX 1 on the Vocal 1 channel down to a sensible level, not cranked and not gone.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.28 && l <= 0.45; } },
+      { title: 'Pull her wedge back', target: 'ch1-aux', teach: 'A quieter stage means less strain, less feedback, and a cleaner room mix. Bring her vocal send down to where she can still hear herself, not so far it is gone.', text: 'Bring AUX 1 on the Vocal 1 channel down to a sensible level, not cranked and not gone.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.28 && l <= 0.45; } },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
