@@ -699,9 +699,10 @@ window.PRACTICE_FAULTS = [
   // FEEDBACK — a singer's wedge pushed into ringing (hot send + hot wedge).
   // The extra condition keeps her monitor level REQUIRED, so the fix is the
   // Feedback Awareness skill: pull the glowing bands down on that wedge's EQ.
-  // The wedge carries the realistic multi-resonance profile, so a send this hot
-  // rings at its top TWO resonances (2 kHz first, then 400 Hz). The fix is a
-  // small cut on each glowing band; a couple of dB drops each loop clear while
+  // The wedge carries the realistic multi-resonance profile, reseeded per load,
+  // so a send this hot rings at its top couple of resonances at frequencies that
+  // VARY from rep to rep (find them by the glow/ear, don't memorize). The fix is
+  // a small cut on each glowing band; a couple of dB drops each loop clear while
   // the monitor stays up. min 0.42 keeps the send required (can't cheat by
   // pulling it to zero) with room to ring out without fighting the floor.
   { key: 'feedback', label: 'Wedge feeding back', blurb: 'A wedge is ringing at a couple of frequencies; cut those bands to clear it.', par: 2, weight: 2, apply: (s, rng) => {

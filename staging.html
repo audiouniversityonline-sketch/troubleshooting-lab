@@ -91,7 +91,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=9"></script>
+<script src="content-staging.js?v=10"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -252,6 +252,51 @@ const DEFAULT_FB_PROFILE = [
   // 10k   12.5k 16k
   0.32, 0.28, 0.24,
 ];
+// Real feedback is a MOVING TARGET: every room, wedge, mic, and placement rings
+// at different frequencies, so a working engineer FINDS the frequency live
+// instead of memorizing one. To train that, each wedge gets its own resonance
+// fingerprint: the SAME height ladder (so the onset timing / calibration is
+// identical everywhere) placed onto DIFFERENT trouble-zone bands. The
+// assignment is reseeded whenever a level loads, so the frequencies change
+// scenario to scenario and you cannot memorize "2 kHz rings first."
+const FB_HEIGHTS = [1.22, 1.05, 0.93, 0.84, 0.77, 0.71];
+let FB_SEED = 0x9e3779b1;
+const _wedgeProfileCache = new Map();
+// mulberry32: tiny deterministic RNG so a wedge's fingerprint is stable within a
+// session (a ring-out stays consistent) but varies across scenarios.
+function fbRng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+window.reseedFeedback = () => { FB_SEED = (Math.floor(Math.random() * 0xffffffff)) >>> 0; _wedgeProfileCache.clear(); };
+// Build one wedge's 25-band resonance profile: 2 low-mid + 2 mid + 2 presence
+// resonances drawn from the real trouble zones, with the TALLEST always in the
+// mid/presence band where a first ring actually lives. Floor + tapered extremes
+// (feedback is rare below ~150 Hz or above ~8 kHz). Deterministic per (wedge,seed).
+function wedgeProfileFor(wKey) {
+  const ck = wKey + ':' + FB_SEED;
+  const hit = _wedgeProfileCache.get(ck);
+  if (hit) return hit;
+  let h = 0; for (let i = 0; i < wKey.length; i++) h = ((h << 5) - h + wKey.charCodeAt(i)) | 0;
+  const rng = fbRng((FB_SEED ^ h) >>> 0);
+  const prof = new Array(FULL_EQ_HZ.length).fill(0.30);
+  for (let i = 0; i < 5; i++) prof[i] = 0.24 + i * 0.02;              // 63..160 Hz taper
+  for (let i = 21; i < prof.length; i++) prof[i] = 0.34 - (i - 21) * 0.03; // 8k..16k taper
+  const draw = (arr, n) => { const a = arr.slice(), out = []; while (out.length < n && a.length) out.push(a.splice(Math.floor(rng() * a.length), 1)[0]); return out; };
+  const bands = [...draw([6, 7, 8, 9], 2), ...draw([10, 11, 12, 13, 14, 15], 2), ...draw([16, 17, 18, 19, 20], 2)];
+  const midPres = bands.filter(b => b >= 10);
+  const tall = midPres[Math.floor(rng() * midPres.length)];
+  const rest = bands.filter(b => b !== tall);
+  for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = rest[i]; rest[i] = rest[j]; rest[j] = t; }
+  [tall, ...rest].forEach((b, i) => { if (i < FB_HEIGHTS.length) prof[b] = FB_HEIGHTS[i]; });
+  _wedgeProfileCache.set(ck, prof);
+  return prof;
+}
 // Linear relief multiplier from a band's cut fraction (0 flat .. 1 full cut).
 function eqBandRelief(cutFrac) {
   const c = Math.max(0, Math.min(1, cutFrac || 0));
@@ -1303,11 +1348,11 @@ function detectFeedback(s, audio) {
     if (!w || !feed) return;
     const has25 = !!(w.eq && w.eq.length === FULL_EQ_HZ.length);
     // Which resonance profile drives this wedge: a scenario's own (Feedback
-    // Mode), otherwise every 25-band wedge gets the realistic DEFAULT_FB_PROFILE
-    // (several staggered resonances). Only a legacy wedge with no 25-band EQ
-    // falls back to the old single ringBand tone.
+    // Mode), otherwise this wedge's own randomized fingerprint from
+    // wedgeProfileFor (each wedge/room rings at different frequencies). Only a
+    // legacy wedge with no 25-band EQ falls back to the old single ringBand tone.
     const prof = (w.fbProfile && w.eq && w.eq.length === w.fbProfile.length) ? w.fbProfile
-               : (has25 ? DEFAULT_FB_PROFILE : null);
+               : (has25 ? wedgeProfileFor(wKey) : null);
     const hzOf = (b) => has25 ? FULL_EQ_HZ[b] : EQ_BAND_HZ[b];
     const bands = prof ? prof.map((p, b) => ({ b, p })) : [{ b: (w.ringBand != null ? w.ringBand : 2), p: 1.0 }];
     for (const { b, p } of bands) {
@@ -2976,7 +3021,7 @@ function EqStrip({ eq, onChange, ringBands, accent, height, width }) {
 // Exposable "Monitor EQ" panel — the graphic EQs for the two aux/monitor sends,
 // the way they'd sit at FOH (outboard rack, or a screen on a digital desk). It
 // auto-opens when a wedge starts ringing and can be toggled by hand otherwise.
-function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandChange, ringWedge, ringBand, rings, toneGate, byEar }) {
+function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandChange, ringWedge, ringBand, rings, toneGate, byEar, severity }) {
   if (!open) return null;
   const ringsFor = (key) => (rings || []).filter(r => r.wedge === key).map(r => r.band);
   const col = (key, w, label, accent) => {
@@ -3024,15 +3069,26 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
             turns red when something is actually ringing. */}
         {(() => {
           const ringing = rings && rings.length > 0;
+          const sev = severity || { level: 0, count: 0 };
+          // A ring builds toward a howl; several at once means cut each glowing
+          // band OR back the send off (both work, and backing off buys headroom).
+          const many = ringing && (rings ? rings.length : 0) >= 3;
+          const howl = ringing && sev.level >= 2 && !many;
+          const hot = many || howl;
+          const target = byEar
+            ? <span>the ringing frequency by <b style={{ color: 'var(--hot)' }}>ear</b></span>
+            : <span>the <b style={{ color: 'var(--hot)' }}>glowing band</b></span>;
           return (
             <div style={{ marginBottom: 10, padding: '8px 10px', minHeight: 34, display: 'flex', alignItems: 'center',
-              background: ringing ? 'rgba(255,70,48,0.10)' : 'rgba(255,255,255,0.03)',
+              background: ringing ? (hot ? 'rgba(255,70,48,0.18)' : 'rgba(255,70,48,0.10)') : 'rgba(255,255,255,0.03)',
               border: '1px solid ' + (ringing ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6,
               fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
               {ringing ? (
-                byEar
-                  ? <span style={{ color: 'var(--ink)' }}>Feeding back. Find the ringing frequency by <b style={{ color: 'var(--hot)' }}>ear</b> and pull that band down, just enough to stop it.</span>
-                  : <span style={{ color: 'var(--ink)' }}>Feeding back. Pull the <b style={{ color: 'var(--hot)' }}>glowing band</b> down to cut that frequency, just enough to stop it.</span>
+                many
+                  ? <span style={{ color: 'var(--ink)' }}>Several frequencies are ringing at once. {byEar ? 'Find each ring by ear and cut it' : <>Cut each <b style={{ color: 'var(--hot)' }}>glowing band</b></>}, or back the <b style={{ color: 'var(--hot)' }}>send</b> off to buy headroom.</span>
+                  : howl
+                  ? <span style={{ color: 'var(--ink)' }}>It is howling. Cut {target} now, or pull the send down fast.</span>
+                  : <span style={{ color: 'var(--ink)' }}>A frequency is starting to ring. Cut {target} before it takes off, just enough to stop it.</span>
               ) : (
                 byEar
                   ? <span>Listen for the ring, then pull that frequency's band down. No band glows in this mode; use your ear.</span>
@@ -6852,6 +6908,15 @@ function App() {
   const monitorEqRef = uR(null);
   const feedbackRiskRef = uR(0);
   const feedbackRingsRef = uR([]);
+  // Per-band ring ENERGY (0..1), integrated over time in the animation loop so a
+  // ring builds toward a howl the longer it is left, and rings out with a tail
+  // when cleared. lastFbTimeRef gives the real per-frame dt for that integration.
+  const ringEnergyRef = uR(null);
+  const lastFbTimeRef = uR(0);
+  const lastSevRef = uR(null);
+  // Peak ring energy this frame + how many bands are ringing, surfaced to the UI
+  // so the warning can escalate (ring -> howl -> "too many, pull it down").
+  const [fbSeverity, setFbSeverity] = uS({ level: 0, count: 0 });
 
   const audio = uM(() => window.computeAudio(state, envelopeRef.current), [state, envTick]);
 
@@ -7170,23 +7235,60 @@ function App() {
           envelopeRef.current[k] = synthF;
         }
       }
-      // Feedback ring voices follow the loop math: each active ring drives
-      // ITS band's voice (the pitch you hear is the band you cut), and any
-      // number can sound at once. Per-voice first-order smoothing (~120 ms)
-      // makes rings build and decay naturally as the engineer works.
+      // Feedback ring voices. Real feedback BUILDS: a band over unity grows
+      // louder the longer it is left (fast when far over = a howl in a fraction
+      // of a second, slow when barely over = a ring you have a beat to catch)
+      // and rings out with a tail once you pull it under. That build is the
+      // urgency a monitor engineer lives by: catch it early or it runs away.
+      // Detection and the win stay knob-based; this integrates the audible
+      // energy on top, per-band, using the real per-frame dt.
       const fbChain = feedbackChainRef.current;
-      if (fbChain && fbChain.voices) {
+      if (fbChain && fbChain.voices && ctxRunning) {
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : (lastFbTimeRef.current + 16);
+        let dt = lastFbTimeRef.current ? (now - lastFbTimeRef.current) / 1000 : 0.016;
+        lastFbTimeRef.current = now;
+        dt = dt < 0 ? 0 : (dt > 0.1 ? 0.1 : dt); // clamp first frame / tab-switch
+        const energy = ringEnergyRef.current || (ringEnergyRef.current = new Array(fbChain.voices.length).fill(0));
         const rings = feedbackRingsRef.current || [];
-        const targets = new Array(fbChain.voices.length).fill(0);
-        for (const r of rings) {
-          if (r.hzIndex >= 0 && r.hzIndex < targets.length) {
-            targets[r.hzIndex] = Math.max(targets[r.hzIndex], Math.min(0.3, Math.max(0, (r.risk - 0.45) * 1.1)));
-          }
-        }
+        const risk = new Array(fbChain.voices.length).fill(0);
+        for (const r of rings) if (r.hzIndex >= 0 && r.hzIndex < risk.length) risk[r.hzIndex] = Math.max(risk[r.hzIndex], r.risk);
+        // UNITY matches the detection SUSTAIN threshold (0.45): any band the
+        // detector still reports as ringing keeps producing audible energy, so
+        // the glow and the sound never disagree. Above it the ring builds; below
+        // it (band cut clear) it rings out with a tail and snaps to true zero.
+        const UNITY = 0.45, GROW_BASE = 0.3, GROW_SLOPE = 4.0, TAIL = 0.4, MAXGAIN = 0.32;
+        let peak = 0;
         fbChain.voices.forEach((v, i) => {
+          let e = energy[i] || 0;
+          const over = risk[i] - UNITY;
+          if (over > 0) e += (GROW_BASE + over * GROW_SLOPE) * dt; // build / runaway
+          else { e -= e * Math.min(1, dt / TAIL); if (e < 1e-3) e = 0; } // ring out + snap
+          e = e < 0 ? 0 : (e > 1 ? 1 : e);
+          energy[i] = e;
+          if (e > peak) peak = e;
+          const target = e * MAXGAIN;
           const cur = v.gain.gain.value;
-          v.gain.gain.value = cur + (targets[i] - cur) * 0.15;
+          v.gain.gain.value = (e === 0 && cur < 1e-3) ? 0 : cur + (target - cur) * 0.3;
         });
+        // Escalating severity for the on-screen warning, bucketed so it only
+        // re-renders on a transition (0 clear, 1 building ring, 2 howl); the ring
+        // count drives the "several at once" copy.
+        const count = rings.length;
+        const bucket = count === 0 ? 0 : (peak > 0.5 ? 2 : 1);
+        const prev = lastSevRef.current;
+        if (!prev || prev.level !== bucket || prev.count !== count) {
+          lastSevRef.current = { level: bucket, count };
+          setFbSeverity({ level: bucket, count });
+        }
+      } else if (fbChain && fbChain.voices) {
+        // Audio suspended (sound off): reset the integration clock and silence the
+        // ring voices so a ring builds from zero when sound comes back on, instead
+        // of pre-charging to a howl in the background.
+        lastFbTimeRef.current = 0;
+        const energy = ringEnergyRef.current;
+        if (energy) for (let i = 0; i < energy.length; i++) energy[i] = 0;
+        fbChain.voices.forEach(v => { if (v.gain.gain.value !== 0) v.gain.gain.value = 0; });
+        if (lastSevRef.current && lastSevRef.current.level !== 0) { lastSevRef.current = { level: 0, count: 0 }; setFbSeverity({ level: 0, count: 0 }); }
       }
       setEnvTick(n => (n + 1) & 0xff);
       raf = requestAnimationFrame(loop);
@@ -7642,6 +7744,12 @@ function App() {
     // its share link).
     const hardLocked = isLocked(lv) && !(lv && lv.isPractice && practiceSoftOpen);
     if (!lv || (hardLocked && !bypassLock)) { if (lv) setPitchFor(lv.isLesson ? { title: 'Run the show', isLesson: true } : lv); return; }
+    // New board = new room: give the wedges fresh resonance frequencies so the
+    // student re-diagnoses instead of memorizing. A same-seed replay keeps them.
+    if (!reuseSeed && window.reseedFeedback) window.reseedFeedback();
+    // Start the new room silent: clear any ring energy left howling on the last
+    // board and re-anchor the integration clock.
+    ringEnergyRef.current = null; lastFbTimeRef.current = 0;
     // Show the first-rep orientation only on the welcome chooser's quick fix,
     // and clear it so the next load (any load) turns it back off.
     const wasFirstFix = firstFixRef.current; firstFixRef.current = false;
@@ -8289,6 +8397,7 @@ function App() {
         rings={feedback ? feedback.rings : []}
         toneGate={level.toneGate}
         byEar={feedbackByEar && level.isFeedbackMode}
+        severity={fbSeverity}
       />
 
       <WarningModal
