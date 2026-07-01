@@ -91,7 +91,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=8"></script>
+<script src="content-staging.js?v=9"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -229,6 +229,29 @@ const EQ_BAND_HZ = [250, 500, 1000, 2000, 4000];
 const FULL_EQ_BANDS = ['63', '80', '100', '125', '160', '200', '250', '315', '400', '500', '630', '800', '1k', '1.25k', '1.6k', '2k', '2.5k', '3.15k', '4k', '5k', '6.3k', '8k', '10k', '12.5k', '16k'];
 const FULL_EQ_HZ = [63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
 const EQ_CUT_DB = 12;
+// A wedge's inherent feedback fingerprint: the frequencies where the mic +
+// wedge + room loop peaks, so those ring first. This is what makes feedback
+// behave like real life instead of one fixed tone. Per band, a "sensitivity"
+// multiplier on the loop gain (loop = send level x this x any EQ cut). A real
+// monitor has a handful of resonances at different heights, spread across the
+// trouble zones, so as you push a send the TALLEST peak rings first (well
+// before the send is maxed), then the next, then the next. Cut a ringing band
+// on the graphic EQ and its peak drops below the ring line, buying you more
+// level until the next peak catches up. That progressive ring-out is exactly
+// how you EQ a monitor. At the 0.55 onset line, a peak of p rings once the
+// send reaches 0.55/p, so the ladder below rings in order: 2k (~0.45), then
+// 400 Hz (~0.52), 4k (~0.59), 800 Hz (~0.66), 250 Hz (~0.71), 6.3k (~0.78).
+// The floor bands (~0.3) only ring if a send is pushed absurdly hard. Indexes
+// are FULL_EQ_HZ (63 Hz .. 16 kHz). Feedback Mode overrides this with its own
+// randomized profile so ring-out practice never repeats.
+const DEFAULT_FB_PROFILE = [
+  // 63    80    100   125   160   200   250   315   400   500   630
+  0.24, 0.26, 0.28, 0.30, 0.32, 0.34, 0.77, 0.36, 1.05, 0.38, 0.38,
+  // 800   1k    1.25k 1.6k  2k    2.5k  3.15k 4k    5k    6.3k  8k
+  0.84, 0.40, 0.40, 0.42, 1.22, 0.42, 0.42, 0.93, 0.40, 0.71, 0.36,
+  // 10k   12.5k 16k
+  0.32, 0.28, 0.24,
+];
 // Linear relief multiplier from a band's cut fraction (0 flat .. 1 full cut).
 function eqBandRelief(cutFrac) {
   const c = Math.max(0, Math.min(1, cutFrac || 0));
@@ -1278,9 +1301,15 @@ function detectFeedback(s, audio) {
   // HPF relieves only the LOW bands (stage rumble), never a mid/high ring.
   const checkWedge = (wKey, w, feed, hpf, chIdx) => {
     if (!w || !feed) return;
-    const full = !!(w.fbProfile && w.eq && w.eq.length === w.fbProfile.length);
-    const hzOf = (b) => (w.eq && w.eq.length === FULL_EQ_HZ.length) ? FULL_EQ_HZ[b] : EQ_BAND_HZ[b];
-    const bands = full ? w.fbProfile.map((p, b) => ({ b, p })) : [{ b: (w.ringBand != null ? w.ringBand : 2), p: 1.0 }];
+    const has25 = !!(w.eq && w.eq.length === FULL_EQ_HZ.length);
+    // Which resonance profile drives this wedge: a scenario's own (Feedback
+    // Mode), otherwise every 25-band wedge gets the realistic DEFAULT_FB_PROFILE
+    // (several staggered resonances). Only a legacy wedge with no 25-band EQ
+    // falls back to the old single ringBand tone.
+    const prof = (w.fbProfile && w.eq && w.eq.length === w.fbProfile.length) ? w.fbProfile
+               : (has25 ? DEFAULT_FB_PROFILE : null);
+    const hzOf = (b) => has25 ? FULL_EQ_HZ[b] : EQ_BAND_HZ[b];
+    const bands = prof ? prof.map((p, b) => ({ b, p })) : [{ b: (w.ringBand != null ? w.ringBand : 2), p: 1.0 }];
     for (const { b, p } of bands) {
       const lowBand = hzOf(b) <= 250;
       const hpfRelief = (hpf && lowBand) ? 0.6 : 1.0;
@@ -5195,15 +5224,15 @@ const SCENARIOS = [
     defaultInspect: 'wedge',
     sabotage: (s) => {
       if (s.channels[2]) s.channels[2].phantom = true;
-      // Bring the four wedges up to a hot-but-realistic nominal. Two reasons:
-      // (1) the monitors are audible the moment a send is opened (they sit at 0
-      // in the default board, which left Free Play's wedges silent), and (2) at
-      // 0.8 the mic->wedge loop sits just under the ring threshold on a normal
-      // send and crosses it when the send is pushed, so cranking a vocal's AUX
-      // tips the wedge into feedback the way a real hot monitor does. The PA is
-      // already up at 0.7 from the default board.
+      // Bring the four wedges up to a working stage level. Two reasons: (1) the
+      // monitors are audible the moment a send is opened (they sit at 0 in the
+      // default board, which left Free Play's wedges silent), and (2) at 0.7 you
+      // can build a healthy monitor mix (a vocal send up to ~two-thirds is
+      // clean), and pushing a send past that walks the wedge into feedback the
+      // way a real hot monitor does: one frequency first, then more as you keep
+      // pushing (the realistic multi-resonance profile). PA is already up at 0.7.
       ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => {
-        if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.8; }
+        if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.7; }
       });
       return s;
     },

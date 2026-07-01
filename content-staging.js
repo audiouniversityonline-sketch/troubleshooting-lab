@@ -698,19 +698,21 @@ window.PRACTICE_FAULTS = [
     } },
   // FEEDBACK — a singer's wedge pushed into ringing (hot send + hot wedge).
   // The extra condition keeps her monitor level REQUIRED, so the fix is the
-  // Feedback Awareness skill: pull the glowing band down on that wedge's EQ.
-  // Numbers: chanIn 0.79 x send 1.0 x aux master 0.75 x vol 0.8 x 1.6 =
-  // 0.758 at the wedge -> rings (threshold 0.55). A full -12 dB band cut
-  // drops the loop to ~0.19 (clear) while the monitor level stays 0.758.
-  { key: 'feedback', label: 'Wedge feeding back', blurb: 'A wedge starts ringing and only an EQ cut fixes it.', par: 2, weight: 2, apply: (s, rng) => {
+  // Feedback Awareness skill: pull the glowing bands down on that wedge's EQ.
+  // The wedge carries the realistic multi-resonance profile, so a send this hot
+  // rings at its top TWO resonances (2 kHz first, then 400 Hz). The fix is a
+  // small cut on each glowing band; a couple of dB drops each loop clear while
+  // the monitor stays up. min 0.42 keeps the send required (can't cheat by
+  // pulling it to zero) with room to ring out without fighting the floor.
+  { key: 'feedback', label: 'Wedge feeding back', blurb: 'A wedge is ringing at a couple of frequencies; cut those bands to clear it.', par: 2, weight: 2, apply: (s, rng) => {
     if (rng() < 0.5) {
-      s.channels[0].aux1 = 1.0;
+      s.channels[0].aux1 = 0.75;
       s.outputs.wedge.volume = 0.8;
-      return { conditions: [{ source: 'vocal', dest: 'wedge', min: 0.5 }] };
+      return { conditions: [{ source: 'vocal', dest: 'wedge', min: 0.42 }] };
     }
-    s.channels[1].aux2 = 1.0;
+    s.channels[1].aux2 = 0.75;
     s.outputs.wedge2.volume = 0.8;
-    return { conditions: [{ source: 'vocal2', dest: 'wedge2', min: 0.5 }] };
+    return { conditions: [{ source: 'vocal2', dest: 'wedge2', min: 0.42 }] };
   } },
   // CROSSPATCH — two cables traded places. The console's channel labels and
   // the patch row in the brief are the evidence; one drag (swap) fixes it.
@@ -1155,11 +1157,11 @@ window.MONITOR_WORLD = [
     symptom: 'Someone kept asking for more, and now the lead singer\'s wedge is cranked: loud enough to strain her voice, start a volume war, and ring. Bring her vocal back to a useful level: loud enough to hear, not blasting.',
     hint: 'Pull AUX 1 on the Vocal 1 channel down. She should hear herself clearly without the wedge dominating the stage. If it is ringing, bringing it down stops that too.',
     hints: [
-      { title: 'Pull her wedge back', target: 'ch1-aux', teach: 'A quieter stage means less strain, less feedback, and a cleaner room mix. Bring her vocal send down to where she can still hear herself, not so far it is gone.', text: 'Bring AUX 1 on the Vocal 1 channel down to a sensible level, not cranked and not gone.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.28 && l <= 0.45; } },
+      { title: 'Pull her wedge back', target: 'ch1-aux', teach: 'A quieter stage means less strain, less feedback, and a cleaner room mix. Bring her vocal send down to where she can still hear herself, not so far it is gone. As it drops, the ringing stops.', text: 'Bring AUX 1 on the Vocal 1 channel down to a sensible level, not cranked and not gone.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.25 && l <= 0.35; } },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
-      { source: 'vocal', dest: 'wedge', min: 0.28, max: 0.45 },
+      { source: 'vocal', dest: 'wedge', min: 0.25, max: 0.35 },
     ],
     sabotage: (s) => { mwBoard(s); s.channels[0].aux1 = 0.9; return s; },
     solution: 'Pull her vocal send back to a useful level. Less is more: a quieter stage means less strain, less feedback, and a cleaner mix for everyone.',
