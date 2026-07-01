@@ -5192,8 +5192,21 @@ const SCENARIOS = [
     symptom: 'Nothing is broken here, and there is no goal. Move faders, set gains, build a monitor mix, and switch the surface between analog and digital. Turn the sound on to hear what changes. When you want a challenge, open the lessons or a practice round from the menu above.',
     conditions: [],
     involves: [1, 2, 3, 4],
-    defaultInspect: 'pa',
-    sabotage: (s) => { if (s.channels[2]) s.channels[2].phantom = true; return s; },
+    defaultInspect: 'wedge',
+    sabotage: (s) => {
+      if (s.channels[2]) s.channels[2].phantom = true;
+      // Bring the four wedges up to a hot-but-realistic nominal. Two reasons:
+      // (1) the monitors are audible the moment a send is opened (they sit at 0
+      // in the default board, which left Free Play's wedges silent), and (2) at
+      // 0.8 the mic->wedge loop sits just under the ring threshold on a normal
+      // send and crosses it when the send is pushed, so cranking a vocal's AUX
+      // tips the wedge into feedback the way a real hot monitor does. The PA is
+      // already up at 0.7 from the default board.
+      ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => {
+        if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.8; }
+      });
+      return s;
+    },
   },
   // The free MIXER TUTORIAL: the console broken into one focused lesson per
   // control, so a student can drop into a single part (master section, gain,
