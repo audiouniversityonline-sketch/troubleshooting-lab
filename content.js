@@ -698,19 +698,22 @@ window.PRACTICE_FAULTS = [
     } },
   // FEEDBACK — a singer's wedge pushed into ringing (hot send + hot wedge).
   // The extra condition keeps her monitor level REQUIRED, so the fix is the
-  // Feedback Awareness skill: pull the glowing band down on that wedge's EQ.
-  // Numbers: chanIn 0.79 x send 1.0 x aux master 0.75 x vol 0.8 x 1.6 =
-  // 0.758 at the wedge -> rings (threshold 0.55). A full -12 dB band cut
-  // drops the loop to ~0.19 (clear) while the monitor level stays 0.758.
-  { key: 'feedback', label: 'Wedge feeding back', blurb: 'A wedge starts ringing and only an EQ cut fixes it.', par: 2, weight: 2, apply: (s, rng) => {
+  // Feedback Awareness skill: pull the glowing bands down on that wedge's EQ.
+  // The wedge carries the realistic multi-resonance profile, reseeded per load,
+  // so a send this hot rings at its top couple of resonances at frequencies that
+  // VARY from rep to rep (find them by the glow/ear, don't memorize). The fix is
+  // a small cut on each glowing band; a couple of dB drops each loop clear while
+  // the monitor stays up. min 0.42 keeps the send required (can't cheat by
+  // pulling it to zero) with room to ring out without fighting the floor.
+  { key: 'feedback', label: 'Wedge feeding back', blurb: 'A wedge is ringing at a couple of frequencies; cut those bands to clear it.', par: 2, weight: 2, apply: (s, rng) => {
     if (rng() < 0.5) {
-      s.channels[0].aux1 = 1.0;
+      s.channels[0].aux1 = 0.75;
       s.outputs.wedge.volume = 0.8;
-      return { conditions: [{ source: 'vocal', dest: 'wedge', min: 0.5 }] };
+      return { conditions: [{ source: 'vocal', dest: 'wedge', min: 0.42 }] };
     }
-    s.channels[1].aux2 = 1.0;
+    s.channels[1].aux2 = 0.75;
     s.outputs.wedge2.volume = 0.8;
-    return { conditions: [{ source: 'vocal2', dest: 'wedge2', min: 0.5 }] };
+    return { conditions: [{ source: 'vocal2', dest: 'wedge2', min: 0.42 }] };
   } },
   // CROSSPATCH — two cables traded places. The console's channel labels and
   // the patch row in the brief are the evidence; one drag (swap) fixes it.
@@ -945,9 +948,12 @@ window.FEEDBACK_MODE = {
   hint: 'Raise the send a little at a time. When a frequency rings, find it on the monitor EQ and pull that band down a few dB, just past where the ring stops. Expect three or four on the way up, and keep every cut small. Once the vocal hits the target, stop.',
   sabotage: (s, rng) => {
     const r = rng || (() => 0.5);
-    // The singer's vocal live at a healthy gain, her wedge on, the send low.
+    // The singer's vocal live at the clean input-gain sweet spot (0.42:
+    // baseline ~0.81, no distortion on the Golden stem peaks), her wedge on,
+    // the send low. The ring-out is driven by the aux send, not the preamp,
+    // so a clean input gain leaves the lesson intact.
     s.channels[0].mute = false;
-    s.channels[0].gain = 0.55;
+    s.channels[0].gain = 0.42;
     s.channels[0].fader = 0.72;
     s.channels[0].aux1 = 0.15;
     s.master.mute = false;
@@ -1019,7 +1025,7 @@ window.SCENARIO_LIBRARY = [
     hint: 'Everything upstream looks fine. Check the channel itself before you touch the gain.',
     solution: 'Channel 1 was muted, so the lead vocal never reached the mix. Unmuting it put it back in the PA. When one source is missing and the rest sound fine, check the channel mute first.',
     conditions: [],
-    start: {"channels":[{"label":"Vocal 1","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":true,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.55,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.5,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.45,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.55,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.7},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
+    start: {"channels":[{"label":"Vocal 1","gain":0.42,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":true,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.42,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.42,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.55,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.7},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
   },
   {
     id: 'pa-side-quiet',
@@ -1028,7 +1034,7 @@ window.SCENARIO_LIBRARY = [
     hint: 'This is a PA output level, not a channel. Check the two mains against each other.',
     solution: 'PA Right was turned down well below PA Left, so half the room got a thin mix. Matching the two main outputs evened out the coverage. Keep your main sides level so the whole room hears the same thing.',
     conditions: [],
-    start: {"channels":[{"label":"Vocal 1","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.55,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.5,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.45,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.55,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.35},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
+    start: {"channels":[{"label":"Vocal 1","gain":0.42,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.42,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.42,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.55,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.35},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
   },
   {
     id: 'keys-buried',
@@ -1037,7 +1043,7 @@ window.SCENARIO_LIBRARY = [
     hint: 'Look at the channel fader for the keys, not the gain.',
     solution: 'The keys fader was pulled almost all the way down, so almost nothing reached the mix. Bringing it back up to a normal level put them back in. The fader sets the level going to the mix; the gain sets it at the input.',
     conditions: [],
-    start: {"channels":[{"label":"Vocal 1","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.55,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.5,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.45,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.02,"inputTrim":1,"id":4},{"label":"5/6","gain":0.55,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.55,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.7},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
+    start: {"channels":[{"label":"Vocal 1","gain":0.42,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.42,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.02,"inputTrim":1,"id":4},{"label":"5/6","gain":0.42,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.55,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.7},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
   },
 ];
 
@@ -1155,11 +1161,11 @@ window.MONITOR_WORLD = [
     symptom: 'Someone kept asking for more, and now the lead singer\'s wedge is cranked: loud enough to strain her voice, start a volume war, and ring. Bring her vocal back to a useful level: loud enough to hear, not blasting.',
     hint: 'Pull AUX 1 on the Vocal 1 channel down. She should hear herself clearly without the wedge dominating the stage. If it is ringing, bringing it down stops that too.',
     hints: [
-      { title: 'Pull her wedge back', target: 'ch1-aux', teach: 'A quieter stage means less strain, less feedback, and a cleaner room mix. Bring her vocal send down to where she can still hear herself, not so far it is gone.', text: 'Bring AUX 1 on the Vocal 1 channel down to a sensible level, not cranked and not gone.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.28 && l <= 0.45; } },
+      { title: 'Pull her wedge back', target: 'ch1-aux', teach: 'A quieter stage means less strain, less feedback, and a cleaner room mix. Bring her vocal send down to where she can still hear herself, not so far it is gone. As it drops, the ringing stops.', text: 'Bring AUX 1 on the Vocal 1 channel down to a sensible level, not cranked and not gone.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.25 && l <= 0.35; } },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
-      { source: 'vocal', dest: 'wedge', min: 0.28, max: 0.45 },
+      { source: 'vocal', dest: 'wedge', min: 0.25, max: 0.35 },
     ],
     sabotage: (s) => { mwBoard(s); s.channels[0].aux1 = 0.9; return s; },
     solution: 'Pull her vocal send back to a useful level. Less is more: a quieter stage means less strain, less feedback, and a cleaner mix for everyone.',

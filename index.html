@@ -91,7 +91,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=49"></script>
+<script src="content.js?v=50"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -229,6 +229,74 @@ const EQ_BAND_HZ = [250, 500, 1000, 2000, 4000];
 const FULL_EQ_BANDS = ['63', '80', '100', '125', '160', '200', '250', '315', '400', '500', '630', '800', '1k', '1.25k', '1.6k', '2k', '2.5k', '3.15k', '4k', '5k', '6.3k', '8k', '10k', '12.5k', '16k'];
 const FULL_EQ_HZ = [63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
 const EQ_CUT_DB = 12;
+// A wedge's inherent feedback fingerprint: the frequencies where the mic +
+// wedge + room loop peaks, so those ring first. This is what makes feedback
+// behave like real life instead of one fixed tone. Per band, a "sensitivity"
+// multiplier on the loop gain (loop = send level x this x any EQ cut). A real
+// monitor has a handful of resonances at different heights, spread across the
+// trouble zones, so as you push a send the TALLEST peak rings first (well
+// before the send is maxed), then the next, then the next. Cut a ringing band
+// on the graphic EQ and its peak drops below the ring line, buying you more
+// level until the next peak catches up. That progressive ring-out is exactly
+// how you EQ a monitor. At the 0.55 onset line, a peak of p rings once the
+// send reaches 0.55/p, so the ladder below rings in order: 2k (~0.45), then
+// 400 Hz (~0.52), 4k (~0.59), 800 Hz (~0.66), 250 Hz (~0.71), 6.3k (~0.78).
+// The floor bands (~0.3) only ring if a send is pushed absurdly hard. Indexes
+// are FULL_EQ_HZ (63 Hz .. 16 kHz). Feedback Mode overrides this with its own
+// randomized profile so ring-out practice never repeats.
+const DEFAULT_FB_PROFILE = [
+  // 63    80    100   125   160   200   250   315   400   500   630
+  0.24, 0.26, 0.28, 0.30, 0.32, 0.34, 0.77, 0.36, 1.05, 0.38, 0.38,
+  // 800   1k    1.25k 1.6k  2k    2.5k  3.15k 4k    5k    6.3k  8k
+  0.84, 0.40, 0.40, 0.42, 1.22, 0.42, 0.42, 0.93, 0.40, 0.71, 0.36,
+  // 10k   12.5k 16k
+  0.32, 0.28, 0.24,
+];
+// Real feedback is a MOVING TARGET: every room, wedge, mic, and placement rings
+// at different frequencies, so a working engineer FINDS the frequency live
+// instead of memorizing one. To train that, each wedge gets its own resonance
+// fingerprint: the SAME height ladder (so the onset timing / calibration is
+// identical everywhere) placed onto DIFFERENT trouble-zone bands. The
+// assignment is reseeded whenever a level loads, so the frequencies change
+// scenario to scenario and you cannot memorize "2 kHz rings first."
+const FB_HEIGHTS = [1.22, 1.05, 0.93, 0.84, 0.77, 0.71];
+let FB_SEED = 0x9e3779b1;
+const _wedgeProfileCache = new Map();
+// mulberry32: tiny deterministic RNG so a wedge's fingerprint is stable within a
+// session (a ring-out stays consistent) but varies across scenarios.
+function fbRng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+window.reseedFeedback = () => { FB_SEED = (Math.floor(Math.random() * 0xffffffff)) >>> 0; _wedgeProfileCache.clear(); };
+// Build one wedge's 25-band resonance profile: 2 low-mid + 2 mid + 2 presence
+// resonances drawn from the real trouble zones, with the TALLEST always in the
+// mid/presence band where a first ring actually lives. Floor + tapered extremes
+// (feedback is rare below ~150 Hz or above ~8 kHz). Deterministic per (wedge,seed).
+function wedgeProfileFor(wKey) {
+  const ck = wKey + ':' + FB_SEED;
+  const hit = _wedgeProfileCache.get(ck);
+  if (hit) return hit;
+  let h = 0; for (let i = 0; i < wKey.length; i++) h = ((h << 5) - h + wKey.charCodeAt(i)) | 0;
+  const rng = fbRng((FB_SEED ^ h) >>> 0);
+  const prof = new Array(FULL_EQ_HZ.length).fill(0.30);
+  for (let i = 0; i < 5; i++) prof[i] = 0.24 + i * 0.02;              // 63..160 Hz taper
+  for (let i = 21; i < prof.length; i++) prof[i] = 0.34 - (i - 21) * 0.03; // 8k..16k taper
+  const draw = (arr, n) => { const a = arr.slice(), out = []; while (out.length < n && a.length) out.push(a.splice(Math.floor(rng() * a.length), 1)[0]); return out; };
+  const bands = [...draw([6, 7, 8, 9], 2), ...draw([10, 11, 12, 13, 14, 15], 2), ...draw([16, 17, 18, 19, 20], 2)];
+  const midPres = bands.filter(b => b >= 10);
+  const tall = midPres[Math.floor(rng() * midPres.length)];
+  const rest = bands.filter(b => b !== tall);
+  for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = rest[i]; rest[i] = rest[j]; rest[j] = t; }
+  [tall, ...rest].forEach((b, i) => { if (i < FB_HEIGHTS.length) prof[b] = FB_HEIGHTS[i]; });
+  _wedgeProfileCache.set(ck, prof);
+  return prof;
+}
 // Linear relief multiplier from a band's cut fraction (0 flat .. 1 full cut).
 function eqBandRelief(cutFrac) {
   const c = Math.max(0, Math.min(1, cutFrac || 0));
@@ -1278,9 +1346,15 @@ function detectFeedback(s, audio) {
   // HPF relieves only the LOW bands (stage rumble), never a mid/high ring.
   const checkWedge = (wKey, w, feed, hpf, chIdx) => {
     if (!w || !feed) return;
-    const full = !!(w.fbProfile && w.eq && w.eq.length === w.fbProfile.length);
-    const hzOf = (b) => (w.eq && w.eq.length === FULL_EQ_HZ.length) ? FULL_EQ_HZ[b] : EQ_BAND_HZ[b];
-    const bands = full ? w.fbProfile.map((p, b) => ({ b, p })) : [{ b: (w.ringBand != null ? w.ringBand : 2), p: 1.0 }];
+    const has25 = !!(w.eq && w.eq.length === FULL_EQ_HZ.length);
+    // Which resonance profile drives this wedge: a scenario's own (Feedback
+    // Mode), otherwise this wedge's own randomized fingerprint from
+    // wedgeProfileFor (each wedge/room rings at different frequencies). Only a
+    // legacy wedge with no 25-band EQ falls back to the old single ringBand tone.
+    const prof = (w.fbProfile && w.eq && w.eq.length === w.fbProfile.length) ? w.fbProfile
+               : (has25 ? wedgeProfileFor(wKey) : null);
+    const hzOf = (b) => has25 ? FULL_EQ_HZ[b] : EQ_BAND_HZ[b];
+    const bands = prof ? prof.map((p, b) => ({ b, p })) : [{ b: (w.ringBand != null ? w.ringBand : 2), p: 1.0 }];
     for (const { b, p } of bands) {
       const lowBand = hzOf(b) <= 250;
       const hpfRelief = (hpf && lowBand) ? 0.6 : 1.0;
@@ -1328,6 +1402,55 @@ function detectFeedback(s, audio) {
   return { channelIdx: primary.channelIdx, riskAmount: primary.risk, ringWedge: primary.wedge, ringBand: primary.band, rings };
 }
 window.detectFeedback = detectFeedback;
+// Per-wedge FEEDBACK MARGIN: how much louder (dB) the hottest mic->wedge loop
+// could get before it hits the ring line. Positive = headroom (pros run monitors
+// ~6 dB below feedback, not on the edge), 0 = on the edge, negative = ringing.
+// Same loop math as detectFeedback, read-only (no hysteresis), reporting the
+// tallest band per wedge so a persistent readout can teach headroom discipline.
+function feedbackMargins(s, audio) {
+  const out = { wedge: 0, wedge2: 0, wedge3: 0, wedge4: 0 };
+  if (!s || !s.channels || !audio || !audio.contributions) return out;
+  const o = s.outputs || {};
+  const eqg = audio.eqGain || { wedge: 1, wedge2: 1, wedge3: 1, wedge4: 1 };
+  const keys = ['wedge', 'wedge2', 'wedge3', 'wedge4'];
+  const maxLoopFor = (wKey, w, feed, hpf) => {
+    if (!w || !feed) return 0;
+    const has25 = !!(w.eq && w.eq.length === FULL_EQ_HZ.length);
+    const prof = (w.fbProfile && w.eq && w.eq.length === w.fbProfile.length) ? w.fbProfile : (has25 ? wedgeProfileFor(wKey) : null);
+    const hzOf = (b) => has25 ? FULL_EQ_HZ[b] : EQ_BAND_HZ[b];
+    const bands = prof ? prof.map((p, b) => ({ b, p })) : [{ b: (w.ringBand != null ? w.ringBand : 2), p: 1.0 }];
+    let m = 0;
+    for (const { b, p } of bands) {
+      const hpfRelief = (hpf && hzOf(b) <= 250) ? 0.6 : 1.0;
+      const loop = feed * 1.0 * p * (w.eq ? eqBandRelief(w.eq[b]) : 1.0) * hpfRelief;
+      if (loop > m) m = loop;
+    }
+    return m;
+  };
+  for (let i = 0; i < s.channels.length; i++) {
+    const ch = s.channels[i]; if (ch.mute) continue;
+    const srcKey = sourceFor(s, i); if (!srcKey) continue;
+    const srcDef = SOURCES[srcKey];
+    if (!srcDef || (srcDef.kind !== 'dynamic' && srcDef.kind !== 'condenser')) continue;
+    if (srcDef.kind === 'condenser' && !ch.phantom) continue;
+    const c = audio.contributions[srcKey]; if (!c) continue;
+    for (const wKey of keys) {
+      const m = maxLoopFor(wKey, o[wKey], (c[wKey] || 0) / (eqg[wKey] || 1), ch.highpass);
+      if (m > out[wKey]) out[wKey] = m;
+    }
+  }
+  return out;
+}
+window.feedbackMargins = feedbackMargins;
+// Convert a wedge's hottest loop to a margin in dB (headroom before the 0.55
+// ring line) and a status band. Returns null when no mic feeds the wedge.
+function feedbackMarginInfo(maxLoop) {
+  if (!(maxLoop > 0.02)) return null; // no live mic on this wedge -> no risk to show
+  const db = 20 * Math.log10(0.55 / maxLoop);
+  const status = db < 0 ? 'ring' : (db < 3 ? 'edge' : (db < 6 ? 'low' : 'ok'));
+  return { db, status };
+}
+window.feedbackMarginInfo = feedbackMarginInfo;
 window.wouldPopOnPlug = wouldPopOnPlug;
 window.detectClipping = detectClipping;
 window.detectPaBalanceIssue = detectPaBalanceIssue;
@@ -2947,7 +3070,7 @@ function EqStrip({ eq, onChange, ringBands, accent, height, width }) {
 // Exposable "Monitor EQ" panel — the graphic EQs for the two aux/monitor sends,
 // the way they'd sit at FOH (outboard rack, or a screen on a digital desk). It
 // auto-opens when a wedge starts ringing and can be toggled by hand otherwise.
-function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandChange, ringWedge, ringBand, rings, toneGate, byEar }) {
+function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandChange, ringWedge, ringBand, rings, toneGate, byEar, severity }) {
   if (!open) return null;
   const ringsFor = (key) => (rings || []).filter(r => r.wedge === key).map(r => r.band);
   const col = (key, w, label, accent) => {
@@ -2995,15 +3118,26 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
             turns red when something is actually ringing. */}
         {(() => {
           const ringing = rings && rings.length > 0;
+          const sev = severity || { level: 0, count: 0 };
+          // A ring builds toward a howl; several at once means cut each glowing
+          // band OR back the send off (both work, and backing off buys headroom).
+          const many = ringing && (rings ? rings.length : 0) >= 3;
+          const howl = ringing && sev.level >= 2 && !many;
+          const hot = many || howl;
+          const target = byEar
+            ? <span>the ringing frequency by <b style={{ color: 'var(--hot)' }}>ear</b></span>
+            : <span>the <b style={{ color: 'var(--hot)' }}>glowing band</b></span>;
           return (
             <div style={{ marginBottom: 10, padding: '8px 10px', minHeight: 34, display: 'flex', alignItems: 'center',
-              background: ringing ? 'rgba(255,70,48,0.10)' : 'rgba(255,255,255,0.03)',
+              background: ringing ? (hot ? 'rgba(255,70,48,0.18)' : 'rgba(255,70,48,0.10)') : 'rgba(255,255,255,0.03)',
               border: '1px solid ' + (ringing ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6,
               fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
               {ringing ? (
-                byEar
-                  ? <span style={{ color: 'var(--ink)' }}>Feeding back. Find the ringing frequency by <b style={{ color: 'var(--hot)' }}>ear</b> and pull that band down, just enough to stop it.</span>
-                  : <span style={{ color: 'var(--ink)' }}>Feeding back. Pull the <b style={{ color: 'var(--hot)' }}>glowing band</b> down to cut that frequency, just enough to stop it.</span>
+                many
+                  ? <span style={{ color: 'var(--ink)' }}>Several frequencies are ringing at once. {byEar ? 'Find each ring by ear and cut it' : <>Cut each <b style={{ color: 'var(--hot)' }}>glowing band</b></>}, or back the <b style={{ color: 'var(--hot)' }}>send</b> off to buy headroom.</span>
+                  : howl
+                  ? <span style={{ color: 'var(--ink)' }}>It is howling. Cut {target} now, or pull the send down fast.</span>
+                  : <span style={{ color: 'var(--ink)' }}>A frequency is starting to ring. Cut {target} before it takes off, just enough to stop it.</span>
               ) : (
                 byEar
                   ? <span>Listen for the ring, then pull that frequency's band down. No band glows in this mode; use your ear.</span>
@@ -3024,7 +3158,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
 }
 window.MonitorEqPanel = MonitorEqPanel;
 
-function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, label = 'STAGE WEDGE', accent = 'var(--aux)', ringing }) {
+function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, label = 'STAGE WEDGE', accent = 'var(--aux)', ringing, marginInfo }) {
   const animate = on && !mute && level > 0.05;
   const intensity = Math.min(1, level);
   // Resolve the accent var to an rgba glow color so we can reuse the variable
@@ -3064,10 +3198,19 @@ function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume,
         </svg>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: 2 }}>
-        <div className="mono" style={{
-          fontSize: 7.5, letterSpacing: 1.5, fontWeight: 700,
-          color: on ? accent : '#ff8676',
-        }}>{label}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 4 }}>
+          <div className="mono" style={{
+            fontSize: 7.5, letterSpacing: 1.5, fontWeight: 700,
+            color: on ? accent : '#ff8676',
+          }}>{label}</div>
+          {on && marginInfo && (
+            <div className="mono" title="How much louder this monitor can get before it feeds back. Pros leave about 6 dB. Green is safe, red is on the edge."
+              style={{ fontSize: 7, fontWeight: 800, letterSpacing: 0.3, whiteSpace: 'nowrap',
+                color: marginInfo.status === 'ok' ? 'var(--green)' : marginInfo.status === 'low' ? 'var(--accent)' : 'var(--hot)' }}>
+              {marginInfo.db < 0 ? 'FEEDING BACK' : (marginInfo.db >= 12 ? '+12+' : '+' + marginInfo.db.toFixed(0)) + ' dB to F/B'}
+            </div>
+          )}
+        </div>
         <div onClick={onSelect} style={{
           cursor: 'pointer',
           padding: '1px 2px', borderRadius: 3,
@@ -3399,7 +3542,7 @@ function ZoneHeader({ label, sublabel, badge, accent, badgeColor }) {
   );
 }
 
-function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef }) {
+function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef, wedgeMargins }) {
   const topo = state.topology || {};
   const isPassive = topo.paRig === 'amp+passive';
   // In passive mode the cabinets are dumb — the external amp powers them, so a
@@ -3479,6 +3622,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
               onVolume={(v) => setOutInspect('wedge', { volume: v }, 'wedge')}
               ringing={ringingWedge === 'wedge'}
+              marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.wedge) : null}
               isInspected={state.inspect === 'wedge'}
               onSelect={() => setState({ ...state, inspect: 'wedge' })}/>
           </div>
@@ -3491,6 +3635,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
               onVolume={(v) => setOutInspect('wedge2', { volume: v }, 'wedge2')}
               ringing={ringingWedge === 'wedge2'}
+              marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.wedge2) : null}
               isInspected={state.inspect === 'wedge2'}
               onSelect={() => setState({ ...state, inspect: 'wedge2' })}/>
           </div>
@@ -3505,6 +3650,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onToggleMute={() => setOut('wedge3', { mute: !state.outputs.wedge3.mute })}
               onVolume={(v) => setOutInspect('wedge3', { volume: v }, 'wedge3')}
               ringing={ringingWedge === 'wedge3'}
+              marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.wedge3) : null}
               isInspected={state.inspect === 'wedge3'}
               onSelect={() => setState({ ...state, inspect: 'wedge3' })}/>
           </div>
@@ -3517,6 +3663,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               onToggleMute={() => setOut('wedge4', { mute: !state.outputs.wedge4.mute })}
               onVolume={(v) => setOutInspect('wedge4', { volume: v }, 'wedge4')}
               ringing={ringingWedge === 'wedge4'}
+              marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.wedge4) : null}
               isInspected={state.inspect === 'wedge4'}
               onSelect={() => setState({ ...state, inspect: 'wedge4' })}/>
           </div>
@@ -3862,7 +4009,7 @@ function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRe
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked }) {
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins }) {
   const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
   const isMobile = useViewport();
   const containerRef = useR2(null);
@@ -4435,7 +4582,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
               sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
               snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
               wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
-              paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef}/>
+              paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins}/>
           </div>
           {sidebarContent}
         </div>
@@ -5192,8 +5339,21 @@ const SCENARIOS = [
     symptom: 'Nothing is broken here, and there is no goal. Move faders, set gains, build a monitor mix, and switch the surface between analog and digital. Turn the sound on to hear what changes. When you want a challenge, open the lessons or a practice round from the menu above.',
     conditions: [],
     involves: [1, 2, 3, 4],
-    defaultInspect: 'pa',
-    sabotage: (s) => { if (s.channels[2]) s.channels[2].phantom = true; return s; },
+    defaultInspect: 'wedge',
+    sabotage: (s) => {
+      if (s.channels[2]) s.channels[2].phantom = true;
+      // Bring the four wedges up to a working stage level. Two reasons: (1) the
+      // monitors are audible the moment a send is opened (they sit at 0 in the
+      // default board, which left Free Play's wedges silent), and (2) at 0.7 you
+      // can build a healthy monitor mix (a vocal send up to ~two-thirds is
+      // clean), and pushing a send past that walks the wedge into feedback the
+      // way a real hot monitor does: one frequency first, then more as you keep
+      // pushing (the realistic multi-resonance profile). PA is already up at 0.7.
+      ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => {
+        if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.7; }
+      });
+      return s;
+    },
   },
   // The free MIXER TUTORIAL: the console broken into one focused lesson per
   // control, so a student can drop into a single part (master section, gain,
@@ -6810,6 +6970,15 @@ function App() {
   const monitorEqRef = uR(null);
   const feedbackRiskRef = uR(0);
   const feedbackRingsRef = uR([]);
+  // Per-band ring ENERGY (0..1), integrated over time in the animation loop so a
+  // ring builds toward a howl the longer it is left, and rings out with a tail
+  // when cleared. lastFbTimeRef gives the real per-frame dt for that integration.
+  const ringEnergyRef = uR(null);
+  const lastFbTimeRef = uR(0);
+  const lastSevRef = uR(null);
+  // Peak ring energy this frame + how many bands are ringing, surfaced to the UI
+  // so the warning can escalate (ring -> howl -> "too many, pull it down").
+  const [fbSeverity, setFbSeverity] = uS({ level: 0, count: 0 });
 
   const audio = uM(() => window.computeAudio(state, envelopeRef.current), [state, envTick]);
 
@@ -6838,6 +7007,10 @@ function App() {
   // transient clip warning; only the win logic reads this stable version.
   const clipsStable = uM(() => (window.detectClipping ? window.detectClipping(audioBaseline, state) : []), [audioBaseline, state]);
   const feedback = (window.detectFeedback ? window.detectFeedback(state, audioBaseline) : null);
+  // Per-wedge feedback margin (dB of headroom before the ring line), from the
+  // settled signal so it doesn't flicker with program material. Fed to the stage
+  // wedges so the student can see how close to the edge each monitor is running.
+  const fbMargins = uM(() => (window.feedbackMargins ? window.feedbackMargins(state, audioBaseline) : null), [state, audioBaseline]);
   // Push the risk amount into a ref so the audio animation loop can read
   // it without taking a dependency on state. 0 when no loop is hot.
   feedbackRiskRef.current = feedback ? feedback.riskAmount : 0;
@@ -7128,23 +7301,60 @@ function App() {
           envelopeRef.current[k] = synthF;
         }
       }
-      // Feedback ring voices follow the loop math: each active ring drives
-      // ITS band's voice (the pitch you hear is the band you cut), and any
-      // number can sound at once. Per-voice first-order smoothing (~120 ms)
-      // makes rings build and decay naturally as the engineer works.
+      // Feedback ring voices. Real feedback BUILDS: a band over unity grows
+      // louder the longer it is left (fast when far over = a howl in a fraction
+      // of a second, slow when barely over = a ring you have a beat to catch)
+      // and rings out with a tail once you pull it under. That build is the
+      // urgency a monitor engineer lives by: catch it early or it runs away.
+      // Detection and the win stay knob-based; this integrates the audible
+      // energy on top, per-band, using the real per-frame dt.
       const fbChain = feedbackChainRef.current;
-      if (fbChain && fbChain.voices) {
+      if (fbChain && fbChain.voices && ctxRunning) {
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : (lastFbTimeRef.current + 16);
+        let dt = lastFbTimeRef.current ? (now - lastFbTimeRef.current) / 1000 : 0.016;
+        lastFbTimeRef.current = now;
+        dt = dt < 0 ? 0 : (dt > 0.1 ? 0.1 : dt); // clamp first frame / tab-switch
+        const energy = ringEnergyRef.current || (ringEnergyRef.current = new Array(fbChain.voices.length).fill(0));
         const rings = feedbackRingsRef.current || [];
-        const targets = new Array(fbChain.voices.length).fill(0);
-        for (const r of rings) {
-          if (r.hzIndex >= 0 && r.hzIndex < targets.length) {
-            targets[r.hzIndex] = Math.max(targets[r.hzIndex], Math.min(0.3, Math.max(0, (r.risk - 0.45) * 1.1)));
-          }
-        }
+        const risk = new Array(fbChain.voices.length).fill(0);
+        for (const r of rings) if (r.hzIndex >= 0 && r.hzIndex < risk.length) risk[r.hzIndex] = Math.max(risk[r.hzIndex], r.risk);
+        // UNITY matches the detection SUSTAIN threshold (0.45): any band the
+        // detector still reports as ringing keeps producing audible energy, so
+        // the glow and the sound never disagree. Above it the ring builds; below
+        // it (band cut clear) it rings out with a tail and snaps to true zero.
+        const UNITY = 0.45, GROW_BASE = 0.3, GROW_SLOPE = 4.0, TAIL = 0.4, MAXGAIN = 0.32;
+        let peak = 0;
         fbChain.voices.forEach((v, i) => {
+          let e = energy[i] || 0;
+          const over = risk[i] - UNITY;
+          if (over > 0) e += (GROW_BASE + over * GROW_SLOPE) * dt; // build / runaway
+          else { e -= e * Math.min(1, dt / TAIL); if (e < 1e-3) e = 0; } // ring out + snap
+          e = e < 0 ? 0 : (e > 1 ? 1 : e);
+          energy[i] = e;
+          if (e > peak) peak = e;
+          const target = e * MAXGAIN;
           const cur = v.gain.gain.value;
-          v.gain.gain.value = cur + (targets[i] - cur) * 0.15;
+          v.gain.gain.value = (e === 0 && cur < 1e-3) ? 0 : cur + (target - cur) * 0.3;
         });
+        // Escalating severity for the on-screen warning, bucketed so it only
+        // re-renders on a transition (0 clear, 1 building ring, 2 howl); the ring
+        // count drives the "several at once" copy.
+        const count = rings.length;
+        const bucket = count === 0 ? 0 : (peak > 0.5 ? 2 : 1);
+        const prev = lastSevRef.current;
+        if (!prev || prev.level !== bucket || prev.count !== count) {
+          lastSevRef.current = { level: bucket, count };
+          setFbSeverity({ level: bucket, count });
+        }
+      } else if (fbChain && fbChain.voices) {
+        // Audio suspended (sound off): reset the integration clock and silence the
+        // ring voices so a ring builds from zero when sound comes back on, instead
+        // of pre-charging to a howl in the background.
+        lastFbTimeRef.current = 0;
+        const energy = ringEnergyRef.current;
+        if (energy) for (let i = 0; i < energy.length; i++) energy[i] = 0;
+        fbChain.voices.forEach(v => { if (v.gain.gain.value !== 0) v.gain.gain.value = 0; });
+        if (lastSevRef.current && lastSevRef.current.level !== 0) { lastSevRef.current = { level: 0, count: 0 }; setFbSeverity({ level: 0, count: 0 }); }
       }
       setEnvTick(n => (n + 1) & 0xff);
       raf = requestAnimationFrame(loop);
@@ -7600,6 +7810,12 @@ function App() {
     // its share link).
     const hardLocked = isLocked(lv) && !(lv && lv.isPractice && practiceSoftOpen);
     if (!lv || (hardLocked && !bypassLock)) { if (lv) setPitchFor(lv.isLesson ? { title: 'Run the show', isLesson: true } : lv); return; }
+    // New board = new room: give the wedges fresh resonance frequencies so the
+    // student re-diagnoses instead of memorizing. A same-seed replay keeps them.
+    if (!reuseSeed && window.reseedFeedback) window.reseedFeedback();
+    // Start the new room silent: clear any ring energy left howling on the last
+    // board and re-anchor the integration clock.
+    ringEnergyRef.current = null; lastFbTimeRef.current = 0;
     // Show the first-rep orientation only on the welcome chooser's quick fix,
     // and clear it so the next load (any load) turns it back off.
     const wasFirstFix = firstFixRef.current; firstFixRef.current = false;
@@ -8247,6 +8463,7 @@ function App() {
         rings={feedback ? feedback.rings : []}
         toneGate={level.toneGate}
         byEar={feedbackByEar && level.isFeedbackMode}
+        severity={fbSeverity}
       />
 
       <WarningModal
@@ -8323,7 +8540,7 @@ function App() {
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             <div ref={designRef} style={{ width: DESIGN_W, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
               <window.Chain
-                state={state} setState={setState} audio={audio} fitScale={fitScale}
+                state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins}
                 surface={(level.isWalkthrough || level.isLesson) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital}
                 surfaceLocked={level.isWalkthrough || level.isLesson}
                 sidebarContent={
