@@ -352,6 +352,14 @@ function defaultState() {
       makeChannel({ id: 4, label: 'Keys',    gain: 0.42,                 fader: 0.60, pan: 0.5, aux1: 0.0 }),
       makeChannel({ id: 5, label: '5/6',     gain: 0.42, stereo: true,   fader: 0.70, pan: 0.5, aux1: 0.0 }),
     ],
+    // Mic placement per vocal mic (the two that can feed back). pattern +
+    // where the monitor sits relative to the mic. Default onaxis = full coupling
+    // (rejection 1.0), so the base feedback calibration is unchanged and aiming
+    // the wedge into the null is a headroom bonus the student earns.
+    micSetup: {
+      vocal:  { pattern: 'cardioid', monitorPos: 'onaxis', cupped: false },
+      vocal2: { pattern: 'cardioid', monitorPos: 'onaxis', cupped: false },
+    },
     // Mixer / console power state. Default ON for all existing levels.
     // The Power-On Sequence lesson sabotages this to false and teaches the
     // safe boot order: console on → master down → amp on → master up.
@@ -1330,6 +1338,28 @@ window.speakerLiveForPatch = speakerLiveForPatch;
 // true (the ring sustains itself) and it stops the warning from strobing
 // when a level wobbles right at the threshold. Module-level is safe here:
 // every caller in a frame passes the same state.
+// Directional mic REJECTION: a monitor sitting off the mic's front axis gets
+// attenuated on the way back in. First-order polar math r(theta) = |a + (1-a)
+// cos(theta)| (a: cardioid 0.5, super 0.375, hyper 0.25). onaxis (front, theta
+// 0) = 1.0 = no rejection, and it is the default so placement NEVER shifts the
+// base calibration -- aiming the wedge into the null is a bonus the student
+// earns. The nulls: cardioid nulls straight BEHIND (180); super/hyper null to
+// the SIDE (~120) and have a LIVE rear lobe at 180 (dead-behind a super mic is
+// a trap, not a null). Cupping the mic (hand over the grille) collapses the
+// pattern toward omni -- the null fills in -- and it rings hotter. Floor 0.1
+// (~ -20 dB, a real deep null).
+const MIC_A = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
+const MON_ANGLE = { onaxis: 0, side: 120, back: 180 };
+function micRejection(setup) {
+  if (!setup) return 1.0;
+  let a = MIC_A[setup.pattern] != null ? MIC_A[setup.pattern] : 0.5;
+  if (setup.cupped) a = a + (1 - a) * 0.7; // toward omni: the null fills in
+  const th = (MON_ANGLE[setup.monitorPos] != null ? MON_ANGLE[setup.monitorPos] : 0) * Math.PI / 180;
+  let r = Math.max(0.1, Math.abs(a + (1 - a) * Math.cos(th)));
+  if (setup.cupped) r *= 1.3; // cupped grille also resonates and rings hotter
+  return r;
+}
+window.micRejection = micRejection;
 const _ringActive = {};
 function detectFeedback(s, audio) {
   if (!s || !s.channels || !audio || !audio.contributions) return null;
@@ -1382,10 +1412,13 @@ function detectFeedback(s, audio) {
     const c = audio.contributions[srcKey];
     if (!c) continue;
     const eqg = audio.eqGain || { wedge: 1, wedge2: 1, wedge3: 1, wedge4: 1 };
-    checkWedge('wedge', o.wedge, (c.wedge || 0) / (eqg.wedge || 1), ch.highpass, i);
-    checkWedge('wedge2', o.wedge2, (c.wedge2 || 0) / (eqg.wedge2 || 1), ch.highpass, i);
-    checkWedge('wedge3', o.wedge3, (c.wedge3 || 0) / (eqg.wedge3 || 1), ch.highpass, i);
-    checkWedge('wedge4', o.wedge4, (c.wedge4 || 0) / (eqg.wedge4 || 1), ch.highpass, i);
+    // Mic placement rejection: aiming the wedge into the mic's null attenuates
+    // the loop (default onaxis = 1.0, so nothing changes until the student aims).
+    const rej = micRejection(s.micSetup && s.micSetup[srcKey]);
+    checkWedge('wedge', o.wedge, (c.wedge || 0) / (eqg.wedge || 1) * rej, ch.highpass, i);
+    checkWedge('wedge2', o.wedge2, (c.wedge2 || 0) / (eqg.wedge2 || 1) * rej, ch.highpass, i);
+    checkWedge('wedge3', o.wedge3, (c.wedge3 || 0) / (eqg.wedge3 || 1) * rej, ch.highpass, i);
+    checkWedge('wedge4', o.wedge4, (c.wedge4 || 0) / (eqg.wedge4 || 1) * rej, ch.highpass, i);
     // Mains loop — no single band; the ring tone falls back to 2 kHz.
     const mainsLoop = ((c.pa_l || 0) + (c.pa_r || 0)) * MAINS_COUPLING * (ch.highpass ? 0.6 : 1.0);
     const mKey = 'mains:' + i;
@@ -1434,8 +1467,9 @@ function feedbackMargins(s, audio) {
     if (!srcDef || (srcDef.kind !== 'dynamic' && srcDef.kind !== 'condenser')) continue;
     if (srcDef.kind === 'condenser' && !ch.phantom) continue;
     const c = audio.contributions[srcKey]; if (!c) continue;
+    const rej = micRejection(s.micSetup && s.micSetup[srcKey]);
     for (const wKey of keys) {
-      const m = maxLoopFor(wKey, o[wKey], (c[wKey] || 0) / (eqg[wKey] || 1), ch.highpass);
+      const m = maxLoopFor(wKey, o[wKey], (c[wKey] || 0) / (eqg[wKey] || 1) * rej, ch.highpass);
       if (m > out[wKey]) out[wKey] = m;
     }
   }
@@ -2863,7 +2897,7 @@ function LaptopIcon({ size = 60, glow = false }) {
   );
 }
 
-function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, onMute, onPatch, patchTarget, patchColor, signalFlowing }) {
+function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, onMute, onPatch, patchTarget, patchColor, signalFlowing, micSetup, onMicSetup }) {
   return (
     <div
       onClick={onTest}
@@ -2906,6 +2940,31 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
             }}
           >{patchTarget ? `→ PORT ${patchTarget}` : 'PATCH'}</div>
         </div>
+        {/* Mic placement: pattern + where the wedge sits relative to the mic.
+            Aiming the wedge into the mic's null is the biggest feedback lever,
+            far bigger than EQ. cardioid nulls BEHIND; super/hyper null to the
+            SIDE and have a live rear lobe (behind is a trap). Cupping kills it. */}
+        {onMicSetup && (kind === 'dynamic' || kind === 'condenser') && micSetup && (() => {
+          const rejDb = window.micRejection ? Math.round(20 * Math.log10(window.micRejection(micSetup))) : 0;
+          const PATS = ['cardioid', 'super', 'hyper'], POS = ['onaxis', 'side', 'back'];
+          const patLabel = { cardioid: 'CARDIOID', super: 'SUPER', hyper: 'HYPER' };
+          const posLabel = { onaxis: 'WEDGE: FRONT', side: 'WEDGE: SIDE', back: 'WEDGE: BEHIND' };
+          const next = (arr, cur) => arr[(arr.indexOf(cur) + 1) % arr.length];
+          const chip = (text, onClick, active, tip) => (
+            <div onClick={(e) => { e.stopPropagation(); onClick(); }} title={tip} className="mono ui-no-select"
+              style={{ fontSize: 7.5, padding: '2px 5px', background: '#0a0a0c', color: active ? 'var(--accent)' : 'var(--ink-2)', border: '1px solid ' + (active ? 'var(--accent)' : '#38383e'), borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.4 }}>{text}</div>
+          );
+          return (
+            <div style={{ display: 'flex', gap: 4, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+              {chip(patLabel[micSetup.pattern] || 'CARDIOID', () => onMicSetup({ pattern: next(PATS, micSetup.pattern || 'cardioid') }), false, 'Mic pickup pattern. Cardioid nulls straight behind; super and hyper null to the sides and have a live lobe directly behind.')}
+              {chip(posLabel[micSetup.monitorPos] || 'WEDGE: FRONT', () => onMicSetup({ monitorPos: next(POS, micSetup.monitorPos || 'onaxis') }), false, 'Where the monitor sits relative to the mic. Aim it into the null.')}
+              {chip('CUP', () => onMicSetup({ cupped: !micSetup.cupped }), micSetup.cupped, 'Hand cupped over the grille: kills the pattern and rings hotter.')}
+              <div className="mono" title="How much the current placement rejects the monitor before it feeds back. More is better; aim for the deepest null." style={{ fontSize: 7.5, fontWeight: 800, color: rejDb <= -6 ? 'var(--green)' : (rejDb < 0 ? 'var(--accent)' : 'var(--ink-3)') }}>
+                {rejDb < 0 ? rejDb + ' dB' : 'on-axis'}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -3708,6 +3767,8 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               label={window.SOURCES[k].label}
               kind={window.SOURCES[k].kind}
               diActive={window.SOURCES[k].diActive}
+              micSetup={state.micSetup && state.micSetup[k]}
+              onMicSetup={(patch) => setState(prev => ({ ...prev, micSetup: { ...prev.micSetup, [k]: { ...(prev.micSetup && prev.micSetup[k]), ...patch } } }))}
               muted={state.sourceMute[k]}
               isTesting={state.testing === k}
               onTest={() => setState({ ...state, testing: k })}
