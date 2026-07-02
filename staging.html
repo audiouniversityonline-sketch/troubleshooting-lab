@@ -4189,6 +4189,7 @@ function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRe
 
 function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement }) {
   const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
+  const [hoverCable, setHoverCable] = useS2(null);
   const isMobile = useViewport();
   const containerRef = useR2(null);
   const stageZoneRef = useR2(null);
@@ -4675,7 +4676,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             y: (sbRect.bottom - cb.top) / S + 22 + (idx % 2) * 16,
           };
         }
-        const color = portId ? ((window.SNAKE_COLORS || [])[portId - 1] || '#5a5a62') : '#8a877e';
+        const color = '#7d7a72'; // uniform gray; the channel color lives on the snake head + fan-out
         return (from && to) ? { spk, name, from, to, color, rail, unplugged, portId } : null;
       }).filter(Boolean);
 
@@ -4873,10 +4874,12 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             if (!c.from || !c.to) return null;
             const isDragged = dragState && dragState.type === 'source' && dragState.id === c.src;
             const someOtherDragged = dragState && !isDragged;
-            // Loose input cables are neutral gray: the cable has no channel
-            // identity until it's plugged into a stage-box port. Once patched
-            // it wears the source's color. (The output lines already do this.)
-            const color = c.unplugged ? '#8a877e' : window.SOURCES[c.src].color;
+            // Stage cables are all one neutral gray, like real stage cabling —
+            // no color to lean on. Hovering a cable brightens just that one so
+            // a viewer can trace it end to end. Channel identity lives on the
+            // snake head and the fan-out tails, not on the stage cables.
+            const hovered = hoverCable === 'src:' + c.src;
+            const color = hovered ? '#eae7e0' : '#7d7a72';
             const rank = xSorted.indexOf(c);
             const n = xSorted.length;
             const railOffset = (rank - (n - 1) / 2) * 6;
@@ -4888,13 +4891,17 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             const d = isDragged
               ? window._cableCurve(c.from, portEnd)
               : window._routedCable(c.from, c.to, railY);
-            const opacity = someOtherDragged ? 0.18 : 0.95;
+            const opacity = someOtherDragged ? 0.18 : (hovered ? 1 : 0.95);
             // No "unplugged" badge: the loose cable dangling from the source
             // is enough to read that it needs patching.
             return (
               <g key={c.src} style={{ pointerEvents: 'none' }}>
                 <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round" strokeLinejoin="round"/>
                 <path d={d} stroke={color} strokeWidth={isDragged ? 4 : 3} fill="none" opacity={opacity} strokeLinecap="round" strokeLinejoin="round"/>
+                {!dragState && (
+                  <path d={d} stroke="transparent" strokeWidth="12" fill="none" style={{ pointerEvents: 'stroke' }}
+                    onPointerEnter={() => setHoverCable('src:' + c.src)} onPointerLeave={() => setHoverCable(null)}/>
+                )}
                 <circle cx={c.from.x} cy={c.from.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
                 {!isDragged && (
                   <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
@@ -5078,12 +5085,18 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             ? window._cableCurve(portEnd, c.to)
             : window._routedCable(c.from, c.to, railY);
           const live = !c.unplugged && !isDragged && retLive(c.portId);
-          const opacity = someOtherDragged ? 0.18 : (c.unplugged ? 0.5 : 0.92);
+          const hovered = hoverCable === 'out:' + c.spk;
+          const color = hovered ? '#eae7e0' : '#7d7a72';
+          const opacity = someOtherDragged ? 0.18 : (hovered ? 1 : (c.unplugged ? 0.5 : 0.92));
           return (
             <g key={'stage-out-' + c.spk} style={{ pointerEvents: 'none' }}>
               <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round" strokeLinejoin="round"/>
-              <path d={d} stroke={c.color} strokeWidth={isDragged ? 4 : 3} fill="none" strokeLinecap="round" strokeLinejoin="round" opacity={opacity}/>
-              <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={c.color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
+              <path d={d} stroke={color} strokeWidth={isDragged ? 4 : 3} fill="none" strokeLinecap="round" strokeLinejoin="round" opacity={opacity}/>
+              {!dragState && (
+                <path d={d} stroke="transparent" strokeWidth="12" fill="none" style={{ pointerEvents: 'stroke' }}
+                  onPointerEnter={() => setHoverCable('out:' + c.spk)} onPointerLeave={() => setHoverCable(null)}/>
+              )}
+              <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
               {c.unplugged && !isDragged && !someOtherDragged && (
                 <g pointerEvents="none">
                   <rect x={portEnd.x - 18} y={portEnd.y + 8} width={36} height={12} rx={2}
@@ -5102,7 +5115,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                   <circle className="cable-hit" cx={portEnd.x} cy={portEnd.y} r="11" fill="transparent"
                     onPointerDown={(e) => startDrag(e, { type: 'outpatch', id: c.spk })}/>
                   <circle className="cable-handle" cx={portEnd.x} cy={portEnd.y} r={isDragged ? 6 : 5}
-                    fill={c.color} stroke="#0a0a0c" strokeWidth="1.2" pointerEvents="none"/>
+                    fill={color} stroke="#0a0a0c" strokeWidth="1.2" pointerEvents="none"/>
                   <circle cx={portEnd.x} cy={portEnd.y} r="2" fill="#0a0a0c" pointerEvents="none"/>
                 </g>
               )}
@@ -5391,7 +5404,14 @@ function MobileNotice({ onCapture }) {
         background: 'rgba(14,36,21,0.7)', border: '1px solid var(--green)', borderRadius: 10,
         boxShadow: '0 0 0 1px rgba(74,222,128,0.18), 0 8px 28px rgba(0,0,0,0.6)',
       }}>
-        {!sent ? (
+        {TIER === 'member' ? (
+          <>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>BEST ON A COMPUTER</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+              This trainer uses a full mixing console, so it needs a desktop or laptop. Open this page on a computer to jump into the lab.
+            </div>
+          </>
+        ) : !sent ? (
           <>
             <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>BEST ON A COMPUTER</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>
@@ -5405,7 +5425,7 @@ function MobileNotice({ onCapture }) {
               style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', fontSize: 13, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid ' + (err ? '#e05a5a' : '#2c9d52'), outline: 'none' }}/>
             {err && <div style={{ fontSize: 10.5, color: '#e98a8a', marginTop: 6 }}>That doesn't look like a valid email address.</div>}
             <button onClick={submit} className="mono ui-no-select" style={{ width: '100%', marginTop: 10, padding: '11px 16px', fontSize: 12, fontWeight: 800, letterSpacing: 1, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>SEND ME THE LINK →</button>
-            <div style={{ fontSize: 9.5, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.4 }}>No spam. Just the link and the occasional lesson.</div>
+            <div style={{ fontSize: 9.5, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.4 }}>No spam. Unsubscribe anytime.</div>
           </>
         ) : (
           <>
