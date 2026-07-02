@@ -5537,7 +5537,7 @@ const SCENARIOS = [
     symptom: 'Nothing is broken here, and there is no goal. Move faders, set gains, build a monitor mix, and switch the surface between analog and digital. Turn the sound on to hear what changes. When you want a challenge, open the lessons or a practice round from the menu above.',
     conditions: [],
     involves: [1, 2, 3, 4],
-    defaultInspect: 'wedge',
+    defaultInspect: 'pa',
     sabotage: (s) => {
       if (s.channels[2]) s.channels[2].phantom = true;
       // Bring the four wedges up to a working stage level. Two reasons: (1) the
