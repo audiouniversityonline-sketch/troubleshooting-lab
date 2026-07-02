@@ -241,9 +241,12 @@ window.LEVELS = [
     task: true,
     involves: [5],
     requirePflCheck: true,
-    gainStructure: { refChannel: 5, unity: 0.75, faderTol: 0.06, inputBand: [0.80, 1.00] },
+    // inputBand = the healthy AVERAGE window on the real-units meter: -21 to
+    // -15 dBFS (about -18 average, the digital-console standard), in the
+    // engine's nominal-anchored linear values.
+    gainStructure: { refChannel: 5, unity: 0.75, faderTol: 0.06, inputBand: [0.575, 1.148] },
     conditions: [
-      { source: 'playback', dest: 'pa', min: 0.30, max: 0.50 },
+      { source: 'playback', dest: 'pa', min: 0.30, max: 0.65 },
     ],
     symptom: 'The system is on and the console is fully zeroed, with your playback connected. Set your gain structure start to finish: check it in PFL, set the gain, bring the faders to unity, then set the room level with the PA.',
     hint: 'Press PFL on the playback to hear it in your headphones. Set the GAIN so the meter sits in the healthy zone. Release PFL, unmute the playback and the master, and bring both faders up to unity. Then bring up the PA speaker volume until the room sits at a good level on the loudness meter.',
@@ -425,22 +428,25 @@ window.LEVELS = [
     // (aux 1 low) and asks for more. As the student turns AUX 1 up to give her
     // more, the loop gain crosses the ring threshold and the wedge starts to
     // feed back. To win, the student needs the vocal LOUD in the wedge
-    // (>= 0.6) AND no feedback, so pulling the send back down won't do it.
+    // (>= 0.8, about 1.2 dB PAST the ring point under the real-dB loop) AND
+    // no feedback, so pulling the send back down won't do it.
     // For now HPF clears it (drops the low-end loop gain ~40% while the wedge
     // level stays up). NEXT TURN: add an EQ on the aux outputs as the real,
     // surgical fix; HPF is the stopgap so the level is solvable today.
     symptom: 'Turn the singer\'s vocal up in her wedge so she can hear herself. Careful: monitors feed back when you push them too hard.',
     hint: 'Turn up AUX 1 on the vocal to give her more in her wedge. When it starts to ring, look at the monitor EQ on her wedge: the ringing frequency glows. Pull that band down just far enough to stop the ring. Cuts cost a little monitor level, so keep them small. (HPF only helps low-frequency ring, not this one.)',
     hints: [
-      { title: 'Give her more', target: 'ch1-aux', teach: 'She wants more of herself on stage, so push AUX 1 up. As a wedge gets loud it can start to ring, which is the monitor feeding back on itself.', text: 'Bring AUX 1 on the vocal up so her wedge reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.6) },
+      { title: 'Give her more', target: 'ch1-aux', teach: 'She wants more of herself on stage, so push AUX 1 up. As a wedge gets loud it can start to ring, which is the monitor feeding back on itself.', text: 'Bring AUX 1 on the vocal up so her wedge reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
       { title: 'Ring it out', target: 'out-wedge1', teach: 'Feedback rings at one frequency. On the wedge\'s Monitor EQ that band glows. Pull just that band down a touch and the ring stops while she keeps her level.', text: 'When it rings, pull the glowing band down on her Monitor EQ, just enough to stop it.', done: (ctx) => !ctx.feedback },
     ],
-    // Wedge min sits at 0.6 (was 0.7) since 2026-06-11 PM: EQ cuts now cost
-    // level (eqLevelGain), so the ring-out's own cut eats a little of the
-    // send level — exactly like a real desk.
+    // Wedge min 0.8 under the real-dB loop (2026-07-02): the ring point on
+    // the primed wedge sits at a send of ~0.66, and 0.8 lands about 1.2 dB
+    // past it, so the level she asks for genuinely cannot be reached without
+    // ringing out the hot band. EQ cuts still cost level (eqLevelGain), so
+    // the cut eats a little of the send — exactly like a real desk.
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
-      { source: 'vocal', dest: 'wedge', min: 0.6 },
+      { source: 'vocal', dest: 'wedge', min: 0.8 },
     ],
     sabotage: (s) => {
       // Vocal live in the PA. Her wedge has been pushed up all night (volume
@@ -609,9 +615,10 @@ window.LEVELS = [
 // matter what the rng broke — and a hard-panned or one-sided fault can't
 // slip through.
 //
-// Numbers (power-summed engine): gain 0.4 -> chanIn 0.79, fader 0.6 ->
-// post 0.474 -> per-source, per-side PA contribution 0.277 (conditions
-// min 0.2 with margin); main bus 0.711, well under the 1.22 clip threshold.
+// Numbers (real-units engine): gain 0.42 -> chanIn 0.812 (+4 dBu, -18 dBFS),
+// fader 0.6 (-5.8 dB) -> post 0.415, master at unity, PA trim 0.6 (-6 dB)
+// -> per-source, per-side PA contribution 0.27 (conditions min 0.2 with
+// margin); the main bus power-sums to about 0 dBu, 22 dB under the clip.
 function bandUp(s) {
   for (let i = 0; i < 4; i++) {
     s.channels[i].mute = false;
@@ -706,13 +713,17 @@ window.PRACTICE_FAULTS = [
   // the monitor stays up. min 0.42 keeps the send required (can't cheat by
   // pulling it to zero) with room to ring out without fighting the floor.
   { key: 'feedback', label: 'Wedge feeding back', blurb: 'A wedge is ringing at a couple of frequencies; cut those bands to clear it.', par: 2, weight: 2, apply: (s, rng) => {
+    // 0.72 send + 0.72 wedge puts the loop about +1.5 dB over unity under the
+    // real-dB engine: the top two or three resonances ring (matching the
+    // blurb and the par), each clearing with a small cut. Hotter settings
+    // light up every band at once, which is a different, harsher lesson.
     if (rng() < 0.5) {
-      s.channels[0].aux1 = 0.75;
-      s.outputs.wedge.volume = 0.8;
+      s.channels[0].aux1 = 0.72;
+      s.outputs.wedge.volume = 0.72;
       return { conditions: [{ source: 'vocal', dest: 'wedge', min: 0.42 }] };
     }
-    s.channels[1].aux2 = 0.75;
-    s.outputs.wedge2.volume = 0.8;
+    s.channels[1].aux2 = 0.72;
+    s.outputs.wedge2.volume = 0.72;
     return { conditions: [{ source: 'vocal2', dest: 'wedge2', min: 0.42 }] };
   } },
   // CROSSPATCH — two cables traded places. The console's channel labels and
@@ -938,7 +949,11 @@ window.FEEDBACK_MODE = {
   title: 'Mic Feedback Mode',
   par: 12,
   conditions: [
-    { source: 'vocal', dest: 'wedge', min: 0.65 },
+    // Target 1.0 under the real-dB engine: reaching it forces the send about
+    // 1.6 dB past the third resonance's ring point, so a rep always rides
+    // through the hot ladder (3 rings, sometimes the borderline 4th right at
+    // the target) — the full real ring-out arc, never a one-cut shortcut.
+    { source: 'vocal', dest: 'wedge', min: 1.0 },
   ],
   // The wedge must keep >= 92% of its response: a real ring-out's three or
   // four small cuts pass easily, slammed sliders or shotgun cutting fail.
