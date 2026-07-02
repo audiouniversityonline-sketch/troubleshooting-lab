@@ -8001,7 +8001,7 @@ function App() {
   // Load a scenario. reuseSeed replays the same attempt (Reset); omitting it
   // rolls a fresh seed (level change, Practice Again), which is what makes a
   // challenge replay a new rep instead of a memory test.
-  const loadLevel = (i, reuseSeed, bypassLock) => {
+  const loadLevel = (i, reuseSeed, bypassLock, carryFrom) => {
     const lv = SCENARIOS[i];
     // Practice Mode is soft-gated for the free tier: playable while the taste
     // budget lasts, then it shows the pitch like any locked mode. Feedback Mode
@@ -8027,9 +8027,14 @@ function App() {
     // audio start.
     if (lv && lv.isWalkthrough) { setWalkStep(0); setWalkPhase('steps'); setAudioOn(true); }
     else setWalkPhase(null);
-    const base = window.defaultState();
-    base.topology = { ...base.topology, ...(lv.topology || {}) };
-    base.channels = normalizeChannels(base.channels, deriveInvolves(lv));
+    // A carried advance (the multi-step mixer flow) starts from the PREVIOUS
+    // lesson's board so the student's settings persist instead of resetting to a
+    // fresh sandbox. Direct entry from the menu (no carryFrom) still starts clean.
+    const base = carryFrom ? JSON.parse(JSON.stringify(carryFrom)) : window.defaultState();
+    if (!carryFrom) {
+      base.topology = { ...base.topology, ...(lv.topology || {}) };
+      base.channels = normalizeChannels(base.channels, deriveInvolves(lv));
+    }
     const seed = reuseSeed != null ? reuseSeed : ((Math.random() * 0xffffffff) >>> 0);
     seedRef.current = seed;
     // The zero-fault "sign off" rep was removed, so content.js uses its own
@@ -8042,9 +8047,20 @@ function App() {
     // can't see React state), and reports the rep's par + fault keys back
     // through PRACTICE_LAST for the debrief.
     window.PRACTICE_FAULT_COUNT = practiceFaultsRef.current;
-    const sab = lv.sabotage(base, mulberry32(seed));
+    const sab = carryFrom ? base : lv.sabotage(base, mulberry32(seed));
     if (lv.isPractice) practiceInfoRef.current = window.PRACTICE_LAST || null;
-    sab.inspect = lv.defaultInspect || 'pa';
+    if (carryFrom) {
+      // Keep the carried monitoring state, EXCEPT the "in the room" lessons drop
+      // PFL and listen to the mains, so moving the fader / pan / send actually
+      // changes what you hear. PFL persists into the gain lesson (you set gain
+      // while listening in PFL, which is the whole point of that step).
+      if (lv.id === 'mix-fader' || lv.id === 'mix-pan' || lv.id === 'mix-aux') {
+        sab.channels.forEach((c) => { c.solo = false; });
+        sab.inspect = 'pa';
+      }
+    } else {
+      sab.inspect = lv.defaultInspect || 'pa';
+    }
     setState(sab);
     setLevelIdx(i);
     setSolved(false);
@@ -8366,7 +8382,7 @@ function App() {
     // Bleed straight into the next lesson in the course, the way the other
     // courses advance.
     const pos = MIXER_INDEXES.indexOf(levelIdx);
-    if (pos >= 0 && pos + 1 < MIXER_INDEXES.length) { loadLevel(MIXER_INDEXES[pos + 1]); return; }
+    if (pos >= 0 && pos + 1 < MIXER_INDEXES.length) { loadLevel(MIXER_INDEXES[pos + 1], seedRef.current, false, state); return; }
     // Last lesson done. The Mixer Tutorial is the free tier's end of guided
     // content, so a free viewer gets the wrap here: a recap, the email capture
     // (the lead magnet's ask at the moment of peak interest), and where to next
