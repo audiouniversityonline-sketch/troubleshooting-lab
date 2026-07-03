@@ -1036,14 +1036,14 @@ function detectClipping(audio, state) {
   // the upstream-most clipping stage and tell the user which knob actually
   // fixes it.
   //
-  // Thresholds match the moment the corresponding meter first shows its
-  // top red LED — what "in the red" means to the user. For each meter
-  // lit = round(displayValue / 1.1 * segments), red is the top 2 segments.
+  // Thresholds are in the real dBu model. Each stage WARNS (settled/baseline)
+  // a little before the AUDIBLE grit (which fires on live PEAKS), so the meter
+  // goes red before you hear it distort, never after:
   //
-  //   Preamp (PFL bar, 14 segs, ×0.95 display)  → chanIn > 1.03
-  //   Channel meter (22 segs, ×1.2 display)     → post > 0.93
-  //   Master (26 segs, ×0.85 display)           → mainBus > 1.22
-  //   Speaker (10 segs, ×1.0 display)           → outputs > 1.03
+  //   Preamp   → chanIn baseline > +15 dBu   (grit when peaks reach +22)
+  //   Channel  → post   baseline > +15 dBu
+  //   Master   → mainBus         > +22 dBu   (0 dBFS, the output ceiling)
+  //   Speaker  → outputs         > +14 dBu   (grit ceiling is 0 dBFS / +22)
 
   // Stage 1 — PREAMP (channel input after the gain knob). The PFL bar's
   // red zone. Only the GAIN knob fixes this; the fader is downstream and
@@ -8054,12 +8054,22 @@ function App() {
     // master is being driven through saturation — same lesson the user sees
     // on the master meter. A PA-speaker clip applies only when the user is
     // monitoring PA (cans on the PFL bus aren't affected by speaker clip).
-    const mainClipped = ((audio.mainBus?.L || 0) > window.dbuToLin(22)) || ((audio.mainBus?.R || 0) > window.dbuToLin(22));
-    const paClipped   = ((audio.outputs?.pa_l || 0) > 1.03) || ((audio.outputs?.pa_r || 0) > 1.03);
-    const wedgeClipped  = (audio.outputs?.wedge  || 0) > 1.03;
-    const wedge2Clipped = (audio.outputs?.wedge2 || 0) > 1.03;
-    const wedge3Clipped = (audio.outputs?.wedge3 || 0) > 1.03;
-    const wedge4Clipped = (audio.outputs?.wedge4 || 0) > 1.03;
+    // Every output stage clips at the same 0 dBFS (+22 dBu) ceiling as the main
+    // bus and the preamp — one clip point across the whole desk. The old speaker
+    // flags used a legacy 1.03 linear (~-16 dBFS), which a healthy summed mix
+    // sailed past on any vocal PEAK: because a bus-clip flag bumps the drive on
+    // EVERY source routed there, one channel's transient made the whole mix grit
+    // even though each channel was clean in PFL. Summing is uncorrelated (~sqrt N)
+    // and the bus carries full 0-dBFS headroom, so a well-gain-staged mix sums
+    // clean; only a genuinely over-driven output (master or a speaker's own
+    // volume cranked, or over-gained inputs upstream) reaches the ceiling.
+    const OUT_CLIP = window.dbuToLin(22);
+    const mainClipped = ((audio.mainBus?.L || 0) > OUT_CLIP) || ((audio.mainBus?.R || 0) > OUT_CLIP);
+    const paClipped   = ((audio.outputs?.pa_l || 0) > OUT_CLIP) || ((audio.outputs?.pa_r || 0) > OUT_CLIP);
+    const wedgeClipped  = (audio.outputs?.wedge  || 0) > OUT_CLIP;
+    const wedge2Clipped = (audio.outputs?.wedge2 || 0) > OUT_CLIP;
+    const wedge3Clipped = (audio.outputs?.wedge3 || 0) > OUT_CLIP;
+    const wedge4Clipped = (audio.outputs?.wedge4 || 0) > OUT_CLIP;
     for (const k of Object.keys(chainsRef.current)) {
       // Compute per-side levels so the playback is genuinely stereo. When
       // monitoring PA, the L/R contributions split per the pan law and the
