@@ -1420,27 +1420,43 @@ window.speakerLiveForPatch = speakerLiveForPatch;
 // when a level wobbles right at the threshold. Module-level is safe here:
 // every caller in a frame passes the same state.
 // Directional mic REJECTION in 3D (the Mic Placement feature). A monitor wedge
-// sitting off the mic's front axis gets attenuated on the way back in, by
-// rejection = |a + (1-a)cosθ| where θ is the 3D angle between the mic axis and
-// the direction to the wedge. The student sets θ across two planes: `az` (the
-// horizontal angle of the wedge off the mic's front) and `tilt` (the mic's
-// vertical tilt; the floor wedge sits FLOOR_DROP below it). cosθ combines them
-// (cosθ = cos(az)·cos(tilt+FLOOR_DROP)). a: cardioid .5 / super .375 / hyper
-// .25 sets where the null falls (cardioid straight back, super/hyper to the
-// rear sides with a live lobe behind). No setup (every existing lesson) returns
-// 1.0, so placement can only EARN headroom and never shifts the base feedback
-// calibration. Floor 0.08 (~ -22 dB, a real deep null).
+// sitting off the mic's front axis is picked up at the mic's polar sensitivity
+// for that direction, |a + (1-a)cosθ|, where θ is the 3D angle between the mic
+// axis and the direction to the wedge. The student sets θ across two planes:
+// `az` (the horizontal angle of the wedge off the mic's front) and `tilt` (the
+// mic's vertical tilt; the floor wedge sits FLOOR_DROP below it). cosθ combines
+// them (cosθ = cos(az)·cos(tilt+FLOOR_DROP)). a: cardioid .5 / super .375 /
+// hyper .25 sets where the null falls (cardioid straight back at 180°, super
+// ~125°, hyper ~110°, with super/hyper keeping a live rear lobe behind — a hyper
+// pointed rear-at-wedge is worse than a super). Floor 0.1 (~ -20 dB): a real
+// mic's null is deep but never truly -inf (mfrs spec -15..-25 dB rear).
 const MIC_A3 = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
 const FLOOR_DROP = 35; // degrees a floor wedge sits below the mic
-function micRejection3D(setup) {
-  if (!setup) return 1.0;
+function micRejectionRaw(setup) {
   const a = MIC_A3[setup.pattern] != null ? MIC_A3[setup.pattern] : 0.5;
   const az = (setup.az != null ? setup.az : 0) * Math.PI / 180;
   const bv = Math.min(180, Math.max(0, (setup.tilt != null ? setup.tilt : 0) + FLOOR_DROP)) * Math.PI / 180;
   const cosT = Math.cos(az) * Math.cos(bv);
-  return Math.max(0.08, Math.abs(a + (1 - a) * cosT));
+  return Math.max(0.1, Math.abs(a + (1 - a) * cosT));
+}
+// Placement is applied RELATIVE to a realistic DEFAULT (a decently-aimed cardioid,
+// wedge behind and below). That default is the reference the whole feedback
+// calibration is anchored to, so placement works BOTH ways: aim the wedge into
+// the null and you EARN gain before feedback; drop it right in front of the mic
+// (on-axis) and you LOSE it and ring sooner — the actual point of the feature.
+// The old model used on-axis as the baseline, so a bad placement was the neutral
+// case and could never hurt. No setup returns 1.0 (identical to the default), so
+// every existing lesson's feedback calibration is untouched; only when a student
+// aims the mic does the loop move. Verified vs research: front->null spread ~18
+// dB, wedge on-axis ~ +12 dB hotter loop, a real GBF penalty.
+const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 135, tilt: 5 };
+const REF_REJ = micRejectionRaw(DEFAULT_MIC_SETUP);
+function micRejection3D(setup) {
+  if (!setup) return 1.0;
+  return Math.max(0.3, Math.min(4.5, micRejectionRaw(setup) / REF_REJ));
 }
 window.micRejection3D = micRejection3D;
+window.DEFAULT_MIC_SETUP = DEFAULT_MIC_SETUP;
 const _ringActive = {};
 // Barkhausen anchor for the acoustic loop: FEED_0DB is the wedge feed (legacy
 // linear) at which a 0 dB resonance band sits exactly at loop gain = 1. The
@@ -3386,9 +3402,10 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   const A = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
   const NAME = { cardioid: 'cardioid', super: 'supercardioid', hyper: 'hypercardioid' };
   const capFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  const pat = (setup && setup.pattern) || 'cardioid';
-  const az = (setup && setup.az != null) ? setup.az : 150;
-  const tilt = (setup && setup.tilt != null) ? setup.tilt : 5;
+  const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 135, tilt: 5 };
+  const pat = (setup && setup.pattern) || DEF.pattern;
+  const az = (setup && setup.az != null) ? setup.az : DEF.az;
+  const tilt = (setup && setup.tilt != null) ? setup.tilt : DEF.tilt;
   const a = A[pat];
   const d2r = (d) => d * Math.PI / 180;
   const rOf = (aa, deg) => Math.abs(aa + (1 - aa) * Math.cos(d2r(deg)));
@@ -8927,7 +8944,7 @@ function App() {
         open={!!placementFor} srcKey={placementFor}
         label={placementFor && window.SOURCES[placementFor] ? window.SOURCES[placementFor].label : ''}
         setup={state.micSetup && placementFor ? state.micSetup[placementFor] : null}
-        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { pattern: 'cardioid', az: 150, tilt: 5, ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
+        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 135, tilt: 5 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
         onClose={() => setPlacementFor(null)}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
