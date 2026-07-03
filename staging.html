@@ -91,7 +91,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=14"></script>
+<script src="content-staging.js?v=16"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -3816,7 +3816,7 @@ function FanOutPoint({ fanOutRef }) {
 // in front of the PA. dB SPL is mapped from the combined L/R output and the
 // "safe exposure" text is derived from the NIOSH REL (3 dB exchange rate).
 // Calibration is a teaching approximation, not a measurement substitute.
-function AudienceSplMeter({ paL, paR }) {
+function AudienceSplMeter({ paL, paR, target }) {
   const avg = ((paL || 0) + (paR || 0)) / 2;
   const instantDb = dbSplFromPa(avg);
   // Real SPL meters integrate over time (LAslow uses a 1-second time constant).
@@ -3843,6 +3843,17 @@ function AudienceSplMeter({ paL, paR }) {
   // the text recommendation.
   const tickSafe   = Math.max(0, Math.min(1, (85 - 60) / 60));   // ~42% across
   const tickDanger = Math.max(0, Math.min(1, (100 - 60) / 60));  // ~67% across
+  // Optional room-level TARGET band (dB SPL). A level that teaches "set the
+  // room level" (the PA-capped condition) passes {lo, hi} so the objective is
+  // visible right on the gauge the engineer watches — no translating an
+  // abstract percentage. A live show sits above the 85 dB all-day-safe line by
+  // nature, so the target lands in the amber "watch" zone on purpose; the band
+  // tells the student THAT loud is the goal here, not a mistake.
+  const tgt = (target && Number.isFinite(target.lo) && Number.isFinite(target.hi)) ? target : null;
+  const tLo = tgt ? Math.max(0, Math.min(1, (tgt.lo - 60) / 60)) : 0;
+  const tHi = tgt ? Math.max(0, Math.min(1, (tgt.hi - 60) / 60)) : 0;
+  const onTarget = tgt && db >= tgt.lo && db <= tgt.hi;
+  const targetMsg = !tgt ? '' : onTarget ? '✓ on target' : (db < tgt.lo ? 'raise the PA →' : 'lower the PA ←');
   const zoneColor = exposure.zone === 'safe' ? 'var(--green)'
                   : exposure.zone === 'watch' ? 'var(--amber)'
                   : exposure.zone === 'limit' ? '#ffb547'
@@ -3872,9 +3883,17 @@ function AudienceSplMeter({ paL, paR }) {
       {/* Horizontal bar with NIOSH breakpoint ticks at 85 dB and 100 dB */}
       <div style={{ position: 'relative', height: 7, background: '#0a0a0c', borderRadius: 2, overflow: 'hidden' }}>
         <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: (fill * 100) + '%', background: zoneColor, transition: 'width 0.15s ease-out, background 0.3s' }}/>
+        {tgt && (
+          <div style={{ position: 'absolute', left: (tLo * 100) + '%', width: ((tHi - tLo) * 100) + '%', top: 0, bottom: 0, background: 'rgba(74,222,128,0.28)', borderLeft: '1px solid var(--green)', borderRight: '1px solid var(--green)', boxShadow: onTarget ? '0 0 6px rgba(74,222,128,0.6)' : 'none' }} title={'Target: ' + Math.round(tgt.lo) + '–' + Math.round(tgt.hi) + ' dB'}/>
+        )}
         <div style={{ position: 'absolute', left: (tickSafe * 100) + '%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.35)' }} title="85 dB"/>
         <div style={{ position: 'absolute', left: (tickDanger * 100) + '%', top: 0, bottom: 0, width: 1, background: 'rgba(255,70,48,0.6)' }} title="100 dB"/>
       </div>
+      {tgt && (
+        <div className="mono" style={{ fontSize: 7.5, letterSpacing: 0.4, fontWeight: 700, color: onTarget ? 'var(--green)' : 'var(--amber)' }}>
+          AIM {Math.round(tgt.lo)}–{Math.round(tgt.hi)} dB · {targetMsg}
+        </div>
+      )}
       <div className="mono" style={{ fontSize: 7.5, color: zoneColor, letterSpacing: 0.4, fontWeight: 600 }}>
         {exposure.text}
       </div>
@@ -7509,7 +7528,11 @@ function App() {
     const poweredDown = !level.requirePowerOff || (() => {
       const o = state.outputs;
       const consoleOff = state.mixer ? state.mixer.on === false : false;
-      const wedgesOff = !(o.wedge && o.wedge.on) && !(o.wedge2 && o.wedge2.on);
+      // All FOUR wedges (symmetric with poweredUp's wedgesOn and with the
+      // brief's "Wedges off" objective row). Checking only wedge+wedge2 let a
+      // player win Power-Down with Wedge 3 / Wedge 4 still powered on while the
+      // objective row stayed red — the win and the checklist disagreed.
+      const wedgesOff = !(o.wedge && o.wedge.on) && !(o.wedge2 && o.wedge2.on) && !(o.wedge3 && o.wedge3.on) && !(o.wedge4 && o.wedge4.on);
       const passive = (state.topology && state.topology.paRig) === 'amp+passive';
       const paOff = passive
         ? !(o.amp && o.amp.on)
@@ -7525,7 +7548,7 @@ function App() {
     const zeroedOk = !level.requireZeroed || (
       state.channels.every(c =>
         c.mute && c.fader <= ZTOL && c.gain <= ZTOL &&
-        c.aux1 <= ZTOL && c.aux2 <= ZTOL &&
+        c.aux1 <= ZTOL && c.aux2 <= ZTOL && (c.aux3 || 0) <= ZTOL && (c.aux4 || 0) <= ZTOL &&
         Math.abs(c.pan - 0.5) <= ZTOL &&
         !c.highpass && !c.phantom
       ) && state.master.mute && state.master.fader <= ZTOL
@@ -8283,7 +8306,7 @@ function App() {
   // Load a scenario. reuseSeed replays the same attempt (Reset); omitting it
   // rolls a fresh seed (level change, Practice Again), which is what makes a
   // challenge replay a new rep instead of a memory test.
-  const loadLevel = (i, reuseSeed, bypassLock, carryFrom) => {
+  const loadLevel = (i, reuseSeed, bypassLock, carryFrom, carryMon) => {
     const lv = SCENARIOS[i];
     // Practice Mode is soft-gated for the free tier: playable while the taste
     // budget lasts, then it shows the pitch like any locked mode. Feedback Mode
@@ -8342,6 +8365,17 @@ function App() {
       }
     } else {
       sab.inspect = lv.defaultInspect || 'pa';
+    }
+    // Carry PFL (monitoring) between consecutive Essentials lessons so the
+    // continuous on-site build feels continuous: a channel you left in PFL is
+    // still in PFL in the next lesson. Skipped for the channels THIS lesson
+    // wants a fresh PFL check on (requirePflEach / the gain lesson's ref), so
+    // the check still scores the student's own action, not a leftover solo.
+    if (carryMon && Array.isArray(carryMon.solo) && !carryFrom && Array.isArray(sab.channels)) {
+      const freshPfl = new Set();
+      if (Array.isArray(lv.requirePflEach)) lv.requirePflEach.forEach((ch) => freshPfl.add(ch - 1));
+      if (lv.requirePflCheck && lv.gainStructure && lv.gainStructure.refChannel != null) freshPfl.add(lv.gainStructure.refChannel - 1);
+      sab.channels.forEach((c, i) => { c.solo = freshPfl.has(i) ? false : !!carryMon.solo[i]; });
     }
     setState(sab);
     setLevelIdx(i);
@@ -8721,7 +8755,15 @@ function App() {
   };
   // Next into a locked challenge is allowed on purpose: loadLevel shows the
   // member pitch instead of the scenario (the picker does the same).
-  const next = () => { if (levelIdx + 1 < SCENARIOS.length) loadLevel(levelIdx + 1); };
+  const next = () => {
+    if (levelIdx + 1 >= SCENARIOS.length) return;
+    const cur = SCENARIOS[levelIdx], nxt = SCENARIOS[levelIdx + 1];
+    // Between two Essentials lessons (numeric ids, the continuous build), carry
+    // the PFL monitoring state forward so it feels like one job, not ten resets.
+    const carryMon = (cur && nxt && typeof cur.id === 'number' && typeof nxt.id === 'number')
+      ? { solo: (state.channels || []).map((c) => !!c.solo) } : null;
+    loadLevel(levelIdx + 1, undefined, false, undefined, carryMon);
+  };
   const prev = () => { if (levelIdx > 0) loadLevel(levelIdx - 1); };
 
   // Gate to desktop. Every hook below must be called before the early return
@@ -9156,7 +9198,15 @@ function App() {
             </div>
           );
         })()}
-        <window.AudienceSplMeter paL={audio.outputs.pa_l} paR={audio.outputs.pa_r}/>
+        <window.AudienceSplMeter paL={audio.outputs.pa_l} paR={audio.outputs.pa_r} target={(() => {
+          // A level that caps the room level (a dest:'pa' condition with a max)
+          // is teaching "set the room level" — surface that band on the loudness
+          // meter so the objective is visible on the gauge, not just an abstract
+          // percentage in the brief. Map the condition's linear min/max to dB SPL.
+          const rc = (level.conditions || []).find(c => c.dest === 'pa' && c.max != null);
+          if (!rc) return null;
+          return { lo: dbSplFromPa(rc.min != null ? rc.min : 0.0005), hi: dbSplFromPa(rc.max) };
+        })()}/>
       </div>
 
       {/* Phantom-power POP feedback overlay. A sharp red flash that fades
@@ -10043,7 +10093,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
     var src = Array.prototype.map.call(document.scripts, function (s) { return s.src; })
       .filter(function (s) { return /content[a-z-]*\.js\?v=/.test(s); })[0] || '';
     var m = src.match(/\?v=(\d+)/);
-    var staging = /content-staging/.test(src);
+    // Environment label. Key off BOTH the page filename (the deploy identity:
+    // production is always index.html, staging is staging.html) AND the content
+    // script name. index.html never contains "staging" in its path, so the real
+    // production file can never mislabel — even if a deploy fumbles the script
+    // src line. Either signal reading "staging" is treated as staging (the safe,
+    // surface-the-fumble call). A staging-labeled tool on a member page means the
+    // embed is pointing at staging.html; repoint it at the site root / index.html.
+    var path = (typeof location !== 'undefined' && location.pathname) || '';
+    var staging = /content-staging/.test(src) || /staging/i.test(path);
     var badge = document.createElement('div');
     badge.textContent = (staging ? 'staging v' : 'v') + (m ? m[1] : '?');
     badge.title = 'Build version (bumps on every deploy). Use it to confirm a new version has loaded.';
