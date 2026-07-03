@@ -102,7 +102,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=54"></script>
+<script src="content.js?v=55"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1674,6 +1674,26 @@ function Knob({ value, onChange, min = 0, max = 1, size = 44, label, sublabel, c
     if (disabled) return;
     onChange(detentAt != null ? detentAt : (min + max) / 2);
   };
+  // Keyboard operability (the console was pointer-only). Arrows nudge, Shift =
+  // fine, PageUp/Down = coarse, Home/End = ends. role="slider" + aria-value* let
+  // a screen reader announce the level.
+  const onKeyDown = (e) => {
+    if (disabled) return;
+    const fine = e.shiftKey ? (max - min) / 200 : (max - min) / 50;
+    let v = value, handled = true;
+    switch (e.key) {
+      case 'ArrowUp': case 'ArrowRight': v = value + fine; break;
+      case 'ArrowDown': case 'ArrowLeft': v = value - fine; break;
+      case 'PageUp': v = value + (max - min) / 10; break;
+      case 'PageDown': v = value - (max - min) / 10; break;
+      case 'Home': v = min; break;
+      case 'End': v = max; break;
+      default: handled = false;
+    }
+    if (!handled) return;
+    e.preventDefault();
+    onChange(Math.max(min, Math.min(max, v)));
+  };
 
   const cx = size / 2, cy = size / 2;
   const r = size / 2 - 3;
@@ -1710,6 +1730,13 @@ function Knob({ value, onChange, min = 0, max = 1, size = 44, label, sublabel, c
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onDoubleClick={onDoubleClick}
+        onKeyDown={onKeyDown}
+        tabIndex={disabled ? -1 : 0}
+        role="slider"
+        aria-label={label || tip || 'control'}
+        aria-valuemin={min} aria-valuemax={max}
+        aria-valuenow={Number(value.toFixed(3))}
+        aria-valuetext={format ? format(value) : Math.round(norm * 100) + ' percent'}
       >
         {ticks}
         <path d={`M ${sx} ${sy} A ${arcR} ${arcR} 0 ${largeArc} 1 ${ex} ${ey}`} stroke={color} strokeWidth="2" fill="none" strokeLinecap="round" opacity={0.9}/>
@@ -1758,6 +1785,22 @@ function Fader({ value, onChange, height = 180, color = '#dcd7c6', tickLabels = 
     try { ref.current.releasePointerCapture(e.pointerId); } catch {}
   };
   const onDoubleClick = () => onChange(0.75);
+  const onKeyDown = (e) => {
+    const fine = e.shiftKey ? 0.005 : 0.02;
+    let v = value, handled = true;
+    switch (e.key) {
+      case 'ArrowUp': case 'ArrowRight': v = value + fine; break;
+      case 'ArrowDown': case 'ArrowLeft': v = value - fine; break;
+      case 'PageUp': v = value + 0.1; break;
+      case 'PageDown': v = value - 0.1; break;
+      case 'Home': v = 1; break;
+      case 'End': v = 0; break;
+      default: handled = false;
+    }
+    if (!handled) return;
+    e.preventDefault();
+    onChange(Math.max(0, Math.min(1, v)));
+  };
 
   const capH = 28;
   const trackH = height;
@@ -1792,6 +1835,13 @@ function Fader({ value, onChange, height = 180, color = '#dcd7c6', tickLabels = 
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onDoubleClick={onDoubleClick}
+        onKeyDown={onKeyDown}
+        tabIndex={0}
+        role="slider"
+        aria-label="fader level"
+        aria-valuemin={0} aria-valuemax={1}
+        aria-valuenow={Number(value.toFixed(3))}
+        aria-valuetext={Math.round(value * 100) + ' percent'}
         style={{
           position: 'relative',
           width: 22,
