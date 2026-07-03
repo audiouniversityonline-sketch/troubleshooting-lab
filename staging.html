@@ -1781,7 +1781,11 @@ const dbfsFrac = (db) => Math.max(0, Math.min(1, (db - DBFS_FLOOR) / (0 - DBFS_F
 window.dbfsFrac = dbfsFrac;
 // dBFS -> LED color. Green is the working range, amber the last stretch before
 // clip, red the top few dB and over.
-const dbfsColor = (db) => (db >= -1 ? '#ff4630' : db >= -6 ? '#ffb547' : '#4ade80');
+// Zone map, X32-like: green up to -12 dBFS, amber -12..-3 (hot), red from -3
+// (danger: peaks are within 3 dB of the clip point). Audible distortion does
+// not start until peaks actually REACH the clip point, so the red always
+// warns BEFORE you hear it — never after.
+const dbfsColor = (db) => (db >= -3 ? '#ff4630' : db >= -12 ? '#ffb547' : '#4ade80');
 
 function LedMeter({ level, height = 180, segments = 18, scale = false }) {
   const db = window.levelToDbfs(level);
@@ -1838,9 +1842,8 @@ function MiniMeter({ level, width = 44, segments = 10 }) {
     }}>
       {Array.from({ length: segments }).map((_, i) => {
         let c;
-        if (i >= segments - 2) c = '#ff4630';
-        else if (i >= segments - 4) c = '#ffb547';
-        else c = '#4ade80';
+        const segDb = -48 + ((i + 1) / segments) * 48;
+        c = dbfsColor(segDb);
         const on = i < lit;
         return <div key={i} style={{
           flex: 1,
@@ -1954,9 +1957,10 @@ function PFLBar({ level, hot }) {
       }}>
         {Array.from({ length: segs }).map((_, i) => {
           let c;
-          if (i >= segs - 2) c = '#ff4630';
-          else if (i >= segs - 5) c = '#ffb547';
-          else c = '#4ade80';
+          // Same dBFS zone map as every other meter, so "red" means one
+          // thing everywhere: peaks within 3 dB of the clip point.
+          const segDb = -48 + ((i + 1) / segs) * 48;
+          c = dbfsColor(segDb);
           const on = i < lit;
           return <div key={i} style={{ flex: 1, height: 4, background: on ? c : '#1a1a1c', borderRadius: 0.5, boxShadow: on ? `0 0 3px ${c}` : 'none', opacity: on ? 1 : 0.5 }}/>;
         })}
@@ -8041,17 +8045,23 @@ function App() {
         // under the +22 clip point — and hardens over the next few dB. A
         // dynamic vocal (crest ~+12 dB) grits earlier than a steady bass
         // (crest ~+5 dB) at the same average: real, source-dependent behavior.
+        // Grit begins only when the live peaks actually REACH the +22 dBu
+        // clip point (a hair under, for the analog knee), and hardens fast
+        // past it. The meters' red zone starts at -3 dBFS, so the red always
+        // lights BEFORE the distortion is audible — warn first, like a real
+        // desk. A dynamic vocal (crest ~+12 dB) still grits earlier than a
+        // steady bass (~+5 dB) at the same average: source-dependent, real.
         const chIn = audio.chanIn[chIdx];
         const peakDbu = window.linToDbu(chIn);
-        if (peakDbu > 19) {
-          drive = Math.max(drive, Math.min(10, 1 + (peakDbu - 19) * 1.5));
+        if (peakDbu > 21.5) {
+          drive = Math.max(drive, Math.min(10, 1 + (peakDbu - 21.5) * 2.5));
         }
         const post = audio.post[chIdx];
         const postDbu = window.linToDbu(post);
-        if (postDbu > 19) {
+        if (postDbu > 21.5) {
           // Same +22 dBu ceiling at the channel/bus stage: fader past unity
           // on a hot channel can clip even when the preamp is clean.
-          drive = Math.max(drive, Math.min(10, 1 + (postDbu - 19) * 1.5));
+          drive = Math.max(drive, Math.min(10, 1 + (postDbu - 21.5) * 2.5));
         }
       }
       if (!audio.anyPfl) {
