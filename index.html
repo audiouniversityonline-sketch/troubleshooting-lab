@@ -91,7 +91,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=51"></script>
+<script src="content.js?v=52"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -10031,6 +10031,29 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+
+// Build version badge. Reads the content script's ?v straight from the loaded
+// DOM, so it shows exactly which build the page is running — a quick way to
+// confirm a fresh deploy actually reached your browser (and to spot a stale
+// cached page, whose old ?v would still show). It reads content.js on
+// production and content-staging.js on staging, so it labels the environment
+// too. The ?v is bumped on every deploy so this number always moves.
+(function () {
+  try {
+    var src = Array.prototype.map.call(document.scripts, function (s) { return s.src; })
+      .filter(function (s) { return /content[a-z-]*\.js\?v=/.test(s); })[0] || '';
+    var m = src.match(/\?v=(\d+)/);
+    var staging = /content-staging/.test(src);
+    var badge = document.createElement('div');
+    badge.textContent = (staging ? 'staging v' : 'v') + (m ? m[1] : '?');
+    badge.title = 'Build version (bumps on every deploy). Use it to confirm a new version has loaded.';
+    badge.style.cssText = 'position:fixed;bottom:6px;right:8px;z-index:99999;'
+      + 'font:600 9.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:0.5px;'
+      + 'color:rgba(180,182,190,0.6);background:rgba(10,10,12,0.5);padding:2px 5px;'
+      + 'border-radius:4px;pointer-events:none;user-select:none;';
+    document.body.appendChild(badge);
+  } catch (e) {}
+})();
 </script>
 </body>
 </html>
