@@ -7898,10 +7898,10 @@ function App() {
     }
 
     // PLAYBACK 5/6 — MUSIC / PINK toggle. The chord-pad oscillators are the
-    // "music" (a real music file slots in here later); pink noise is the
-    // broadband test signal an engineer rings a system out with. Both sum into
-    // the same channel-5 chain through their own selector gain, and
-    // state.playbackMode crossfades between them.
+    // FALLBACK "music" bed; the real music file loads just below and takes over
+    // on the same MUSIC selector. Pink noise is the broadband test signal an
+    // engineer rings a system out with. Both sum into the same channel-5 chain
+    // through their own selector gain, and state.playbackMode crossfades between them.
     {
       const pb = chainsRef.current.playback;
       if (pb) {
@@ -7937,6 +7937,47 @@ function App() {
         pb.musicSel = musicSel; pb.pinkSel = pinkSel; pb.pinkSrc = pinkSrc;
       }
     }
+
+    // PLAYBACK MUSIC — the real music file behind the MUSIC option. Loads async
+    // and hands off from the synth chord-pad the same way the stage stems do:
+    // decode, peak-normalize to a consistent working level, loop, and route
+    // through the MUSIC/PINK selector gain into the drive stage (past the
+    // synth-tuned trim + lowpass, which would leave a real recording quiet and
+    // dull). On success the synth "music" oscillators stop and the MUSIC/PINK
+    // crossfade rides the real file; a failed load just leaves the synth bed.
+    fetch('audio/playback.m4a?v=1')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+      .then(ab => ctx.decodeAudioData(ab))
+      .then(buf => {
+        const pb = chainsRef.current.playback;
+        if (!pb || !pb.drive) return;
+        const startTime = ctx.currentTime + 0.15;
+        let peak = 0;
+        for (let c = 0; c < buf.numberOfChannels; c++) {
+          const d = buf.getChannelData(c);
+          for (let i = 0; i < d.length; i++) { const a = d[i] < 0 ? -d[i] : d[i]; if (a > peak) peak = a; }
+        }
+        const clipGain = ctx.createGain();
+        clipGain.gain.value = peak > 0.0001 ? Math.min(8, 0.6 / peak) : 1;
+        // The MUSIC/PINK selector for the real file. Seed it from the live pink
+        // selector so a load that finishes while PINK is showing stays silent.
+        const musicGain = ctx.createGain();
+        musicGain.gain.value = (pb.pinkSel && pb.pinkSel.gain.value > 0.5) ? 0 : 1;
+        const src = ctx.createBufferSource();
+        src.buffer = buf; src.loop = true;
+        src.connect(clipGain); clipGain.connect(musicGain); musicGain.connect(pb.drive);
+        src.start(startTime);
+        // Hand off: stop the synth chord-pad; the crossfade now rides the file.
+        try {
+          pb.o1 && pb.o1.stop(startTime);
+          pb.o2 && pb.o2.stop(startTime);
+          (pb.chordOscs || []).forEach(o => o.stop(startTime));
+          pb.lfo && pb.lfo.stop(startTime);
+        } catch (_) {}
+        pb.musicSel = musicGain;
+        pb.musicSrc = src; pb.musicClipGain = clipGain;
+      })
+      .catch(e => console.warn('playback music load failed:', e));
 
     // STAGE SOURCE LOOPS — swap the placeholder synth for the real recorded
     // stems. The four files are identical-length (~19.8 s) mono loops, so once
