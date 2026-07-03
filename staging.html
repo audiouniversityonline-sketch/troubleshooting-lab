@@ -1811,21 +1811,49 @@ window.dbfsFrac = dbfsFrac;
 // warns BEFORE you hear it — never after.
 const dbfsColor = (db) => (db >= -3 ? '#ff4630' : db >= -12 ? '#ffb547' : '#4ade80');
 
+// Peak-hold. A real digital meter freezes the highest recent peak for a beat, so
+// you SEE the transient that clipped even though the bar's body sits well below
+// it (program peaks ride ~12 dB above the average). Without it, the peak that
+// drives the preamp into grit only flashes for a frame or two, and the eye reads
+// the steady yellow body while the ear hears the red peak. Holding the peak
+// ~0.9 s then dropping it at a PPM-like ~12 dB/s is what makes "the meter goes
+// red exactly when you'd hear it distort" true, the way it is on a real desk.
+// Time-based (performance.now) so it falls at the same rate no matter how often
+// a given meter re-renders. `ref` persists per meter instance across frames.
+function advancePeakHold(ref, db) {
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+  const st = ref.current;
+  const dt = st.t == null ? 0 : Math.max(0, now - st.t);
+  st.t = now;
+  if (db >= st.db) { st.db = db; st.holdUntil = now + 900; }
+  else if (now >= st.holdUntil) { st.db = Math.max(db, st.db - 0.012 * dt); }
+  return st.db;
+}
+window.advancePeakHold = advancePeakHold;
+// The segment index (0 = bottom) a held dBFS lights, for any N-segment meter.
+const peakHoldIdx = (holdDb, segments) => (holdDb > DBFS_FLOOR + 1
+  ? Math.max(0, Math.min(segments - 1, Math.round(dbfsFrac(holdDb) * segments) - 1)) : -1);
+window.peakHoldIdx = peakHoldIdx;
+
 function LedMeter({ level, height = 180, segments = 18, scale = false }) {
   const db = window.levelToDbfs(level);
   const lit = Math.round(dbfsFrac(db) * segments);
+  const holdRef = useRef({ db: -60, t: null, holdUntil: 0 });
+  const holdDb = advancePeakHold(holdRef, db);
+  const holdIdx = peakHoldIdx(holdDb, segments);
   const cells = [];
   for (let i = 0; i < segments; i++) {
-    const idx = segments - 1 - i; // 0 = top segment
+    const idx = segments - 1 - i; // segDb rises with idx; idx 0 = bottom, high idx = top
     // The dBFS this segment tops out at, so its color and the printed scale agree.
     const segDb = DBFS_FLOOR + ((idx + 1) / segments) * (0 - DBFS_FLOOR);
-    const baseColor = dbfsColor(segDb);
-    const on = idx < lit;
+    const isHold = idx === holdIdx;
+    const col = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+    const on = idx < lit || isHold;
     cells.push(
       <div key={i} style={{
         flex: 1, margin: '1px 0', borderRadius: 1,
-        background: on ? baseColor : '#1a1a1c',
-        boxShadow: on ? `0 0 4px ${baseColor}` : 'inset 0 0 2px #000',
+        background: on ? col : '#1a1a1c',
+        boxShadow: on ? `0 0 ${isHold ? 6 : 4}px ${col}` : 'inset 0 0 2px #000',
         opacity: on ? 1 : 0.5,
       }}/>
     );
@@ -1854,7 +1882,11 @@ function LedMeter({ level, height = 180, segments = 18, scale = false }) {
 // stream gear) so engineers can see signal arriving at each output without
 // needing the full signal-flow diagnostic.
 function MiniMeter({ level, width = 44, segments = 10 }) {
-  const lit = Math.min(segments, Math.round((window.dbfsFrac ? window.dbfsFrac(window.levelToDbfs(level)) : 0) * segments));
+  const db = window.levelToDbfs(level);
+  const lit = Math.min(segments, Math.round((window.dbfsFrac ? window.dbfsFrac(db) : 0) * segments));
+  const holdRef = useRef({ db: -60, t: null, holdUntil: 0 });
+  const holdDb = advancePeakHold(holdRef, db);
+  const holdIdx = peakHoldIdx(holdDb, segments);
   return (
     <div className="ui-no-select" style={{
       display: 'flex', gap: 1,
@@ -1865,15 +1897,15 @@ function MiniMeter({ level, width = 44, segments = 10 }) {
       borderRadius: 2,
     }}>
       {Array.from({ length: segments }).map((_, i) => {
-        let c;
         const segDb = -48 + ((i + 1) / segments) * 48;
-        c = dbfsColor(segDb);
-        const on = i < lit;
+        const isHold = i === holdIdx;
+        const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+        const on = i < lit || isHold;
         return <div key={i} style={{
           flex: 1,
           background: on ? c : '#1a1a1c',
           borderRadius: 0.5,
-          boxShadow: on ? `0 0 2px ${c}` : 'none',
+          boxShadow: on ? `0 0 ${isHold ? 4 : 2}px ${c}` : 'none',
           opacity: on ? 1 : 0.45,
         }}/>;
       })}
@@ -1955,7 +1987,11 @@ function PFLBar({ level, hot }) {
   // gold marker is the healthy AVERAGE zone, around -18 dBFS like a real
   // digital desk: park the signal's average there and let the program's
   // peaks dance above it — that's the real gain-staging picture.
-  const lit = Math.min(segs, Math.round((window.dbfsFrac ? window.dbfsFrac(window.levelToDbfs(level)) : 0) * segs));
+  const db = window.levelToDbfs(level);
+  const lit = Math.min(segs, Math.round((window.dbfsFrac ? window.dbfsFrac(db) : 0) * segs));
+  const holdRef = React.useRef({ db: -60, t: null, holdUntil: 0 });
+  const holdDb = window.advancePeakHold ? window.advancePeakHold(holdRef, db) : db;
+  const holdIdx = window.peakHoldIdx ? window.peakHoldIdx(holdDb, segs) : -1;
   const targetLow = window.dbfsFrac ? window.dbfsFrac(-21) : 0.56;
   const targetHigh = window.dbfsFrac ? window.dbfsFrac(-15) : 0.69;
   return (
@@ -1980,13 +2016,15 @@ function PFLBar({ level, hot }) {
         boxShadow: hot ? '0 0 4px rgba(255,181,71,0.45)' : 'none',
       }}>
         {Array.from({ length: segs }).map((_, i) => {
-          let c;
           // Same dBFS zone map as every other meter, so "red" means one
-          // thing everywhere: peaks within 3 dB of the clip point.
+          // thing everywhere: peaks within 3 dB of the clip point. The held
+          // peak segment lights bright at the highest recent peak so a
+          // transient that grits the preamp leaves a visible mark.
           const segDb = -48 + ((i + 1) / segs) * 48;
-          c = dbfsColor(segDb);
-          const on = i < lit;
-          return <div key={i} style={{ flex: 1, height: 4, background: on ? c : '#1a1a1c', borderRadius: 0.5, boxShadow: on ? `0 0 3px ${c}` : 'none', opacity: on ? 1 : 0.5 }}/>;
+          const isHold = i === holdIdx;
+          const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+          const on = i < lit || isHold;
+          return <div key={i} style={{ flex: 1, height: 4, background: on ? c : '#1a1a1c', borderRadius: 0.5, boxShadow: on ? `0 0 ${isHold ? 5 : 3}px ${c}` : 'none', opacity: on ? 1 : 0.5 }}/>;
         })}
       </div>
     </div>
