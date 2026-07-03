@@ -1420,25 +1420,32 @@ window.speakerLiveForPatch = speakerLiveForPatch;
 // when a level wobbles right at the threshold. Module-level is safe here:
 // every caller in a frame passes the same state.
 // Directional mic REJECTION in 3D (the Mic Placement feature). A monitor wedge
-// sitting off the mic's front axis is picked up at the mic's polar sensitivity
-// for that direction, |a + (1-a)cosθ|, where θ is the 3D angle between the mic
-// axis and the direction to the wedge. The student sets θ across two planes:
-// `az` (the horizontal angle of the wedge off the mic's front) and `tilt` (the
-// mic's vertical tilt; the floor wedge sits FLOOR_DROP below it). cosθ combines
-// them (cosθ = cos(az)·cos(tilt+FLOOR_DROP)). a: cardioid .5 / super .375 /
-// hyper .25 sets where the null falls (cardioid straight back at 180°, super
-// ~125°, hyper ~110°, with super/hyper keeping a live rear lobe behind — a hyper
-// pointed rear-at-wedge is worse than a super). Floor 0.1 (~ -20 dB): a real
-// mic's null is deep but never truly -inf (mfrs spec -15..-25 dB rear).
+// off the mic's front axis is picked up at the mic's polar sensitivity for that
+// direction, |a + (1-a)cosθ|, where θ is the 3D angle between the mic axis and
+// the direction to the wedge. The student sets θ across two planes: `az` (the
+// horizontal angle of the wedge off the mic's front) and `tilt` (the mic's
+// vertical tilt; the floor wedge sits FLOOR_DROP below it). θ is the TRUE angle
+// between the mic-axis unit vector (tilted up by `tilt`) and the wedge-direction
+// unit vector (azimuth `az`, FLOOR_DROP below horizontal), i.e. the spherical
+// law of cosines:  cosθ = cos(tilt)·cos(FLOOR_DROP)·cos(az) - sin(tilt)·sin(FLOOR_DROP).
+// (The old cos(az)·cos(tilt+FLOOR_DROP) was NOT a real 3D angle: off-axis it
+// inverted the tilt effect, so tilting the null onto a rear wedge made feedback
+// WORSE — the bug this replaces.) a: cardioid .5 / super .375 / hyper .25 sets
+// where the null falls (cardioid straight back at 180°, super ~125°, hyper ~110°,
+// with super/hyper keeping a live rear lobe behind — a hyper pointed rear-at-wedge
+// is worse than a super). Floor 0.1 (~ -20 dB): a real null is deep but never
+// truly -inf (mfrs spec -15..-25 dB rear).
 const MIC_A3 = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
 const FLOOR_DROP = 35; // degrees a floor wedge sits below the mic
 function micRejectionRaw(setup) {
   const a = MIC_A3[setup.pattern] != null ? MIC_A3[setup.pattern] : 0.5;
   const az = (setup.az != null ? setup.az : 0) * Math.PI / 180;
-  const bv = Math.min(180, Math.max(0, (setup.tilt != null ? setup.tilt : 0) + FLOOR_DROP)) * Math.PI / 180;
-  const cosT = Math.cos(az) * Math.cos(bv);
+  const tilt = (setup.tilt != null ? setup.tilt : 0) * Math.PI / 180;
+  const phi = FLOOR_DROP * Math.PI / 180;
+  const cosT = Math.cos(tilt) * Math.cos(phi) * Math.cos(az) - Math.sin(tilt) * Math.sin(phi);
   return Math.max(0.1, Math.abs(a + (1 - a) * cosT));
 }
+window.micRejectionRaw = micRejectionRaw;
 // Placement is applied RELATIVE to a realistic DEFAULT (a decently-aimed cardioid,
 // wedge behind and below). That default is the reference the whole feedback
 // calibration is anchored to, so placement works BOTH ways: aim the wedge into
@@ -3410,9 +3417,12 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   const d2r = (d) => d * Math.PI / 180;
   const rOf = (aa, deg) => Math.abs(aa + (1 - aa) * Math.cos(d2r(deg)));
   const FLOOR_DROP = 35;
-  const bv = Math.min(180, Math.max(0, tilt + FLOOR_DROP));
-  const cosT = Math.cos(d2r(az)) * Math.cos(d2r(bv));
-  const rej3 = Math.max(0.08, Math.abs(a + (1 - a) * cosT));
+  // TRUE 3D angle to the floor wedge (spherical law of cosines), the same math
+  // the feedback engine's micRejectionRaw uses, so this panel's number can never
+  // drift from the loop. cosT drives the alt-pattern coaching below; rej3 comes
+  // straight from the shared engine function.
+  const cosT = Math.cos(d2r(tilt)) * Math.cos(d2r(FLOOR_DROP)) * Math.cos(d2r(az)) - Math.sin(d2r(tilt)) * Math.sin(d2r(FLOOR_DROP));
+  const rej3 = window.micRejectionRaw ? window.micRejectionRaw({ pattern: pat, az, tilt }) : Math.max(0.1, Math.abs(a + (1 - a) * cosT));
   const rejDb = Math.round(20 * Math.log10(rej3));
   const nullDeg = pat === 'cardioid' ? 180 : Math.acos(-a / (1 - a)) * 180 / Math.PI;
   let stColor, stWord;
