@@ -1099,6 +1099,7 @@ function mwBoard(s) {
   s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
   s.outputs.wedge3.on = true; s.outputs.wedge3.volume = 0.6; s.outputs.wedge3.mute = false;
   s.outputs.wedge4.on = true; s.outputs.wedge4.volume = 0.6; s.outputs.wedge4.mute = false;
+  s.channels[1].phantom = true; // condenser (Vocal 2) needs phantom for the show
   s.channels[2].phantom = true; // bass is an active DI; power it for the show
   s.channels.forEach((c) => { c.aux1 = 0; c.aux2 = 0; c.aux3 = 0; c.aux4 = 0; });
   return s;
