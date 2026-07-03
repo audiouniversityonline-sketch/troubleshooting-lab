@@ -91,7 +91,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=50"></script>
+<script src="content.js?v=51"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -158,7 +158,12 @@ function envelopeFactor(srcKey, tSec) {
 //   paAvg ~3.0  → ~109 dB SPL (very loud, damage risk)
 function dbSplFromPa(paAvg) {
   if (!Number.isFinite(paAvg) || paAvg <= 0) return 60;
-  return 60 + 25 * Math.log10(1 + 30 * paAvg);
+  // Real chain: SPL at the mix position tracks the PA's drive level dB-for-dB
+  // (a 6 dB fader pull is 6 dB off the room). Calibrated so the default show
+  // level lands in the low 90s dB SPL — a small-club gig at a sane level —
+  // with a ~55 dB room floor when the system is idle.
+  if (!(paAvg > 0.0005)) return 55;
+  return Math.max(55, 90.4 + linToDbu(paAvg));
 }
 
 // NIOSH (National Institute for Occupational Safety and Health) maximum daily
@@ -338,19 +343,19 @@ function makeChannel(o = {}) { return { ...DEFAULT_CHANNEL, ...o }; }
 function defaultState() {
   return {
     channels: [
-      // Default input gains sit at 0.42 (baseline chanIn ~0.81, the lower-middle
-      // of the healthy band [0.80,1.00]). This is the highest gain that stays
-      // CLEAN on peaks: live chanIn = baseline x the meter wiggle, which caps at
-      // 1.25, so 0.81 x 1.25 = 1.01, just under the 1.03 where the preamp starts
-      // to saturate audibly. The input meter then averages ~77% and peaks ~96%,
-      // which is textbook gain staging. Higher (0.55) put the average near the
-      // top and made the dynamic vocal stems distort on every loud syllable.
-      // The fader (not the gain) carries the mix balance below.
-      makeChannel({ id: 1, label: 'Vocal 1', gain: 0.42, phantom: false, fader: 0.72, pan: 0.5, aux1: 0.0 }),
-      makeChannel({ id: 2, label: 'Vocal 2', gain: 0.42, phantom: true,  fader: 0.72, pan: 0.5, aux1: 0.0 }),
-      makeChannel({ id: 3, label: 'Bass',    gain: 0.42,                 fader: 0.65, pan: 0.5, aux1: 0.0 }),
-      makeChannel({ id: 4, label: 'Keys',    gain: 0.42,                 fader: 0.60, pan: 0.5, aux1: 0.0 }),
-      makeChannel({ id: 5, label: '5/6',     gain: 0.42, stereo: true,   fader: 0.70, pan: 0.5, aux1: 0.0 }),
+      // Default input gains are PER-SOURCE (HEALTHY_GAIN_BY_CH): each one is
+      // the knob position that lands its source at nominal, +4 dBu / -18 dBFS
+      // (baseline chanIn ~0.81). A passive bass sits high on the knob (~0.77,
+      // 46 dB), a hot keyboard low (~0.23, 14 dB), the mics in between. Every
+      // channel meters the same at the input — the difference is the knob, which
+      // is exactly the gain-staging skill. All land with a real 18 dB of
+      // headroom above nominal, clean on the dynamic stems' peaks. The fader
+      // (not the gain) carries the mix balance below.
+      makeChannel({ id: 1, label: 'Vocal 1', gain: HEALTHY_GAIN_BY_CH[0], phantom: false, fader: 0.72, pan: 0.5, aux1: 0.0 }),
+      makeChannel({ id: 2, label: 'Vocal 2', gain: HEALTHY_GAIN_BY_CH[1], phantom: true,  fader: 0.72, pan: 0.5, aux1: 0.0 }),
+      makeChannel({ id: 3, label: 'Bass',    gain: HEALTHY_GAIN_BY_CH[2],                 fader: 0.65, pan: 0.5, aux1: 0.0 }),
+      makeChannel({ id: 4, label: 'Keys',    gain: HEALTHY_GAIN_BY_CH[3],                 fader: 0.60, pan: 0.5, aux1: 0.0 }),
+      makeChannel({ id: 5, label: '5/6',     gain: HEALTHY_GAIN_BY_CH[4], stereo: true,   fader: 0.70, pan: 0.5, aux1: 0.0 }),
     ],
     // Mixer / console power state. Default ON for all existing levels.
     // The Power-On Sequence lesson sabotages this to false and teaches the
@@ -417,8 +422,10 @@ function defaultState() {
       { name: 'FX',   members: [4],             active: false },
     ],
     dcas: [
-      { name: 'VOX',  members: [0, 1], fader: 1 },
-      { name: 'BAND', members: [2, 3], fader: 1 },
+      // DCA faders ride the same real taper as every other fader: 0.75 of
+      // travel = unity (0 dB). Parked at unity they are transparent.
+      { name: 'VOX',  members: [0, 1], fader: 0.75 },
+      { name: 'BAND', members: [2, 3], fader: 0.75 },
     ],
     // Console scenes/snapshots (digital surface, Phase 3a). Inert by default:
     // three named scenes with no stored snapshot, current = SHOW. Recalling an
@@ -467,6 +474,75 @@ function sourceFor(s, chIdxZero) {
   return null;
 }
 
+// ── Real-units signal model ──────────────────────────────────────────────
+// The whole chain computes in REAL dB, anchored to pro line level:
+//   +4 dBu  = nominal program level = legacy linear 0.812 = -18 dBFS
+//   +22 dBu = console clip = 0 dBFS  (X32-class alignment: -18 dBFS ≈ +4 dBu)
+// Legacy linear fields stay nominal-anchored (0.812 at +4 dBu) so the app
+// reads familiar numbers at a healthy show level, while every knob and fader
+// now moves the signal in true dB through real control tapers. A 6 dB fader
+// pull is 6 dB everywhere downstream: meters, headroom, and feedback margin
+// all move together, which is the real gain-staging discipline.
+const DBU_NOM = 4, DBU_CLIP = 22, NOM_LIN = 0.812;
+const dbToLin = (db) => Math.pow(10, db / 20);
+const linDb = (v) => (v > 1e-6 ? 20 * Math.log10(v) : -120);
+const linToDbu = (v) => DBU_NOM + linDb(v / NOM_LIN);
+const dbuToLin = (dbu) => NOM_LIN * dbToLin(dbu - DBU_NOM);
+window.linToDbu = linToDbu; window.dbuToLin = dbuToLin;
+// Source program level at the connector (dBu, average). Real sources vary
+// widely: a passive bass through a DI arrives ~17 dB below a close vocal, a
+// synth or a laptop is nearly line level. Modeling that spread is what makes
+// gain staging a real skill here — every source needs a different gain-knob
+// position to reach the same nominal +4 dBu, so the student sets by the meter,
+// not by a memorized knob spot. Values are average program level in dBu at the
+// connector, from published mic/DI sensitivities:
+//   vocal    dynamic SM58-class, strong close singer   -25 dBu
+//   vocal2   condenser (e865-class), hotter             -21 dBu
+//   guitar   passive bass through a DI (mic level!)     -42 dBu
+//   laptop   keyboard/synth through a DI (line-ish)     -10 dBu
+//   playback media player at the desk (consumer line)   -8 dBu
+const SRC_DBU_BY_SOURCE = { vocal: -25, vocal2: -21, guitar: -42, laptop: -10, playback: -8 };
+const SRC_DBU_DEFAULT = -21.2; // fallback for any unmapped source
+const srcDbuFor = (srcKey) => (SRC_DBU_BY_SOURCE[srcKey] != null ? SRC_DBU_BY_SOURCE[srcKey] : SRC_DBU_DEFAULT);
+// The gain-knob position that lands each source at nominal (+4 dBu, -18 dBFS):
+// gain = (4 - srcDbu) / 60, since the preamp is 0..60 dB linear-in-dB. Indexed
+// by channel under the default patch (ch1 vocal, ch2 vocal2, ch3 bass, ch4
+// keys, ch5 playback). defaultState() and the content's "healthy" sabotages
+// read this so a hot source sits low on the knob and a passive bass sits high —
+// the whole point of per-source levels. Change a source's dBu and update here.
+const HEALTHY_GAIN_BY_CH = [0.48, 0.42, 0.77, 0.23, 0.20];
+window.srcDbuFor = srcDbuFor;
+window.HEALTHY_GAIN_BY_CH = HEALTHY_GAIN_BY_CH;
+// Preamp: the knob IS the dB. 0..60 dB of gain, linear-in-dB like a real
+// trim pot, and matching the diagnostic's existing "gain x 60 dB" label.
+const preampDb = (g) => g * 60;
+// Control tapers: piecewise linear-in-dB through the printed marks of real
+// controls. 100 mm fader: +10 at the top, unity (0 dB) at ~75% of travel,
+// log all the way down to off.
+const FADER_TAPER = [[0, -Infinity], [0.08, -55], [0.18, -40], [0.28, -30], [0.38, -20], [0.50, -10], [0.62, -5], [0.75, 0], [0.87, 5], [1, 10]];
+// Rotary send/trim pots (aux sends, aux masters, speaker input trims):
+// off at 0, unity at ~75% (about 2 o'clock), a few dB in hand at the top.
+const KNOB_TAPER = [[0, -Infinity], [0.10, -30], [0.30, -16], [0.50, -10], [0.75, 0], [1, 6]];
+function taperDb(v, taper) {
+  if (v == null || v <= 0.005) return -Infinity;
+  if (v >= 1) return taper[taper.length - 1][1];
+  for (let i = 1; i < taper.length; i++) {
+    const x1 = taper[i - 1][0], y1 = taper[i - 1][1];
+    const x2 = taper[i][0], y2 = taper[i][1];
+    if (v <= x2) {
+      // The bottom segment glides out of a finite floor instead of -∞ so a
+      // barely-open control passes a barely-there signal, not silence.
+      if (y1 === -Infinity) { const yF = y2 - 25; return yF + (v - x1) / (x2 - x1) * (y2 - yF); }
+      return y1 + (v - x1) / (x2 - x1) * (y2 - y1);
+    }
+  }
+  return taper[taper.length - 1][1];
+}
+const faderGain = (v) => { const d = taperDb(v, FADER_TAPER); return d === -Infinity ? 0 : dbToLin(d); };
+const knobGain = (v) => { const d = taperDb(v, KNOB_TAPER); return d === -Infinity ? 0 : dbToLin(d); };
+window.faderGainDb = (v) => taperDb(v, FADER_TAPER);
+window.knobGainDb = (v) => taperDb(v, KNOB_TAPER);
+
 function panGains(pan) {
   // Live-sound pan law: panning ATTENUATES the opposite side only. At
   // center (pan = 0.5), both L and R sit at unity — no -3 dB cut. Panning
@@ -497,7 +573,7 @@ function dcaGainFor(s, i) {
   if (!Array.isArray(dcas)) return 1;
   let g = 1;
   for (const d of dcas) {
-    if (d && Array.isArray(d.members) && d.members.indexOf(i) !== -1) g *= (d.fader != null ? d.fader : 1);
+    if (d && Array.isArray(d.members) && d.members.indexOf(i) !== -1) g *= faderGain(d.fader != null ? d.fader : 0.75);
   }
   return g;
 }
@@ -532,7 +608,12 @@ function computeAudio(s, envelope) {
     // passive DIs work without it. No phantom on a powered input = dead channel.
     if ((srcDef.kind === 'condenser' || srcDef.diActive) && !ch.phantom) return { level: 0, srcKey };
     const trim = ch.inputTrim != null ? ch.inputTrim : 1;
-    return { level: (0.35 + ch.gain * 1.1) * trim, srcKey };
+    // Preamp output in real units: this source's connector level plus preamp
+    // gain. Each source has its own level (srcDbuFor), so at its healthy gain
+    // every channel lands at the same +4 dBu (-18 dBFS) nominal — a passive
+    // bass gets there at ~46 dB of gain, a hot keyboard at ~14 dB. Same meter,
+    // different knob: real gain staging, with 18 dB of headroom above nominal.
+    return { level: dbuToLin(srcDbuFor(srcKey) + preampDb(ch.gain)) * trim, srcKey };
   });
 
   // INSTANT chanIn — what the meter shows right now, with per-source
@@ -547,7 +628,7 @@ function computeAudio(s, envelope) {
 
   const post = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
-    return chanIn[i].level * ch.fader * dcaGainFor(s, i);
+    return chanIn[i].level * faderGain(ch.fader) * dcaGainFor(s, i);
   });
 
   // POWER SUMMING. Different sources (a voice, a bass, a keyboard) are
@@ -584,7 +665,7 @@ function computeAudio(s, envelope) {
   // and channel meters still show what WOULD be on the wire so the
   // engineer can verify their setup before flipping the power on.
   const mixerOn = s.mixer ? s.mixer.on !== false : true;
-  const masterGate = (s.master.mute || !mixerOn) ? 0 : s.master.fader;
+  const masterGate = (s.master.mute || !mixerOn) ? 0 : faderGain(s.master.fader);
   const mainBusL = mixL * masterGate;
   const mainBusR = mixR * masterGate;
 
@@ -601,10 +682,10 @@ function computeAudio(s, envelope) {
 
   // Aux master gains — each aux send bus has a master level knob on the console
   // before it leaves the desk (in addition to per-channel aux send + destination volume).
-  const aux1MasterGain = s.master.aux1 != null ? s.master.aux1 : 1;
-  const aux2MasterGain = s.master.aux2 != null ? s.master.aux2 : 1;
-  const aux3MasterGain = s.master.aux3 != null ? s.master.aux3 : 1;
-  const aux4MasterGain = s.master.aux4 != null ? s.master.aux4 : 1;
+  const aux1MasterGain = knobGain(s.master.aux1 != null ? s.master.aux1 : 0.75);
+  const aux2MasterGain = knobGain(s.master.aux2 != null ? s.master.aux2 : 0.75);
+  const aux3MasterGain = knobGain(s.master.aux3 != null ? s.master.aux3 : 0.75);
+  const aux4MasterGain = knobGain(s.master.aux4 != null ? s.master.aux4 : 0.75);
 
   const aux1 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
@@ -612,7 +693,7 @@ function computeAudio(s, envelope) {
     // regardless of what the engineer is listening to in their cans. (A DCA
     // does NOT scale the aux send: monitor sends are pre-fader, so the DCA's
     // fader only rides the main-mix path.)
-    return chanIn[i].level * ch.aux1;
+    return chanIn[i].level * knobGain(ch.aux1);
   });
   // AUX 1 / AUX 2 SEND BUSES — sum of all channels' aux send levels through
   // the per-bus master send. These represent what's leaving the desk on each
@@ -626,7 +707,7 @@ function computeAudio(s, envelope) {
   const aux2 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
     // PFL does NOT gate aux 2 either.
-    return chanIn[i].level * ch.aux2;
+    return chanIn[i].level * knobGain(ch.aux2);
   });
   const wedge2Mix = Math.sqrt(aux2.reduce((a, b) => a + b * b, 0)) * aux2MasterGain * (mixerOn ? 1 : 0);
   const w2 = o.wedge2 || { on: true, mute: false, volume: 0 };
@@ -635,14 +716,14 @@ function computeAudio(s, envelope) {
   // pre-fader, power-summed, mixer-gated math as aux 1/2.
   const aux3 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
-    return chanIn[i].level * (ch.aux3 || 0);
+    return chanIn[i].level * knobGain(ch.aux3 || 0);
   });
   const wedge3Mix = Math.sqrt(aux3.reduce((a, b) => a + b * b, 0)) * aux3MasterGain * (mixerOn ? 1 : 0);
   const w3 = o.wedge3 || { on: true, mute: false, volume: 0 };
 
   const aux4 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
-    return chanIn[i].level * (ch.aux4 || 0);
+    return chanIn[i].level * knobGain(ch.aux4 || 0);
   });
   const wedge4Mix = Math.sqrt(aux4.reduce((a, b) => a + b * b, 0)) * aux4MasterGain * (mixerOn ? 1 : 0);
   const w4 = o.wedge4 || { on: true, mute: false, volume: 0 };
@@ -673,13 +754,16 @@ function computeAudio(s, envelope) {
   const wedge2EqGain = eqLevelGain(w2);
   const wedge3EqGain = eqLevelGain(w3);
   const wedge4EqGain = eqLevelGain(w4);
+  // The speaker "volume" knob is a powered box's input trim (a real rotary
+  // taper, unity at ~75%); the fixed 1.3 / 1.6 constants are the amp stages'
+  // gain expressed in the linear domain.
   const spkChain = {
-    pa_l: paLOn && !o.pa_l.mute ? o.pa_l.volume * 1.3 * paGate : 0,
-    pa_r: paROn && !o.pa_r.mute ? o.pa_r.volume * 1.3 * paGate : 0,
-    wedge: o.wedge.on && !o.wedge.mute ? o.wedge.volume * 1.6 * wedgeEqGain : 0,
-    wedge2: w2.on && !w2.mute ? w2.volume * 1.6 * wedge2EqGain : 0,
-    wedge3: w3.on && !w3.mute ? w3.volume * 1.6 * wedge3EqGain : 0,
-    wedge4: w4.on && !w4.mute ? w4.volume * 1.6 * wedge4EqGain : 0,
+    pa_l: paLOn && !o.pa_l.mute ? knobGain(o.pa_l.volume) * 1.3 * paGate : 0,
+    pa_r: paROn && !o.pa_r.mute ? knobGain(o.pa_r.volume) * 1.3 * paGate : 0,
+    wedge: o.wedge.on && !o.wedge.mute ? knobGain(o.wedge.volume) * 1.6 * wedgeEqGain : 0,
+    wedge2: w2.on && !w2.mute ? knobGain(w2.volume) * 1.6 * wedge2EqGain : 0,
+    wedge3: w3.on && !w3.mute ? knobGain(w3.volume) * 1.6 * wedge3EqGain : 0,
+    wedge4: w4.on && !w4.mute ? knobGain(w4.volume) * 1.6 * wedge4EqGain : 0,
   };
   // SPEAKER OUTPUTS — patched bus × the speaker's own chain. This is what
   // each box is actually producing; the on-speaker LED meter reads from
@@ -900,8 +984,10 @@ function traceTo(s, srcKey, dest) {
 }
 
 function faderDb(v) {
-  if (v <= 0.001) return '-∞';
-  const db = 20 * Math.log10(v / 0.75);
+  // Reads the REAL fader taper, so the diagnostic string matches the printed
+  // scale beside the fader (0.75 travel = unity = 0.0 dB, top = +10).
+  const db = taperDb(v, FADER_TAPER);
+  if (db === -Infinity) return '-∞';
   return db >= 0 ? `+${db.toFixed(1)} dB` : `${db.toFixed(1)} dB`;
 }
 
@@ -950,28 +1036,29 @@ function detectClipping(audio, state) {
   // the upstream-most clipping stage and tell the user which knob actually
   // fixes it.
   //
-  // Thresholds match the moment the corresponding meter first shows its
-  // top red LED — what "in the red" means to the user. For each meter
-  // lit = round(displayValue / 1.1 * segments), red is the top 2 segments.
+  // Thresholds are in the real dBu model. Each stage WARNS (settled/baseline)
+  // a little before the AUDIBLE grit (which fires on live PEAKS), so the meter
+  // goes red before you hear it distort, never after:
   //
-  //   Preamp (PFL bar, 14 segs, ×0.95 display)  → chanIn > 1.03
-  //   Channel meter (22 segs, ×1.2 display)     → post > 0.93
-  //   Master (26 segs, ×0.85 display)           → mainBus > 1.22
-  //   Speaker (10 segs, ×1.0 display)           → outputs > 1.03
+  //   Preamp   → chanIn baseline > +15 dBu   (grit when peaks reach +22)
+  //   Channel  → post   baseline > +15 dBu
+  //   Master   → mainBus         > +22 dBu   (0 dBFS, the output ceiling)
+  //   Speaker  → outputs         > +14 dBu   (grit ceiling is 0 dBFS / +22)
 
   // Stage 1 — PREAMP (channel input after the gain knob). The PFL bar's
   // red zone. Only the GAIN knob fixes this; the fader is downstream and
   // can't undo distortion that's already been baked in.
   //
   // Reads the BASELINE chanIn (no envelope) so the block fires on gain
-  // SETTING, not on transient peaks. With the synthesized envelope adding
-  // up to ~+20% on transients, threshold sits at 1.05 so default-gain
-  // baselines (~0.955) don't false-trigger while a deliberately hot preamp
-  // (above gain 0.64-ish) still gets caught.
+  // SETTING, not on transient peaks. Real headroom now: the flag fires when
+  // the AVERAGE sits above +15 dBu — at that setting the program's peaks
+  // (crest factor up to ~13 dB on a vocal) slam the +22 dBu clip point on
+  // most syllables, which is unambiguous, audible overdrive. A healthy
+  // nominal average (+4 dBu) leaves ~18 dB for peaks and never trips this.
   if (audio && audio.chanInBaseline) {
     const preampClips = [];
     audio.chanInBaseline.forEach((v, i) => {
-      if (v > 1.05) {
+      if (v > dbuToLin(15)) {
         preampClips.push({
           stage: 'preamp',
           id: i,
@@ -986,11 +1073,13 @@ function detectClipping(audio, state) {
   // Stage 2 — CHANNEL METER (post-fader). Preamp is clean but the fader is
   // pushing the channel into the red, or the combination of gain + fader
   // is hot enough that the meter reads red even though the preamp itself
-  // is below its red zone.
+  // is below its red zone. Same real-units rule as the preamp stage: the
+  // flag fires when the post-fader AVERAGE sits above +15 dBu, where the
+  // program's peaks are slamming the +22 clip on most syllables.
   if (audio && audio.post) {
     const channelClips = [];
     audio.post.forEach((p, i) => {
-      if (p > 0.93) {
+      if (p > dbuToLin(15)) {
         channelClips.push({
           stage: 'channel',
           id: i,
@@ -1008,7 +1097,7 @@ function detectClipping(audio, state) {
   if (audio && audio.mainBus) {
     const L = audio.mainBus.L || 0;
     const R = audio.mainBus.R || 0;
-    if (L > 1.22 || R > 1.22) {
+    if (L > dbuToLin(DBU_CLIP) || R > dbuToLin(DBU_CLIP)) {
       return [{
         stage: 'master',
         id: L > R ? 'L' : 'R',
@@ -1032,7 +1121,7 @@ function detectClipping(audio, state) {
     const speakerClips = [];
     for (const s of speakers) {
       const lvl = audio.outputs[s.key] || 0;
-      if (lvl > 1.03) speakerClips.push({ stage: 'speaker', id: s.key, label: s.label, fix: s.fix });
+      if (lvl > dbuToLin(14)) speakerClips.push({ stage: 'speaker', id: s.key, label: s.label, fix: s.fix });
     }
     if (speakerClips.length) return speakerClips;
   }
@@ -1203,8 +1292,8 @@ function detectGainStagingMistakes(state, audio, level) {
   // overshoots fire coaching. Above clip-block threshold (~1.05), the clip
   // detector takes over — coaching here only covers the "hot but not yet
   // clipping" window where a transient peak would clip.
-  const COLD = 0.55;
-  const HOT  = 1.00;
+  const COLD = 0.55;              // ~3.5 dB under nominal: audibly weak input
+  const HOT  = dbuToLin(10);      // +10 dBu average: peaks are already flirting with the clip point
 
   // Per-involved-channel checks
   for (const chNum of involved) {
@@ -1330,11 +1419,65 @@ window.speakerLiveForPatch = speakerLiveForPatch;
 // true (the ring sustains itself) and it stops the warning from strobing
 // when a level wobbles right at the threshold. Module-level is safe here:
 // every caller in a frame passes the same state.
+// Directional mic REJECTION in 3D (the Mic Placement feature). A monitor wedge
+// off the mic's front axis is picked up at the mic's polar sensitivity for that
+// direction, |a + (1-a)cosθ|, where θ is the 3D angle between the mic axis and
+// the direction to the wedge. The student sets θ across two planes: `az` (the
+// horizontal angle of the wedge off the mic's front) and `tilt` (the mic's
+// vertical tilt; the floor wedge sits FLOOR_DROP below it). θ is the TRUE angle
+// between the mic-axis unit vector (tilted up by `tilt`) and the wedge-direction
+// unit vector (azimuth `az`, FLOOR_DROP below horizontal), i.e. the spherical
+// law of cosines:  cosθ = cos(tilt)·cos(FLOOR_DROP)·cos(az) - sin(tilt)·sin(FLOOR_DROP).
+// (The old cos(az)·cos(tilt+FLOOR_DROP) was NOT a real 3D angle: off-axis it
+// inverted the tilt effect, so tilting the null onto a rear wedge made feedback
+// WORSE — the bug this replaces.) a: cardioid .5 / super .375 / hyper .25 sets
+// where the null falls (cardioid straight back at 180°, super ~125°, hyper ~110°,
+// with super/hyper keeping a live rear lobe behind — a hyper pointed rear-at-wedge
+// is worse than a super). Floor 0.1 (~ -20 dB): a real null is deep but never
+// truly -inf (mfrs spec -15..-25 dB rear).
+const MIC_A3 = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
+const FLOOR_DROP = 35; // degrees a floor wedge sits below the mic
+function micRejectionRaw(setup) {
+  const a = MIC_A3[setup.pattern] != null ? MIC_A3[setup.pattern] : 0.5;
+  const az = (setup.az != null ? setup.az : 0) * Math.PI / 180;
+  const tilt = (setup.tilt != null ? setup.tilt : 0) * Math.PI / 180;
+  const phi = FLOOR_DROP * Math.PI / 180;
+  const cosT = Math.cos(tilt) * Math.cos(phi) * Math.cos(az) - Math.sin(tilt) * Math.sin(phi);
+  return Math.max(0.1, Math.abs(a + (1 - a) * cosT));
+}
+window.micRejectionRaw = micRejectionRaw;
+// Placement is applied RELATIVE to a realistic DEFAULT (a decently-aimed cardioid,
+// wedge behind and below). That default is the reference the whole feedback
+// calibration is anchored to, so placement works BOTH ways: aim the wedge into
+// the null and you EARN gain before feedback; drop it right in front of the mic
+// (on-axis) and you LOSE it and ring sooner — the actual point of the feature.
+// The old model used on-axis as the baseline, so a bad placement was the neutral
+// case and could never hurt. No setup returns 1.0 (identical to the default), so
+// every existing lesson's feedback calibration is untouched; only when a student
+// aims the mic does the loop move. Verified vs research: front->null spread ~18
+// dB, wedge on-axis ~ +12 dB hotter loop, a real GBF penalty.
+const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 135, tilt: 5 };
+const REF_REJ = micRejectionRaw(DEFAULT_MIC_SETUP);
+function micRejection3D(setup) {
+  if (!setup) return 1.0;
+  return Math.max(0.3, Math.min(4.5, micRejectionRaw(setup) / REF_REJ));
+}
+window.micRejection3D = micRejection3D;
+window.DEFAULT_MIC_SETUP = DEFAULT_MIC_SETUP;
 const _ringActive = {};
+// Barkhausen anchor for the acoustic loop: FEED_0DB is the wedge feed (legacy
+// linear) at which a 0 dB resonance band sits exactly at loop gain = 1. The
+// loop is now computed in TRUE dB, so every dB anywhere in the chain (gain,
+// fader, aux, master aux, wedge trim, EQ cut, HPF, mic placement) moves the
+// feedback margin by exactly that many dB — the real gain-before-feedback
+// discipline. Calibrated so the primed Free Play board starts ringing around
+// two-thirds on a vocal send, the approved feel.
+const FEED_0DB = 0.83;
+const RING_SUSTAIN_DB = -1.7; // a started ring holds on until ~1.7 dB under onset
+window.RING_SUSTAIN_DB = RING_SUSTAIN_DB;
 function detectFeedback(s, audio) {
   if (!s || !s.channels || !audio || !audio.contributions) return null;
-  const WEDGE_COUPLING = 1.0;   // wedge points at the mic
-  const MAINS_COUPLING = 0.22;  // mains face away — only ring when cranked hard
+  const MAINS_DB = -9.6;  // mains face away from the mics — ring only when cranked hard
   const o = s.outputs || {};
   const rings = [];
   // Per-band loop check for one wedge. Two wedge models:
@@ -1355,15 +1498,20 @@ function detectFeedback(s, audio) {
                : (has25 ? wedgeProfileFor(wKey) : null);
     const hzOf = (b) => has25 ? FULL_EQ_HZ[b] : EQ_BAND_HZ[b];
     const bands = prof ? prof.map((p, b) => ({ b, p })) : [{ b: (w.ringBand != null ? w.ringBand : 2), p: 1.0 }];
+    // Loop gain per band, in REAL dB: feed level vs the unity anchor, plus the
+    // band's resonance height, minus the EQ cut (slider dB counts one-for-one)
+    // and the HPF's low-band relief. Ring when the loop crosses 0 dB.
+    const feedDb = 20 * Math.log10(feed / FEED_0DB);
     for (const { b, p } of bands) {
       const lowBand = hzOf(b) <= 250;
-      const hpfRelief = (hpf && lowBand) ? 0.6 : 1.0;
-      const loop = feed * WEDGE_COUPLING * p * (w.eq ? eqBandRelief(w.eq[b]) : 1.0) * hpfRelief;
+      const hpfDb = (hpf && lowBand) ? -4.4 : 0;
+      const eqDb = w.eq ? -EQ_CUT_DB * Math.max(0, Math.min(1, w.eq[b] || 0)) : 0;
+      const loopDb = feedDb + 20 * Math.log10(p) + eqDb + hpfDb;
       const key = wKey + ':' + b;
-      const th = _ringActive[key] ? 0.45 : 0.55;
-      if (loop > th) {
+      const th = _ringActive[key] ? RING_SUSTAIN_DB : 0;
+      if (loopDb > th) {
         _ringActive[key] = true;
-        rings.push({ wedge: wKey, band: b, hz: hzOf(b), risk: loop, channelIdx: chIdx });
+        rings.push({ wedge: wKey, band: b, hz: hzOf(b), risk: loopDb, channelIdx: chIdx });
       } else {
         _ringActive[key] = false;
       }
@@ -1382,17 +1530,23 @@ function detectFeedback(s, audio) {
     const c = audio.contributions[srcKey];
     if (!c) continue;
     const eqg = audio.eqGain || { wedge: 1, wedge2: 1, wedge3: 1, wedge4: 1 };
-    checkWedge('wedge', o.wedge, (c.wedge || 0) / (eqg.wedge || 1), ch.highpass, i);
-    checkWedge('wedge2', o.wedge2, (c.wedge2 || 0) / (eqg.wedge2 || 1), ch.highpass, i);
-    checkWedge('wedge3', o.wedge3, (c.wedge3 || 0) / (eqg.wedge3 || 1), ch.highpass, i);
-    checkWedge('wedge4', o.wedge4, (c.wedge4 || 0) / (eqg.wedge4 || 1), ch.highpass, i);
+    // Mic placement rejection: aiming the wedge into the mic's null attenuates
+    // the loop (no placement set = 1.0, so nothing changes until the student aims).
+    const rej = micRejection3D(s.micSetup && s.micSetup[srcKey]);
+    checkWedge('wedge', o.wedge, (c.wedge || 0) / (eqg.wedge || 1) * rej, ch.highpass, i);
+    checkWedge('wedge2', o.wedge2, (c.wedge2 || 0) / (eqg.wedge2 || 1) * rej, ch.highpass, i);
+    checkWedge('wedge3', o.wedge3, (c.wedge3 || 0) / (eqg.wedge3 || 1) * rej, ch.highpass, i);
+    checkWedge('wedge4', o.wedge4, (c.wedge4 || 0) / (eqg.wedge4 || 1) * rej, ch.highpass, i);
     // Mains loop — no single band; the ring tone falls back to 2 kHz.
-    const mainsLoop = ((c.pa_l || 0) + (c.pa_r || 0)) * MAINS_COUPLING * (ch.highpass ? 0.6 : 1.0);
+    const paFeed = (c.pa_l || 0) + (c.pa_r || 0);
+    const mainsLoopDb = (paFeed > 0.001)
+      ? 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + (ch.highpass ? -4.4 : 0)
+      : -999;
     const mKey = 'mains:' + i;
-    const mTh = _ringActive[mKey] ? 0.45 : 0.55;
-    if (mainsLoop > mTh) {
+    const mTh = _ringActive[mKey] ? RING_SUSTAIN_DB : 0;
+    if (mainsLoopDb > mTh) {
       _ringActive[mKey] = true;
-      rings.push({ wedge: null, band: null, hz: 2000, risk: mainsLoop, channelIdx: i });
+      rings.push({ wedge: null, band: null, hz: 2000, risk: mainsLoopDb, channelIdx: i });
     } else {
       _ringActive[mKey] = false;
     }
@@ -1408,22 +1562,24 @@ window.detectFeedback = detectFeedback;
 // Same loop math as detectFeedback, read-only (no hysteresis), reporting the
 // tallest band per wedge so a persistent readout can teach headroom discipline.
 function feedbackMargins(s, audio) {
-  const out = { wedge: 0, wedge2: 0, wedge3: 0, wedge4: 0 };
+  const out = { wedge: -999, wedge2: -999, wedge3: -999, wedge4: -999 };
   if (!s || !s.channels || !audio || !audio.contributions) return out;
   const o = s.outputs || {};
   const eqg = audio.eqGain || { wedge: 1, wedge2: 1, wedge3: 1, wedge4: 1 };
   const keys = ['wedge', 'wedge2', 'wedge3', 'wedge4'];
   const maxLoopFor = (wKey, w, feed, hpf) => {
-    if (!w || !feed) return 0;
+    if (!w || !(feed > 0.001)) return -999;
     const has25 = !!(w.eq && w.eq.length === FULL_EQ_HZ.length);
     const prof = (w.fbProfile && w.eq && w.eq.length === w.fbProfile.length) ? w.fbProfile : (has25 ? wedgeProfileFor(wKey) : null);
     const hzOf = (b) => has25 ? FULL_EQ_HZ[b] : EQ_BAND_HZ[b];
     const bands = prof ? prof.map((p, b) => ({ b, p })) : [{ b: (w.ringBand != null ? w.ringBand : 2), p: 1.0 }];
-    let m = 0;
+    const feedDb = 20 * Math.log10(feed / FEED_0DB);
+    let m = -999;
     for (const { b, p } of bands) {
-      const hpfRelief = (hpf && hzOf(b) <= 250) ? 0.6 : 1.0;
-      const loop = feed * 1.0 * p * (w.eq ? eqBandRelief(w.eq[b]) : 1.0) * hpfRelief;
-      if (loop > m) m = loop;
+      const hpfDb = (hpf && hzOf(b) <= 250) ? -4.4 : 0;
+      const eqDb = w.eq ? -EQ_CUT_DB * Math.max(0, Math.min(1, w.eq[b] || 0)) : 0;
+      const loopDb = feedDb + 20 * Math.log10(p) + eqDb + hpfDb;
+      if (loopDb > m) m = loopDb;
     }
     return m;
   };
@@ -1434,8 +1590,9 @@ function feedbackMargins(s, audio) {
     if (!srcDef || (srcDef.kind !== 'dynamic' && srcDef.kind !== 'condenser')) continue;
     if (srcDef.kind === 'condenser' && !ch.phantom) continue;
     const c = audio.contributions[srcKey]; if (!c) continue;
+    const rej = micRejection3D(s.micSetup && s.micSetup[srcKey]);
     for (const wKey of keys) {
-      const m = maxLoopFor(wKey, o[wKey], (c[wKey] || 0) / (eqg[wKey] || 1), ch.highpass);
+      const m = maxLoopFor(wKey, o[wKey], (c[wKey] || 0) / (eqg[wKey] || 1) * rej, ch.highpass);
       if (m > out[wKey]) out[wKey] = m;
     }
   }
@@ -1444,9 +1601,9 @@ function feedbackMargins(s, audio) {
 window.feedbackMargins = feedbackMargins;
 // Convert a wedge's hottest loop to a margin in dB (headroom before the 0.55
 // ring line) and a status band. Returns null when no mic feeds the wedge.
-function feedbackMarginInfo(maxLoop) {
-  if (!(maxLoop > 0.02)) return null; // no live mic on this wedge -> no risk to show
-  const db = 20 * Math.log10(0.55 / maxLoop);
+function feedbackMarginInfo(maxLoopDb) {
+  if (maxLoopDb == null || maxLoopDb < -30) return null; // no meaningful mic->wedge loop to show
+  const db = -maxLoopDb; // loop gain is in dB now, so the margin IS its negative
   const status = db < 0 ? 'ring' : (db < 3 ? 'edge' : (db < 6 ? 'low' : 'ok'));
   return { db, status };
 }
@@ -1594,11 +1751,14 @@ function Fader({ value, onChange, height = 180, color = '#dcd7c6', tickLabels = 
   const trackH = height;
   const capY = (1 - value) * (trackH - capH);
 
+  // Positions come from the REAL fader taper (FADER_TAPER): unity at 75% of
+  // travel, +10 at the top, log spacing below — the printed scale now agrees
+  // with the actual gain at every position.
   const ticks = [
     { v: 1.0, label: '+10' },
     { v: 0.75, label: '0' },
-    { v: 0.55, label: '-10' },
-    { v: 0.35, label: '-20' },
+    { v: 0.50, label: '-10' },
+    { v: 0.38, label: '-20' },
     { v: 0.18, label: '-40' },
     { v: 0.0, label: '-∞' },
   ];
@@ -1654,28 +1814,89 @@ function Fader({ value, onChange, height = 180, color = '#dcd7c6', tickLabels = 
   );
 }
 
-function LedMeter({ level, height = 180, segments = 18 }) {
-  const lit = Math.min(segments, Math.round(level / 1.1 * segments));
+// Peak meters read in dBFS, like a real console: 0 dBFS = full scale (the clip
+// point, level ~1.1), and everything below is a true 20*log10 ratio floored at
+// -48. The ladder is dB-scaled (log), not linear amplitude, so the segments and
+// the printed scale line up with real dB. Color follows the dBFS zones: green
+// in the working range, amber as it gets hot, red the last few dB into clip.
+const DBFS_FLOOR = -48;   // bottom of the meter
+const DBFS_MARKS = [0, -3, -6, -12, -18, -24, -36, -48];
+// 0 dBFS = the console's +22 dBu clip point; nominal (+4 dBu) reads -18 dBFS,
+// the X32-class alignment. Reads the real-units model via linToDbu.
+window.levelToDbfs = (level) => (level > 0.0009 ? (window.linToDbu(level) - 22) : -60);
+const dbfsFrac = (db) => Math.max(0, Math.min(1, (db - DBFS_FLOOR) / (0 - DBFS_FLOOR)));
+window.dbfsFrac = dbfsFrac;
+// dBFS -> LED color. Green is the working range, amber the last stretch before
+// clip, red the top few dB and over.
+// Zone map, X32-like: green up to -12 dBFS, amber -12..-3 (hot), red from -3
+// (danger: peaks are within 3 dB of the clip point). Audible distortion does
+// not start until peaks actually REACH the clip point, so the red always
+// warns BEFORE you hear it — never after.
+const dbfsColor = (db) => (db >= -3 ? '#ff4630' : db >= -12 ? '#ffb547' : '#4ade80');
+
+// Peak-hold. A real digital meter freezes the highest recent peak for a beat, so
+// you SEE the transient that clipped even though the bar's body sits well below
+// it (program peaks ride ~12 dB above the average). Without it, the peak that
+// drives the preamp into grit only flashes for a frame or two, and the eye reads
+// the steady yellow body while the ear hears the red peak. Holding the peak
+// ~0.9 s then dropping it at a PPM-like ~12 dB/s is what makes "the meter goes
+// red exactly when you'd hear it distort" true, the way it is on a real desk.
+// Time-based (performance.now) so it falls at the same rate no matter how often
+// a given meter re-renders. `ref` persists per meter instance across frames.
+function advancePeakHold(ref, db) {
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+  const st = ref.current;
+  const dt = st.t == null ? 0 : Math.max(0, now - st.t);
+  st.t = now;
+  if (db >= st.db) { st.db = db; st.holdUntil = now + 900; }
+  else if (now >= st.holdUntil) { st.db = Math.max(db, st.db - 0.012 * dt); }
+  return st.db;
+}
+window.advancePeakHold = advancePeakHold;
+// The segment index (0 = bottom) a held dBFS lights, for any N-segment meter.
+const peakHoldIdx = (holdDb, segments) => (holdDb > DBFS_FLOOR + 1
+  ? Math.max(0, Math.min(segments - 1, Math.round(dbfsFrac(holdDb) * segments) - 1)) : -1);
+window.peakHoldIdx = peakHoldIdx;
+
+function LedMeter({ level, height = 180, segments = 18, scale = false }) {
+  const db = window.levelToDbfs(level);
+  const lit = Math.round(dbfsFrac(db) * segments);
+  const holdRef = useRef({ db: -60, t: null, holdUntil: 0 });
+  const holdDb = advancePeakHold(holdRef, db);
+  const holdIdx = peakHoldIdx(holdDb, segments);
   const cells = [];
   for (let i = 0; i < segments; i++) {
-    const idx = segments - 1 - i;
-    let baseColor;
-    if (idx >= segments - 2) baseColor = '#ff4630';
-    else if (idx >= segments - 5) baseColor = '#ffb547';
-    else baseColor = '#4ade80';
-    const on = idx < lit;
+    const idx = segments - 1 - i; // segDb rises with idx; idx 0 = bottom, high idx = top
+    // The dBFS this segment tops out at, so its color and the printed scale agree.
+    const segDb = DBFS_FLOOR + ((idx + 1) / segments) * (0 - DBFS_FLOOR);
+    const isHold = idx === holdIdx;
+    const col = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+    const on = idx < lit || isHold;
     cells.push(
       <div key={i} style={{
         flex: 1, margin: '1px 0', borderRadius: 1,
-        background: on ? baseColor : '#1a1a1c',
-        boxShadow: on ? `0 0 4px ${baseColor}` : 'inset 0 0 2px #000',
+        background: on ? col : '#1a1a1c',
+        boxShadow: on ? `0 0 ${isHold ? 6 : 4}px ${col}` : 'inset 0 0 2px #000',
         opacity: on ? 1 : 0.5,
       }}/>
     );
   }
-  return (
+  const bar = (
     <div className="ui-no-select" style={{ display: 'flex', flexDirection: 'column', height, width: 10, padding: 1, background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 2 }}>
       {cells}
+    </div>
+  );
+  if (!scale) return bar;
+  // Optional printed dBFS scale down the right side (used on the meters that
+  // have room: the master L/R and the channel level meter).
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 2 }}>
+      {bar}
+      <div className="mono" style={{ position: 'relative', width: 13, height, fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.2, fontWeight: 700 }}>
+        {DBFS_MARKS.map((m) => (
+          <div key={m} style={{ position: 'absolute', left: 0, top: (1 - dbfsFrac(m)) * height - 2.5, lineHeight: 1 }}>{m}</div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1684,7 +1905,11 @@ function LedMeter({ level, height = 180, segments = 18 }) {
 // stream gear) so engineers can see signal arriving at each output without
 // needing the full signal-flow diagnostic.
 function MiniMeter({ level, width = 44, segments = 10 }) {
-  const lit = Math.min(segments, Math.round(level / 1.1 * segments));
+  const db = window.levelToDbfs(level);
+  const lit = Math.min(segments, Math.round((window.dbfsFrac ? window.dbfsFrac(db) : 0) * segments));
+  const holdRef = useRef({ db: -60, t: null, holdUntil: 0 });
+  const holdDb = advancePeakHold(holdRef, db);
+  const holdIdx = peakHoldIdx(holdDb, segments);
   return (
     <div className="ui-no-select" style={{
       display: 'flex', gap: 1,
@@ -1695,16 +1920,15 @@ function MiniMeter({ level, width = 44, segments = 10 }) {
       borderRadius: 2,
     }}>
       {Array.from({ length: segments }).map((_, i) => {
-        let c;
-        if (i >= segments - 2) c = '#ff4630';
-        else if (i >= segments - 4) c = '#ffb547';
-        else c = '#4ade80';
-        const on = i < lit;
+        const segDb = -48 + ((i + 1) / segments) * 48;
+        const isHold = i === holdIdx;
+        const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+        const on = i < lit || isHold;
         return <div key={i} style={{
           flex: 1,
           background: on ? c : '#1a1a1c',
           borderRadius: 0.5,
-          boxShadow: on ? `0 0 2px ${c}` : 'none',
+          boxShadow: on ? `0 0 ${isHold ? 4 : 2}px ${c}` : 'none',
           opacity: on ? 1 : 0.45,
         }}/>;
       })}
@@ -1782,13 +2006,17 @@ const { Knob: K, Fader: F, LedMeter: M, ButtonPad: BP, Led: L } = window;
 
 function PFLBar({ level, hot }) {
   const segs = 14;
-  // Bar full-scale = 1.1 (matches detectClipping's display scale). The
-  // healthy operating band sits in the upper amber zone — where peaks of a
-  // real dynamic signal should land, leaving headroom above for transients
-  // without crossing into the red. Drawn as a thin gold marker above the bar.
-  const lit = Math.min(segs, Math.round(level / 1.1 * segs));
-  const targetLow = 0.75 / 1.1;
-  const targetHigh = 0.95 / 1.1;
+  // dBFS bar: full scale = the console's clip point (0 dBFS = +22 dBu). The
+  // gold marker is the healthy AVERAGE zone, around -18 dBFS like a real
+  // digital desk: park the signal's average there and let the program's
+  // peaks dance above it — that's the real gain-staging picture.
+  const db = window.levelToDbfs(level);
+  const lit = Math.min(segs, Math.round((window.dbfsFrac ? window.dbfsFrac(db) : 0) * segs));
+  const holdRef = React.useRef({ db: -60, t: null, holdUntil: 0 });
+  const holdDb = window.advancePeakHold ? window.advancePeakHold(holdRef, db) : db;
+  const holdIdx = window.peakHoldIdx ? window.peakHoldIdx(holdDb, segs) : -1;
+  const targetLow = window.dbfsFrac ? window.dbfsFrac(-21) : 0.56;
+  const targetHigh = window.dbfsFrac ? window.dbfsFrac(-15) : 0.69;
   return (
     <div className="ui-no-select" style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
       <div style={{ position: 'relative', height: 3 }}>
@@ -1799,7 +2027,7 @@ function PFLBar({ level, hot }) {
           top: 0, height: 3,
           background: 'linear-gradient(180deg, rgba(255,201,58,0.42), rgba(255,181,71,0.55))',
           borderRadius: 1,
-        }} title="Healthy peak zone. Aim peaks here, leave headroom above."/>
+        }} title="Healthy average zone (about -18 dBFS). Park the average here; peaks ride above it."/>
       </div>
       <div style={{
         display: 'flex', gap: 1,
@@ -1811,12 +2039,15 @@ function PFLBar({ level, hot }) {
         boxShadow: hot ? '0 0 4px rgba(255,181,71,0.45)' : 'none',
       }}>
         {Array.from({ length: segs }).map((_, i) => {
-          let c;
-          if (i >= segs - 2) c = '#ff4630';
-          else if (i >= segs - 5) c = '#ffb547';
-          else c = '#4ade80';
-          const on = i < lit;
-          return <div key={i} style={{ flex: 1, height: 4, background: on ? c : '#1a1a1c', borderRadius: 0.5, boxShadow: on ? `0 0 3px ${c}` : 'none', opacity: on ? 1 : 0.5 }}/>;
+          // Same dBFS zone map as every other meter, so "red" means one
+          // thing everywhere: peaks within 3 dB of the clip point. The held
+          // peak segment lights bright at the highest recent peak so a
+          // transient that grits the preamp leaves a visible mark.
+          const segDb = -48 + ((i + 1) / segs) * 48;
+          const isHold = i === holdIdx;
+          const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+          const on = i < lit || isHold;
+          return <div key={i} style={{ flex: 1, height: 4, background: on ? c : '#1a1a1c', borderRadius: 0.5, boxShadow: on ? `0 0 ${isHold ? 5 : 3}px ${c}` : 'none', opacity: on ? 1 : 0.5 }}/>;
         })}
       </div>
     </div>
@@ -1985,7 +2216,7 @@ function MasterSection({ master, onChange, paLevel, paRLevel, powered = true, on
         <F value={master.fader} onChange={(v) => { onChange({ ...master, fader: v }); if (onInspect) onInspect('pa'); }} height={208}/>
         <div style={{ display: 'flex', gap: 3 }}>
           <M level={paLevel} height={208} segments={26}/>
-          <M level={paRLevel} height={208} segments={26}/>
+          <M level={paRLevel} height={208} segments={26} scale/>
         </div>
       </div>
 
@@ -2048,7 +2279,7 @@ function Console({ state, setState, audio, faultChannelIdx }) {
   // because the main bus is gated by mixer power upstream.)
   const mixerOn = state.mixer ? state.mixer.on !== false : true;
   const channelLevels = audio.post.map((p) => mixerOn ? p * 1.2 : 0);
-  const pflLevels = audio.chanIn.map(v => mixerOn ? v * 0.95 : 0);
+  const pflLevels = audio.chanIn.map(v => mixerOn ? v : 0);
 
   // Master L/R meters read from the MAIN BUS (post master fader, pre-PA).
   // Speaker on/off/mute/volume must NOT silence these — that's the speaker's
@@ -2060,8 +2291,8 @@ function Console({ state, setState, audio, faultChannelIdx }) {
   // headroom before the red, so the meter remains a useful operating
   // signal rather than pegged red by the act of opening the master.
   const main = audio.mainBus || { L: 0, R: 0 };
-  const masterL = (main.L || 0) * 0.85;
-  const masterR = (main.R || 0) * 0.85;
+  const masterL = main.L || 0;
+  const masterR = main.R || 0;
 
   return (
     <div style={{
@@ -2595,11 +2826,11 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx, channelRefs, 
   // meter shows signal, the way a real console does. Otherwise the strip meter
   // shows the post-fader contribution to the mix.
   const channelLevels = state.channels.map((ch, i) =>
-    !mixerOn ? 0 : (ch.solo ? (audio.chanIn[i] || 0) * 0.95 : (audio.post[i] || 0) * 1.2));
-  const pflLevels = audio.chanIn.map(v => mixerOn ? v * 0.95 : 0);
+    !mixerOn ? 0 : (ch.solo ? (audio.chanIn[i] || 0) : (audio.post[i] || 0)));
+  const pflLevels = audio.chanIn.map(v => mixerOn ? v : 0);
   const main = audio.mainBus || { L: 0, R: 0 };
-  const masterL = (main.L || 0) * 0.85;
-  const masterR = (main.R || 0) * 0.85;
+  const masterL = main.L || 0;
+  const masterR = main.R || 0;
   const groupMutedArr = state.channels.map((ch, i) => (state.muteGroups || []).some(g => g.active && (g.members || []).indexOf(i) !== -1));
 
   const sel = Math.min(Math.max(0, selected), Math.max(0, state.channels.length - 1));
@@ -2637,7 +2868,7 @@ function DigitalConsole({ state, setState, audio, faultChannelIdx, channelRefs, 
   const busStrips = [
     { name: 'AUX 1', kind: 'WEDGE 1', color: '#46d6b0', value: state.master.aux1 != null ? state.master.aux1 : 0.75, onChange: (v) => updateMaster({ ...state.master, aux1: v }), level: mixerOn && audio.auxBus ? (audio.auxBus.wedge || 0) : 0 },
     { name: 'AUX 2', kind: 'WEDGE 2', color: '#6aa9ff', value: state.master.aux2 != null ? state.master.aux2 : 0.75, onChange: (v) => updateMaster({ ...state.master, aux2: v }), level: mixerOn && audio.auxBus ? (audio.auxBus.wedge2 || 0) : 0 },
-    ...(state.dcas || []).map((d, di) => ({ name: 'DCA ' + (d.name || (di + 1)), kind: 'GROUP', color: di === 0 ? '#ffc93a' : '#c9a0ff', value: d.fader != null ? d.fader : 1, onChange: (v) => updateDca(di, v), level: busLevel(d.members) })),
+    ...(state.dcas || []).map((d, di) => ({ name: 'DCA ' + (d.name || (di + 1)), kind: 'GROUP', color: di === 0 ? '#ffc93a' : '#c9a0ff', value: d.fader != null ? d.fader : 0.75, onChange: (v) => updateDca(di, v), level: busLevel(d.members) })),
   ];
 
   const TABS = [['channel', 'CHANNEL'], ['groups', 'GROUPS'], ['scenes', 'SCENES'], ['patch', 'PATCH']];
@@ -2863,7 +3094,7 @@ function LaptopIcon({ size = 60, glow = false }) {
   );
 }
 
-function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, onMute, onPatch, patchTarget, patchColor, signalFlowing }) {
+function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, onMute, onPatch, patchTarget, patchColor, signalFlowing, onOpenPlacement }) {
   return (
     <div
       onClick={onTest}
@@ -2905,6 +3136,10 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
               borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5,
             }}
           >{patchTarget ? `→ PORT ${patchTarget}` : 'PATCH'}</div>
+          {onOpenPlacement && (kind === 'dynamic' || kind === 'condenser') && (
+            <div onClick={(e) => { e.stopPropagation(); onOpenPlacement(srcKey); }} className="mono ui-no-select"
+              style={{ fontSize: 8, padding: '2px 6px', background: '#0a0a0c', color: 'var(--accent)', border: '1px solid #38383e', borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>PLACEMENT</div>
+          )}
         </div>
       </div>
     </div>
@@ -3157,6 +3392,157 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
   );
 }
 window.MonitorEqPanel = MonitorEqPanel;
+
+// ── Mic Placement (both planes) ────────────────────────────────────────────
+// The dedicated visual trainer for the biggest real feedback lever: where the
+// wedge sits relative to the mic's pickup pattern. Two linked plan views — top
+// down (drag the wedge's horizontal angle) and side (the mic's vertical tilt) —
+// driven by state.micSetup[key] = { pattern, az, tilt }. Rejection is read live
+// from the SAME micRejection3D the feedback engine uses, so the picture and the
+// loop can never disagree. cardioid rejects straight back; super/hyper reject to
+// the rear sides and keep a live lobe behind, so cardioid is not always ideal —
+// the best pattern depends on the tilt, which the side view makes visible.
+function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
+  const svgRef = React.useRef(null);
+  const dragRef = React.useRef(false);
+  if (!open) return null;
+  const A = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
+  const NAME = { cardioid: 'cardioid', super: 'supercardioid', hyper: 'hypercardioid' };
+  const capFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 135, tilt: 5 };
+  const pat = (setup && setup.pattern) || DEF.pattern;
+  const az = (setup && setup.az != null) ? setup.az : DEF.az;
+  const tilt = (setup && setup.tilt != null) ? setup.tilt : DEF.tilt;
+  const a = A[pat];
+  const d2r = (d) => d * Math.PI / 180;
+  const rOf = (aa, deg) => Math.abs(aa + (1 - aa) * Math.cos(d2r(deg)));
+  const FLOOR_DROP = 35;
+  // TRUE 3D angle to the floor wedge (spherical law of cosines), the same math
+  // the feedback engine's micRejectionRaw uses, so this panel's number can never
+  // drift from the loop. cosT drives the alt-pattern coaching below; rej3 comes
+  // straight from the shared engine function.
+  const cosT = Math.cos(d2r(tilt)) * Math.cos(d2r(FLOOR_DROP)) * Math.cos(d2r(az)) - Math.sin(d2r(tilt)) * Math.sin(d2r(FLOOR_DROP));
+  const rej3 = window.micRejectionRaw ? window.micRejectionRaw({ pattern: pat, az, tilt }) : Math.max(0.1, Math.abs(a + (1 - a) * cosT));
+  const rejDb = Math.round(20 * Math.log10(rej3));
+  const nullDeg = pat === 'cardioid' ? 180 : Math.acos(-a / (1 - a)) * 180 / Math.PI;
+  let stColor, stWord;
+  if (rej3 < 0.2) { stColor = 'var(--green)'; stWord = 'Strong rejection'; }
+  else if (rej3 < 0.55) { stColor = 'var(--accent)'; stWord = 'Partial rejection'; }
+  else { stColor = 'var(--hot)'; stWord = 'Little rejection'; }
+
+  const TCX = 150, TCY = 168, R = 88, RW = 116;
+  const tdPt = (deg, rad) => [TCX + rad * Math.sin(d2r(deg)), TCY - rad * Math.cos(d2r(deg))];
+  let tdD = '';
+  for (let t = 0; t <= 360; t += 4) { const p = tdPt(t, R * rOf(a, t)); tdD += (t === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ' '; }
+  tdD += 'Z';
+  const tdNulls = pat === 'cardioid' ? [180] : [nullDeg, 360 - nullDeg];
+  const wpt = tdPt(az, RW);
+
+  const SMX = 96, SMY = 96, dm = 50, SR = 74, FY = 250, SW = [206, 238];
+  const cap = [SMX + dm * Math.cos(d2r(tilt)), SMY + dm * Math.sin(d2r(tilt))];
+  const faAng = Math.atan2(-Math.sin(d2r(tilt)), -Math.cos(d2r(tilt)));
+  let svD = '';
+  for (let t = 0; t <= 360; t += 4) { const rr = SR * rOf(a, t); const ang = faAng + d2r(t); svD += (t === 0 ? 'M' : 'L') + (cap[0] + rr * Math.cos(ang)).toFixed(1) + ' ' + (cap[1] + rr * Math.sin(ang)).toFixed(1) + ' '; }
+  svD += 'Z';
+  const svNulls = pat === 'cardioid' ? [180] : [nullDeg, -nullDeg];
+
+  const couplingP = (p) => Math.abs(A[p] + (1 - A[p]) * cosT);
+  let best = pat, bestc = rej3;
+  ['cardioid', 'super', 'hyper'].forEach((p) => { const cc = couplingP(p); if (cc < bestc - 0.03) { bestc = cc; best = p; } });
+  let coach;
+  if (rej3 < 0.2) coach = 'Good. From here the ' + NAME[pat] + ' strongly rejects sound coming from the wedge, so you have real headroom before it rings.';
+  else if (best !== pat && bestc < 0.22) coach = capFirst(NAME[pat]) + ' is not the best fit at this angle. A ' + NAME[best] + ' would put its null closer to the wedge. Try the pattern, or aim the wedge and tilt so a null lands on it.';
+  else coach = 'The wedge is in a sensitive part of the pattern, so the mic passes it back into the loop. Drag it toward a green null, or tilt the mic so a null swings onto the wedge.';
+
+  const setAz = (e) => {
+    const svg = svgRef.current; if (!svg) return;
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+    let deg = Math.atan2(q.x - TCX, -(q.y - TCY)) * 180 / Math.PI; if (deg < 0) deg += 360;
+    onChange({ az: Math.round(deg) });
+  };
+  const patBtn = (p, txt) => (
+    <div key={p} onClick={() => onChange({ pattern: p })} className="mono ui-no-select"
+      style={{ fontSize: 9, padding: '4px 9px', borderRadius: 4, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.4,
+        background: pat === p ? 'var(--accent)' : '#0a0a0c', color: pat === p ? '#0a0a0c' : 'var(--ink-2)',
+        border: '1px solid ' + (pat === p ? 'var(--accent)' : '#38383e') }}>{txt}</div>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 62, background: 'rgba(0,0,0,0.5)' }}>
+      <div onClick={(e) => e.stopPropagation()} className="ui-no-select" style={{ background: 'linear-gradient(180deg,#1c1c20 0%, #141417 100%)', border: '1px solid #38383e', borderRadius: 10, padding: '14px 16px', boxShadow: '0 16px 48px rgba(0,0,0,0.6)', width: 660, maxWidth: '94vw' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <div className="display" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Mic placement</div>
+          <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 0.6 }}>{(label || '').toUpperCase()}</div>
+          <div style={{ flex: 1 }}/>
+          <div style={{ display: 'flex', gap: 5 }}>{patBtn('cardioid', 'CARDIOID')}{patBtn('super', 'SUPER')}{patBtn('hyper', 'HYPER')}</div>
+          <div onClick={onClose} className="mono ui-no-select" style={{ fontSize: 12, color: 'var(--ink-2)', cursor: 'pointer', padding: '2px 6px', marginLeft: 4 }}>✕</div>
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1, background: '#0d0d10', border: '1px solid #2a2a2e', borderRadius: 6, padding: 6 }}>
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 2 }}>LOOKING DOWN · DRAG THE WEDGE</div>
+            <svg ref={svgRef} viewBox="0 0 300 300" style={{ width: '100%', display: 'block', touchAction: 'none', cursor: 'grab' }}
+              onPointerDown={(e) => { dragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} setAz(e); }}
+              onPointerMove={(e) => { if (dragRef.current) setAz(e); }}
+              onPointerUp={() => { dragRef.current = false; }} onPointerCancel={() => { dragRef.current = false; }}>
+              <text x="150" y="14" textAnchor="middle" style={{ fontSize: 10, fill: 'var(--ink-3)' }}>singer</text>
+              <circle cx="150" cy="42" r="15" fill="none" stroke="var(--ink-2)" strokeWidth="1.3"/>
+              <path d={tdD} fill="var(--accent)" fillOpacity="0.10" stroke="var(--accent)" strokeWidth="1.4"/>
+              {tdNulls.map((g, i) => { const q = tdPt(g, R + 18); const l = tdPt(g, R + 30); return (
+                <g key={i}>
+                  <line x1={TCX} y1={TCY} x2={q[0].toFixed(1)} y2={q[1].toFixed(1)} stroke="var(--green)" strokeWidth="1" strokeDasharray="3 4" opacity="0.7"/>
+                  <text x={l[0].toFixed(1)} y={(l[1] + 3).toFixed(1)} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--green)' }}>null</text>
+                </g>); })}
+              <line x1={wpt[0].toFixed(1)} y1={wpt[1].toFixed(1)} x2={TCX} y2={TCY} stroke={stColor} strokeWidth="1.8" strokeDasharray="4 4"/>
+              <circle cx={TCX} cy={TCY} r="5" fill="var(--ink)"/>
+              <text x={TCX} y={TCY + 18} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>mic</text>
+              <g transform={'translate(' + wpt[0].toFixed(1) + ',' + wpt[1].toFixed(1) + ')'}>
+                <rect x="-16" y="-9" width="32" height="18" rx="3" fill="#1c1c20" stroke={stColor} strokeWidth="1.5"/>
+                <text x="0" y="4" textAnchor="middle" style={{ fontSize: 8.5, fill: 'var(--ink)' }}>wedge</text>
+              </g>
+            </svg>
+          </div>
+          <div style={{ flex: 1, background: '#0d0d10', border: '1px solid #2a2a2e', borderRadius: 6, padding: 6 }}>
+            <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 2 }}>FROM THE SIDE · MIC TILT</div>
+            <svg viewBox="0 0 300 300" style={{ width: '100%', display: 'block' }}>
+              <line x1="20" y1={FY} x2="284" y2={FY} stroke="#38383e" strokeWidth="1.4"/>
+              <text x="34" y={FY + 15} style={{ fontSize: 9, fill: 'var(--ink-3)' }}>floor</text>
+              <circle cx={SMX - 26} cy={SMY - 6} r="20" fill="none" stroke="var(--ink-2)" strokeWidth="1.3"/>
+              <circle cx={SMX} cy={SMY} r="2.5" fill="var(--ink-2)"/>
+              <polygon points="188,250 236,250 230,232 200,238" fill="#1c1c20" stroke="var(--ink)" strokeWidth="1.3"/>
+              <text x="212" y={FY + 15} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>wedge</text>
+              <path d={svD} fill="var(--accent)" fillOpacity="0.10" stroke="var(--accent)" strokeWidth="1.4"/>
+              {svNulls.map((g, i) => { const gg = faAng + d2r(g); const qx = cap[0] + (SR + 16) * Math.cos(gg), qy = cap[1] + (SR + 16) * Math.sin(gg); const lx = cap[0] + (SR + 28) * Math.cos(gg), ly = cap[1] + (SR + 28) * Math.sin(gg); return (
+                <g key={i}>
+                  <line x1={cap[0].toFixed(1)} y1={cap[1].toFixed(1)} x2={qx.toFixed(1)} y2={qy.toFixed(1)} stroke="var(--green)" strokeWidth="1" strokeDasharray="3 4" opacity="0.7"/>
+                  <text x={lx.toFixed(1)} y={(ly + 3).toFixed(1)} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--green)' }}>null</text>
+                </g>); })}
+              <line x1={SW[0]} y1={SW[1]} x2={cap[0].toFixed(1)} y2={cap[1].toFixed(1)} stroke={stColor} strokeWidth="1.8" strokeDasharray="4 4"/>
+              <line x1={cap[0].toFixed(1)} y1={cap[1].toFixed(1)} x2={(cap[0] + 22 * Math.cos(d2r(tilt))).toFixed(1)} y2={(cap[1] + 22 * Math.sin(d2r(tilt))).toFixed(1)} stroke="var(--ink)" strokeWidth="5" strokeLinecap="round"/>
+              <circle cx={cap[0].toFixed(1)} cy={cap[1].toFixed(1)} r="4" fill="var(--ink)"/>
+            </svg>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, padding: '0 4px' }}>
+              <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)' }}>TILT</span>
+              <input type="range" min="-20" max="50" step="5" value={tilt} onChange={(e) => onChange({ tilt: +e.target.value })} style={{ flex: 1 }}/>
+              <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-2)', minWidth: 64, textAlign: 'right' }}>{tilt > 0 ? 'up ' + tilt + '°' : tilt < 0 ? 'down ' + (-tilt) + '°' : 'level'}</span>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+          <div style={{ textAlign: 'center', minWidth: 92 }}>
+            <div className="display" style={{ fontSize: 22, fontWeight: 800, color: stColor, lineHeight: 1 }}>{rejDb} dB</div>
+            <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, marginTop: 2 }}>REJECTION</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="mono" style={{ fontSize: 9, fontWeight: 700, color: stColor, letterSpacing: 0.5, marginBottom: 3 }}>{stWord.toUpperCase()}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>{coach}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+window.PlacementPanel = PlacementPanel;
 
 function Wedge({ on, mute, volume, level, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, label = 'STAGE WEDGE', accent = 'var(--aux)', ringing, marginInfo }) {
   const animate = on && !mute && level > 0.05;
@@ -3542,7 +3928,7 @@ function ZoneHeader({ label, sublabel, badge, accent, badgeColor }) {
   );
 }
 
-function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef, wedgeMargins }) {
+function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef, wedgeMargins, onOpenPlacement }) {
   const topo = state.topology || {};
   const isPassive = topo.paRig === 'amp+passive';
   // In passive mode the cabinets are dumb — the external amp powers them, so a
@@ -3708,6 +4094,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               label={window.SOURCES[k].label}
               kind={window.SOURCES[k].kind}
               diActive={window.SOURCES[k].diActive}
+              onOpenPlacement={onOpenPlacement}
               muted={state.sourceMute[k]}
               isTesting={state.testing === k}
               onTest={() => setState({ ...state, testing: k })}
@@ -4009,7 +4396,7 @@ function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRe
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins }) {
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement }) {
   const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
   const [hoverCable, setHoverCable] = useS2(null);
   const isMobile = useViewport();
@@ -4583,7 +4970,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
               sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
               snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
               wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
-              paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins}/>
+              paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
           </div>
           {sidebarContent}
         </div>
@@ -6023,7 +6410,7 @@ const WALK_STEPS = [
   },
   {
     act: 'The channel strip', title: 'Gain', target: 'ch1-gain',
-    teach: "Gain is the preamp knob at the top of the strip. It sets the signal strength right at the input. Turn it up while you watch the meter, aiming for healthy peaks with a little room before the red. Set gain by the meter, not by ear.",
+    teach: "Gain is the preamp knob at the top of the strip. It sets the signal strength right at the input. Turn it up while you watch the meter: park the signal's average in the gold zone, around -18, and let the peaks bounce above it with room to spare before the red. Set gain by the meter, not by ear.",
     prompt: "With the lead vocal in PFL, bring its gain up slowly and watch the meter. Ease it back if it hits the red.",
     aside: "The 48V button powers condenser mics. A dynamic mic like this lead vocal does not need it.",
     takeaway: "Gain is the input level, set with the knob at the top of the channel strip, by the meter.",
@@ -6657,6 +7044,7 @@ function App() {
   const everSoundRef = uR(false);
   uE(() => { if (audioOn) everSoundRef.current = true; }, [audioOn]);
   const [eqPanelOpen, setEqPanelOpen] = uS(false);
+  const [placementFor, setPlacementFor] = uS(null);
   // Free tier: clicking a locked challenge in the picker shows this pitch
   // overlay instead of loading the scenario.
   const [pitchFor, setPitchFor] = uS(null);
@@ -7002,11 +7390,14 @@ function App() {
 
   const audio = uM(() => window.computeAudio(state, envelopeRef.current), [state, envTick]);
 
-  // Active clipping. Recomputed every render from the live audio state.
-  // Unlike phantomPop (which sticks until reset), clipping is recoverable —
-  // the warning shows up while distortion is happening and goes away the
-  // moment the engineer backs off the offending control.
-  const clips = (window.detectClipping ? window.detectClipping(audio, state) : []);
+  // Clipping warnings read the SETTLED signal only (clipsStable, below).
+  // With real crest factors, live peaks cross thresholds on every hot
+  // syllable; keying the warning off the live signal made the modal storm
+  // open on a peak, and each trough reset the dismissal latch so it popped
+  // right back — a loop that locked the user away from the gain knob. A
+  // clip warning is about the SETTING being wrong, so it reads the setting.
+  // The meters still dance on the live signal; ears + red LEDs carry the
+  // transient story.
   // Stereo-PA balance issue (L vs R off, or volumes mismatched). Same
   // recoverable-warning treatment as clipping: blocks the win, clears the
   // moment the user matches them up.
@@ -7020,11 +7411,11 @@ function App() {
   // frame. Envelope-driven detection made the warning strobe at onset as
   // peaks crossed the threshold and troughs fell back under it.
   const audioBaseline = uM(() => window.computeAudio(state), [state]);
-  // Clip detection on the STEADY signal (no per-frame envelope). Drives the win
-  // and the brief's objectives so a dynamic source (a vocal peaking) doesn't
-  // flip the objective on and off as it rides above and below the threshold.
-  // The live `clips` (enveloped, above) still feeds the bouncing meters + the
-  // transient clip warning; only the win logic reads this stable version.
+  // Clip detection on the STEADY signal (no per-frame envelope). Drives the
+  // warning modal, the status pill, the win, and the brief's objectives, so a
+  // dynamic source (a vocal peaking) never flips any of them on and off as it
+  // rides above and below a threshold. A clip flag means the KNOBS are set
+  // wrong, and it stays put until the knobs change.
   const clipsStable = uM(() => (window.detectClipping ? window.detectClipping(audioBaseline, state) : []), [audioBaseline, state]);
   const feedback = (window.detectFeedback ? window.detectFeedback(state, audioBaseline) : null);
   // Per-wedge feedback margin (dB of headroom before the ring line), from the
@@ -7054,7 +7445,7 @@ function App() {
   const warnDismissedSigRef = uR(null);
   const faultSig = feedback ? null
                 : state.phantomPop ? ('pop:' + state.phantomPop.at)
-                : (clips && clips.length) ? 'clip'
+                : (clipsStable && clipsStable.length) ? 'clip'
                 : paBalanceIssue ? 'bal'
                 : null;
   uE(() => {
@@ -7313,7 +7704,11 @@ function App() {
           if (rms > 0.005) avg = avg * 0.997 + rms * 0.003;
           meterAvgRef.current[k] = avg;
           let f = avg > 1e-4 ? rms / avg : 0;
-          f = Math.max(0, Math.min(1.25, f));
+          // Real crest factors pass through now (a vocal peaks 12+ dB over its
+          // average). The old 1.25 cap existed because the old model had only
+          // ~2 dB of headroom; with a true 18 dB between nominal and clip the
+          // meters can dance the way real meters do.
+          f = Math.max(0, Math.min(4.5, f));
           const cur = envelopeRef.current[k] != null ? envelopeRef.current[k] : synthF;
           // Meter ballistics: fast attack, slower release, like a real meter.
           envelopeRef.current[k] = f > cur ? cur + (f - cur) * 0.6 : cur + (f - cur) * 0.25;
@@ -7336,18 +7731,20 @@ function App() {
         dt = dt < 0 ? 0 : (dt > 0.1 ? 0.1 : dt); // clamp first frame / tab-switch
         const energy = ringEnergyRef.current || (ringEnergyRef.current = new Array(fbChain.voices.length).fill(0));
         const rings = feedbackRingsRef.current || [];
-        const risk = new Array(fbChain.voices.length).fill(0);
+        const risk = new Array(fbChain.voices.length).fill(-999); // loop gain in dB; -999 = no ring reported
         for (const r of rings) if (r.hzIndex >= 0 && r.hzIndex < risk.length) risk[r.hzIndex] = Math.max(risk[r.hzIndex], r.risk);
-        // UNITY matches the detection SUSTAIN threshold (0.45): any band the
-        // detector still reports as ringing keeps producing audible energy, so
-        // the glow and the sound never disagree. Above it the ring builds; below
-        // it (band cut clear) it rings out with a tail and snaps to true zero.
-        const UNITY = 0.45, GROW_BASE = 0.3, GROW_SLOPE = 4.0, TAIL = 0.4, MAXGAIN = 0.32;
+        // risk[] is the band's loop gain in dB (0 = the Barkhausen unity
+        // point). Any band the detector still reports (down to the sustain
+        // hysteresis at -1.7 dB) keeps producing audible energy, so the glow
+        // and the sound never disagree; the build rate scales with how many
+        // dB over unity the loop sits — hotter loops run away faster,
+        // calibrated to the previous feel (~1 s to a howl just past onset).
+        const SUSTAIN_DB = -1.7, GROW_BASE = 0.3, GROW_PER_DB = 0.23, TAIL = 0.4, MAXGAIN = 0.32;
         let peak = 0;
         fbChain.voices.forEach((v, i) => {
           let e = energy[i] || 0;
-          const over = risk[i] - UNITY;
-          if (over > 0) e += (GROW_BASE + over * GROW_SLOPE) * dt; // build / runaway
+          const over = risk[i] > -900 ? (risk[i] - SUSTAIN_DB) : -1;
+          if (over > 0) e += (GROW_BASE + over * GROW_PER_DB) * dt; // build / runaway
           else { e -= e * Math.min(1, dt / TAIL); if (e < 1e-3) e = 0; } // ring out + snap
           e = e < 0 ? 0 : (e > 1 ? 1 : e);
           energy[i] = e;
@@ -7528,10 +7925,10 @@ function App() {
     }
 
     // PLAYBACK 5/6 — MUSIC / PINK toggle. The chord-pad oscillators are the
-    // "music" (a real music file slots in here later); pink noise is the
-    // broadband test signal an engineer rings a system out with. Both sum into
-    // the same channel-5 chain through their own selector gain, and
-    // state.playbackMode crossfades between them.
+    // FALLBACK "music" bed; the real music file loads just below and takes over
+    // on the same MUSIC selector. Pink noise is the broadband test signal an
+    // engineer rings a system out with. Both sum into the same channel-5 chain
+    // through their own selector gain, and state.playbackMode crossfades between them.
     {
       const pb = chainsRef.current.playback;
       if (pb) {
@@ -7567,6 +7964,47 @@ function App() {
         pb.musicSel = musicSel; pb.pinkSel = pinkSel; pb.pinkSrc = pinkSrc;
       }
     }
+
+    // PLAYBACK MUSIC — the real music file behind the MUSIC option. Loads async
+    // and hands off from the synth chord-pad the same way the stage stems do:
+    // decode, peak-normalize to a consistent working level, loop, and route
+    // through the MUSIC/PINK selector gain into the drive stage (past the
+    // synth-tuned trim + lowpass, which would leave a real recording quiet and
+    // dull). On success the synth "music" oscillators stop and the MUSIC/PINK
+    // crossfade rides the real file; a failed load just leaves the synth bed.
+    fetch('audio/playback.m4a?v=1')
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+      .then(ab => ctx.decodeAudioData(ab))
+      .then(buf => {
+        const pb = chainsRef.current.playback;
+        if (!pb || !pb.drive) return;
+        const startTime = ctx.currentTime + 0.15;
+        let peak = 0;
+        for (let c = 0; c < buf.numberOfChannels; c++) {
+          const d = buf.getChannelData(c);
+          for (let i = 0; i < d.length; i++) { const a = d[i] < 0 ? -d[i] : d[i]; if (a > peak) peak = a; }
+        }
+        const clipGain = ctx.createGain();
+        clipGain.gain.value = peak > 0.0001 ? Math.min(8, 0.6 / peak) : 1;
+        // The MUSIC/PINK selector for the real file. Seed it from the live pink
+        // selector so a load that finishes while PINK is showing stays silent.
+        const musicGain = ctx.createGain();
+        musicGain.gain.value = (pb.pinkSel && pb.pinkSel.gain.value > 0.5) ? 0 : 1;
+        const src = ctx.createBufferSource();
+        src.buffer = buf; src.loop = true;
+        src.connect(clipGain); clipGain.connect(musicGain); musicGain.connect(pb.drive);
+        src.start(startTime);
+        // Hand off: stop the synth chord-pad; the crossfade now rides the file.
+        try {
+          pb.o1 && pb.o1.stop(startTime);
+          pb.o2 && pb.o2.stop(startTime);
+          (pb.chordOscs || []).forEach(o => o.stop(startTime));
+          pb.lfo && pb.lfo.stop(startTime);
+        } catch (_) {}
+        pb.musicSel = musicGain;
+        pb.musicSrc = src; pb.musicClipGain = clipGain;
+      })
+      .catch(e => console.warn('playback music load failed:', e));
 
     // STAGE SOURCE LOOPS — swap the placeholder synth for the real recorded
     // stems. The four files are identical-length (~19.8 s) mono loops, so once
@@ -7684,12 +8122,22 @@ function App() {
     // master is being driven through saturation — same lesson the user sees
     // on the master meter. A PA-speaker clip applies only when the user is
     // monitoring PA (cans on the PFL bus aren't affected by speaker clip).
-    const mainClipped = ((audio.mainBus?.L || 0) > 1.22) || ((audio.mainBus?.R || 0) > 1.22);
-    const paClipped   = ((audio.outputs?.pa_l || 0) > 1.03) || ((audio.outputs?.pa_r || 0) > 1.03);
-    const wedgeClipped  = (audio.outputs?.wedge  || 0) > 1.03;
-    const wedge2Clipped = (audio.outputs?.wedge2 || 0) > 1.03;
-    const wedge3Clipped = (audio.outputs?.wedge3 || 0) > 1.03;
-    const wedge4Clipped = (audio.outputs?.wedge4 || 0) > 1.03;
+    // Every output stage clips at the same 0 dBFS (+22 dBu) ceiling as the main
+    // bus and the preamp — one clip point across the whole desk. The old speaker
+    // flags used a legacy 1.03 linear (~-16 dBFS), which a healthy summed mix
+    // sailed past on any vocal PEAK: because a bus-clip flag bumps the drive on
+    // EVERY source routed there, one channel's transient made the whole mix grit
+    // even though each channel was clean in PFL. Summing is uncorrelated (~sqrt N)
+    // and the bus carries full 0-dBFS headroom, so a well-gain-staged mix sums
+    // clean; only a genuinely over-driven output (master or a speaker's own
+    // volume cranked, or over-gained inputs upstream) reaches the ceiling.
+    const OUT_CLIP = window.dbuToLin(22);
+    const mainClipped = ((audio.mainBus?.L || 0) > OUT_CLIP) || ((audio.mainBus?.R || 0) > OUT_CLIP);
+    const paClipped   = ((audio.outputs?.pa_l || 0) > OUT_CLIP) || ((audio.outputs?.pa_r || 0) > OUT_CLIP);
+    const wedgeClipped  = (audio.outputs?.wedge  || 0) > OUT_CLIP;
+    const wedge2Clipped = (audio.outputs?.wedge2 || 0) > OUT_CLIP;
+    const wedge3Clipped = (audio.outputs?.wedge3 || 0) > OUT_CLIP;
+    const wedge4Clipped = (audio.outputs?.wedge4 || 0) > OUT_CLIP;
     for (const k of Object.keys(chainsRef.current)) {
       // Compute per-side levels so the playback is genuinely stereo. When
       // monitoring PA, the L/R contributions split per the pan law and the
@@ -7735,15 +8183,28 @@ function App() {
       let drive = 1.0;
       const chIdx = audio.chanInSource ? audio.chanInSource.indexOf(k) : -1;
       if (chIdx >= 0) {
+        // Real headroom: grit starts as the LIVE peaks (average level times
+        // the program's crest factor) push past +19 dBu — the soft knee 3 dB
+        // under the +22 clip point — and hardens over the next few dB. A
+        // dynamic vocal (crest ~+12 dB) grits earlier than a steady bass
+        // (crest ~+5 dB) at the same average: real, source-dependent behavior.
+        // Grit begins only when the live peaks actually REACH the +22 dBu
+        // clip point (a hair under, for the analog knee), and hardens fast
+        // past it. The meters' red zone starts at -3 dBFS, so the red always
+        // lights BEFORE the distortion is audible — warn first, like a real
+        // desk. A dynamic vocal (crest ~+12 dB) still grits earlier than a
+        // steady bass (~+5 dB) at the same average: source-dependent, real.
         const chIn = audio.chanIn[chIdx];
-        if (chIn > 1.03) {
-          // Preamp scale: 1.03 → 1.0 drive, 1.45 (max) → ~7 drive.
-          drive = Math.max(drive, Math.min(10, 1 + (chIn - 1.03) * 14));
+        const peakDbu = window.linToDbu(chIn);
+        if (peakDbu > 21.5) {
+          drive = Math.max(drive, Math.min(10, 1 + (peakDbu - 21.5) * 2.5));
         }
         const post = audio.post[chIdx];
-        if (post > 0.93) {
-          // Channel-meter scale: 0.93 → 1.0 drive, 1.5 → ~9 drive.
-          drive = Math.max(drive, Math.min(10, 1 + (post - 0.93) * 14));
+        const postDbu = window.linToDbu(post);
+        if (postDbu > 21.5) {
+          // Same +22 dBu ceiling at the channel/bus stage: fader past unity
+          // on a hot channel can clip even when the preamp is clean.
+          drive = Math.max(drive, Math.min(10, 1 + (postDbu - 21.5) * 2.5));
         }
       }
       if (!audio.anyPfl) {
@@ -8489,6 +8950,12 @@ function App() {
           your console" walkthrough, and everyone else lands with the mode menu
           open (startOpen on TopBar), so the menu is the single universal entry.
           The component + handlers remain dormant. */}
+      <window.PlacementPanel
+        open={!!placementFor} srcKey={placementFor}
+        label={placementFor && window.SOURCES[placementFor] ? window.SOURCES[placementFor].label : ''}
+        setup={state.micSetup && placementFor ? state.micSetup[placementFor] : null}
+        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 135, tilt: 5 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
+        onClose={() => setPlacementFor(null)}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
         wedge={state.outputs.wedge} wedge2={state.outputs.wedge2}
@@ -8504,7 +8971,7 @@ function App() {
 
       <WarningModal
         open={warnOpen}
-        phantomPop={state.phantomPop} clips={clips} paBalanceIssue={paBalanceIssue} audio={audio}
+        phantomPop={state.phantomPop} clips={clipsStable} paBalanceIssue={paBalanceIssue} audio={audio}
         onReset={restart}
         onClose={() => { warnDismissedSigRef.current = faultSig; setWarnOpen(false); }}
       />
@@ -8576,7 +9043,7 @@ function App() {
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             <div ref={designRef} style={{ width: DESIGN_W, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
               <window.Chain
-                state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins}
+                state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
                 surface={(level.isWalkthrough || level.isLesson) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital}
                 surfaceLocked={level.isWalkthrough || level.isLesson}
                 sidebarContent={
@@ -8608,7 +9075,7 @@ function App() {
                     : <BriefCard level={level} conditions={effConditions} audio={audioBaseline} phantomPop={state.phantomPop} onReset={restart}
                         liveShow={TIER === 'member' && liveShow} dropouts={dropouts}
                         pendingHints={pendingHints} hintCount={hintCount} onRevealHint={() => { hintsUsedRef.current += 1; setHintCount(c => c + 1); }}
-                        pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
+                        pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clipsStable} paBalanceIssue={paBalanceIssue} feedback={feedback}
                         verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus} patchStatus={patchStatus}
                         powerStatus={powerStatus}
                         onSignOff={null} signoffMsg={null}
