@@ -1051,11 +1051,13 @@ function detectClipping(audio, state) {
   // Stage 2 — CHANNEL METER (post-fader). Preamp is clean but the fader is
   // pushing the channel into the red, or the combination of gain + fader
   // is hot enough that the meter reads red even though the preamp itself
-  // is below its red zone.
+  // is below its red zone. Same real-units rule as the preamp stage: the
+  // flag fires when the post-fader AVERAGE sits above +15 dBu, where the
+  // program's peaks are slamming the +22 clip on most syllables.
   if (audio && audio.post) {
     const channelClips = [];
     audio.post.forEach((p, i) => {
-      if (p > 0.93) {
+      if (p > dbuToLin(15)) {
         channelClips.push({
           stage: 'channel',
           id: i,
@@ -7301,11 +7303,14 @@ function App() {
 
   const audio = uM(() => window.computeAudio(state, envelopeRef.current), [state, envTick]);
 
-  // Active clipping. Recomputed every render from the live audio state.
-  // Unlike phantomPop (which sticks until reset), clipping is recoverable —
-  // the warning shows up while distortion is happening and goes away the
-  // moment the engineer backs off the offending control.
-  const clips = (window.detectClipping ? window.detectClipping(audio, state) : []);
+  // Clipping warnings read the SETTLED signal only (clipsStable, below).
+  // With real crest factors, live peaks cross thresholds on every hot
+  // syllable; keying the warning off the live signal made the modal storm
+  // open on a peak, and each trough reset the dismissal latch so it popped
+  // right back — a loop that locked the user away from the gain knob. A
+  // clip warning is about the SETTING being wrong, so it reads the setting.
+  // The meters still dance on the live signal; ears + red LEDs carry the
+  // transient story.
   // Stereo-PA balance issue (L vs R off, or volumes mismatched). Same
   // recoverable-warning treatment as clipping: blocks the win, clears the
   // moment the user matches them up.
@@ -7319,11 +7324,11 @@ function App() {
   // frame. Envelope-driven detection made the warning strobe at onset as
   // peaks crossed the threshold and troughs fell back under it.
   const audioBaseline = uM(() => window.computeAudio(state), [state]);
-  // Clip detection on the STEADY signal (no per-frame envelope). Drives the win
-  // and the brief's objectives so a dynamic source (a vocal peaking) doesn't
-  // flip the objective on and off as it rides above and below the threshold.
-  // The live `clips` (enveloped, above) still feeds the bouncing meters + the
-  // transient clip warning; only the win logic reads this stable version.
+  // Clip detection on the STEADY signal (no per-frame envelope). Drives the
+  // warning modal, the status pill, the win, and the brief's objectives, so a
+  // dynamic source (a vocal peaking) never flips any of them on and off as it
+  // rides above and below a threshold. A clip flag means the KNOBS are set
+  // wrong, and it stays put until the knobs change.
   const clipsStable = uM(() => (window.detectClipping ? window.detectClipping(audioBaseline, state) : []), [audioBaseline, state]);
   const feedback = (window.detectFeedback ? window.detectFeedback(state, audioBaseline) : null);
   // Per-wedge feedback margin (dB of headroom before the ring line), from the
@@ -7353,7 +7358,7 @@ function App() {
   const warnDismissedSigRef = uR(null);
   const faultSig = feedback ? null
                 : state.phantomPop ? ('pop:' + state.phantomPop.at)
-                : (clips && clips.length) ? 'clip'
+                : (clipsStable && clipsStable.length) ? 'clip'
                 : paBalanceIssue ? 'bal'
                 : null;
   uE(() => {
@@ -8828,7 +8833,7 @@ function App() {
 
       <WarningModal
         open={warnOpen}
-        phantomPop={state.phantomPop} clips={clips} paBalanceIssue={paBalanceIssue} audio={audio}
+        phantomPop={state.phantomPop} clips={clipsStable} paBalanceIssue={paBalanceIssue} audio={audio}
         onReset={restart}
         onClose={() => { warnDismissedSigRef.current = faultSig; setWarnOpen(false); }}
       />
@@ -8932,7 +8937,7 @@ function App() {
                     : <BriefCard level={level} conditions={effConditions} audio={audioBaseline} phantomPop={state.phantomPop} onReset={restart}
                         liveShow={TIER === 'member' && liveShow} dropouts={dropouts}
                         pendingHints={pendingHints} hintCount={hintCount} onRevealHint={() => { hintsUsedRef.current += 1; setHintCount(c => c + 1); }}
-                        pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clips} paBalanceIssue={paBalanceIssue} feedback={feedback}
+                        pflClear={state.channels.every(c => !c.solo)} pflChecked={pflCheckedRef.current} clips={clipsStable} paBalanceIssue={paBalanceIssue} feedback={feedback}
                         verifyStatus={verifyStatus} gainStatus={gainStatus} pflEachStatus={pflEachStatus} zeroStatus={zeroStatus} patchStatus={patchStatus}
                         powerStatus={powerStatus}
                         onSignOff={null} signoffMsg={null}
