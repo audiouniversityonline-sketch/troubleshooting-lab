@@ -296,9 +296,10 @@ window.LEVELS = [
     ],
     sabotage: (s) => {
       // Carried from Set the Input Level: good input, faders at unity, PA set.
-      // The wedges are not up yet: sends closed, wedge volumes down.
+      // The wedges are not up yet: sends closed, wedge volumes down. Playback is
+      // a hot line source, so its healthy gain sits low on the knob (~0.20).
       s.channels[4].mute = false;
-      s.channels[4].gain = 0.42;
+      s.channels[4].gain = window.HEALTHY_GAIN_BY_CH[4];
       s.channels[4].fader = 0.75;
       s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
       s.master.fader = 0.75; s.master.mute = false;
@@ -339,8 +340,8 @@ window.LEVELS = [
       // Test the Wedges). The two vocal channels start muted, faders down, gain
       // low. The condenser's phantom is off so the student has to know it needs
       // +48V. PFL each channel to check it before bringing it up.
-      s.channels[0].mute = true; s.channels[0].fader = 0; s.channels[0].gain = 0.2; s.channels[0].phantom = false;
-      s.channels[1].mute = true; s.channels[1].fader = 0; s.channels[1].gain = 0.2; s.channels[1].phantom = false;
+      s.channels[0].mute = true; s.channels[0].fader = 0; s.channels[0].gain = window.HEALTHY_GAIN_BY_CH[0] * 0.5; s.channels[0].phantom = false;
+      s.channels[1].mute = true; s.channels[1].fader = 0; s.channels[1].gain = window.HEALTHY_GAIN_BY_CH[1] * 0.5; s.channels[1].phantom = false;
       s.master.fader = 0.75; s.master.mute = false;
       s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
       s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
@@ -375,13 +376,16 @@ window.LEVELS = [
       { title: 'Bring up the keys', target: 'ch4-strip', teach: 'The keyboard runs through a passive DI, which needs no power. The simplest input on the board.', text: 'Channel 4 (passive DI on keys, no power): PFL it, set the gain, bring it up.', done: (ctx) => hintReaches(ctx, 'laptop', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[4] },
     ],
     sabotage: (s) => {
-      // Mics from the last level kept as set, but muted so the audio stops.
-      s.channels[0].mute = true; s.channels[0].fader = 0.72; s.channels[0].gain = 0.42; s.channels[0].phantom = false;
-      s.channels[1].mute = true; s.channels[1].fader = 0.72; s.channels[1].gain = 0.42; s.channels[1].phantom = true;
-      // Both DI channels start muted, faders down, gain low. The active DI
-      // (bass, ch3) has phantom off so the student has to power it.
-      s.channels[2].mute = true; s.channels[2].fader = 0; s.channels[2].gain = 0.2; s.channels[2].phantom = false;
-      s.channels[3].mute = true; s.channels[3].fader = 0; s.channels[3].gain = 0.2; s.channels[3].phantom = false;
+      // Mics from the last level kept as set (their per-source healthy gain),
+      // but muted so the audio stops.
+      s.channels[0].mute = true; s.channels[0].fader = 0.72; s.channels[0].gain = window.HEALTHY_GAIN_BY_CH[0]; s.channels[0].phantom = false;
+      s.channels[1].mute = true; s.channels[1].fader = 0.72; s.channels[1].gain = window.HEALTHY_GAIN_BY_CH[1]; s.channels[1].phantom = true;
+      // Both DI channels start muted, faders down, gain low (half of healthy) so
+      // the student sets each by the meter: the passive bass needs a lot of gain
+      // (its healthy spot is high on the knob), the keys very little. The active
+      // DI (bass, ch3) has phantom off so the student has to power it.
+      s.channels[2].mute = true; s.channels[2].fader = 0; s.channels[2].gain = window.HEALTHY_GAIN_BY_CH[2] * 0.5; s.channels[2].phantom = false;
+      s.channels[3].mute = true; s.channels[3].fader = 0; s.channels[3].gain = window.HEALTHY_GAIN_BY_CH[3] * 0.5; s.channels[3].phantom = false;
       s.master.fader = 0.75; s.master.mute = false;
       s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
       s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
@@ -525,7 +529,10 @@ window.LEVELS = [
       for (let i = 0; i < s.channels.length; i++) {
         s.channels[i].mute = true;
         s.channels[i].fader = 0;
-        s.channels[i].gain = i === 4 ? 0 : 0.2;
+        // Playback out (channel 5 is unused in the gig); every input starts at
+        // half its per-source healthy gain, so the student sets each by the
+        // meter from a weak-but-present start (no channel reads hot to begin).
+        s.channels[i].gain = i === 4 ? 0 : window.HEALTHY_GAIN_BY_CH[i] * 0.5;
         s.channels[i].phantom = false;
         s.channels[i].aux1 = 0;
         s.channels[i].aux2 = 0;
@@ -565,13 +572,14 @@ window.LEVELS = [
       { title: 'Console off last', target: 'mixer-power', teach: 'With every speaker already dead, the console goes off last and its thump plays to nobody.', text: 'Console off last (it pops on shutoff, and a live speaker would play it).', done: (ctx) => ctx.powerStatus && !ctx.powerStatus.console },
     ],
     sabotage: (s) => {
-      // End-of-night state: live mix at modest levels (clean), with realistic
-      // show leftovers for the zero-out: off-center pans on the DIs, HPF in
-      // on the vocal, phantom on the condenser + active DI.
-      s.channels[0].mute = false; s.channels[0].fader = 0.55; s.channels[0].gain = 0.3; s.channels[0].phantom = false; s.channels[0].aux1 = 0.45; s.channels[0].aux2 = 0; s.channels[0].highpass = true;
-      s.channels[1].mute = false; s.channels[1].fader = 0.55; s.channels[1].gain = 0.3; s.channels[1].phantom = true;  s.channels[1].aux1 = 0;    s.channels[1].aux2 = 0;
-      s.channels[2].mute = false; s.channels[2].fader = 0.4;  s.channels[2].gain = 0.3; s.channels[2].phantom = true;  s.channels[2].aux1 = 0;    s.channels[2].aux2 = 0; s.channels[2].pan = 0.3;
-      s.channels[3].mute = false; s.channels[3].fader = 0.4;  s.channels[3].gain = 0.3; s.channels[3].phantom = false; s.channels[3].aux1 = 0;    s.channels[3].aux2 = 0; s.channels[3].pan = 0.7;
+      // End-of-night state: a clean live mix (every input at its per-source
+      // healthy gain, faders modest), with realistic show leftovers for the
+      // zero-out: off-center pans on the DIs, HPF in on the vocal, phantom on
+      // the condenser + active DI.
+      s.channels[0].mute = false; s.channels[0].fader = 0.55; s.channels[0].gain = window.HEALTHY_GAIN_BY_CH[0]; s.channels[0].phantom = false; s.channels[0].aux1 = 0.45; s.channels[0].aux2 = 0; s.channels[0].highpass = true;
+      s.channels[1].mute = false; s.channels[1].fader = 0.55; s.channels[1].gain = window.HEALTHY_GAIN_BY_CH[1]; s.channels[1].phantom = true;  s.channels[1].aux1 = 0;    s.channels[1].aux2 = 0;
+      s.channels[2].mute = false; s.channels[2].fader = 0.4;  s.channels[2].gain = window.HEALTHY_GAIN_BY_CH[2]; s.channels[2].phantom = true;  s.channels[2].aux1 = 0;    s.channels[2].aux2 = 0; s.channels[2].pan = 0.3;
+      s.channels[3].mute = false; s.channels[3].fader = 0.4;  s.channels[3].gain = window.HEALTHY_GAIN_BY_CH[3]; s.channels[3].phantom = false; s.channels[3].aux1 = 0;    s.channels[3].aux2 = 0; s.channels[3].pan = 0.7;
       s.channels[4].mute = true;  s.channels[4].fader = 0;    s.channels[4].gain = 0;   s.channels[4].aux1 = 0;        s.channels[4].aux2 = 0;
       s.master = { ...s.master, mute: false, fader: 0.75 };
       s.mixer = { on: true };
@@ -615,15 +623,18 @@ window.LEVELS = [
 // matter what the rng broke — and a hard-panned or one-sided fault can't
 // slip through.
 //
-// Numbers (real-units engine): gain 0.42 -> chanIn 0.812 (+4 dBu, -18 dBFS),
-// fader 0.6 (-5.8 dB) -> post 0.415, master at unity, PA trim 0.6 (-6 dB)
-// -> per-source, per-side PA contribution 0.27 (conditions min 0.2 with
-// margin); the main bus power-sums to about 0 dBu, 22 dB under the clip.
+// Numbers (real-units engine): each source at its PER-SOURCE healthy gain
+// (HEALTHY_GAIN_BY_CH: bass ~0.77, keys ~0.23, mics ~0.42-0.48) -> chanIn 0.81
+// (+4 dBu, -18 dBFS) on every channel, fader 0.6 (-5.8 dB) -> post 0.415,
+// master at unity, PA trim 0.6 (-6 dB) -> per-source, per-side PA contribution
+// 0.27 (conditions min 0.2 with margin); the main bus power-sums to about
+// 0 dBu, 22 dB under the clip. Same meters as the old uniform-0.42 board — the
+// gain KNOBS now sit at realistic per-source spots.
 function bandUp(s) {
   for (let i = 0; i < 4; i++) {
     s.channels[i].mute = false;
     s.channels[i].fader = 0.6;
-    s.channels[i].gain = 0.42; // healthy input: baseline ~0.81, clean on peaks (see defaultState note)
+    s.channels[i].gain = window.HEALTHY_GAIN_BY_CH[i]; // per-source healthy input: every channel nominal, ~0.81 baseline
     // Condenser (ch2) and active DI (ch3) need +48V to pass signal.
     s.channels[i].phantom = (i === 1 || i === 2);
   }
@@ -792,9 +803,11 @@ window.PRACTICE_GOALS = [
   {
     key: 'gain-stage', label: 'Fix the gain structure', par: 2,
     apply: (s) => {
-      // The bass came in weak: its gain got cracked way down and the fader was
-      // ridden up to compensate. Set the gain healthy and the fader to unity.
-      s.channels[2].gain = 0.12; s.channels[2].fader = 0.45;
+      // The bass came in weak: its gain got cracked down to half of where a
+      // passive bass needs to sit, and the fader was ridden up past unity to
+      // compensate. Set the gain healthy (high on the knob for a bass) and the
+      // fader back to unity.
+      s.channels[2].gain = window.HEALTHY_GAIN_BY_CH[2] * 0.5; s.channels[2].fader = 0.9;
       return {
         conditions: [{ source: 'guitar', dest: 'pa', min: 0.3 }],
         gainStructure: { refChannel: 3, unity: 0.75, faderTol: 0.08, inputBand: [0.75, 1.0] },
@@ -812,7 +825,7 @@ window.PRACTICE_GOALS = [
       // passing signal, the PA and both wedges, one at a time. This checks the
       // OUTPUTS — it is NOT a line check (a line check verifies the inputs).
       for (let i = 0; i < 4; i++) { s.channels[i].mute = true; }
-      s.channels[4].mute = false; s.channels[4].gain = 0.42; s.channels[4].fader = 0.75; s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
+      s.channels[4].mute = false; s.channels[4].gain = window.HEALTHY_GAIN_BY_CH[4]; s.channels[4].fader = 0.75; s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
       s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.6 };
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, mute: false, volume: 0.6 };
       return {
@@ -963,12 +976,13 @@ window.FEEDBACK_MODE = {
   hint: 'Raise the send a little at a time. When a frequency rings, find it on the monitor EQ and pull that band down a few dB, just past where the ring stops. Expect three or four on the way up, and keep every cut small. Once the vocal hits the target, stop.',
   sabotage: (s, rng) => {
     const r = rng || (() => 0.5);
-    // The singer's vocal live at the clean input-gain sweet spot (0.42:
-    // baseline ~0.81, no distortion on the Golden stem peaks), her wedge on,
-    // the send low. The ring-out is driven by the aux send, not the preamp,
-    // so a clean input gain leaves the lesson intact.
+    // The singer's vocal live at its clean input-gain sweet spot (the vocal's
+    // per-source healthy gain: baseline ~0.81, +4 dBu, no distortion on the
+    // Golden stem peaks), her wedge on, the send low. The ring-out is driven by
+    // the aux send, not the preamp, so a clean input gain leaves the lesson
+    // intact.
     s.channels[0].mute = false;
-    s.channels[0].gain = 0.42;
+    s.channels[0].gain = window.HEALTHY_GAIN_BY_CH[0];
     s.channels[0].fader = 0.72;
     s.channels[0].aux1 = 0.15;
     s.master.mute = false;
