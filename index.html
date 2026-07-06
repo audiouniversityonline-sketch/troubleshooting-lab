@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=57"></script>
+<script src="content.js?v=58"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5506,6 +5506,9 @@ function defaultProfile() {
     liveShow: false,    // Practice: "the room is listening" mode (charges destructive diagnosis)
     pathChosen: false,  // welcome chooser: has the user picked a first path (quick fix vs Essentials)
     walkthroughDone: false, // free "Know your console" walkthrough: shown once to a fresh free visitor
+    streak: 0,          // daily streak: consecutive days with at least one finished session
+    streakDay: '',      // YYYY-MM-DD (local) of the last day counted toward the streak
+    streakBest: 0,      // longest daily streak reached, ever
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -5531,9 +5534,28 @@ function normalizeProfile(data) {
   p.liveShow = !!data.liveShow;
   p.pathChosen = !!data.pathChosen;
   p.walkthroughDone = !!data.walkthroughDone;
+  p.streak = (Number.isFinite(data.streak) && data.streak >= 0) ? Math.floor(data.streak) : 0;
+  p.streakDay = (typeof data.streakDay === 'string') ? data.streakDay : '';
+  p.streakBest = (Number.isFinite(data.streakBest) && data.streakBest >= 0) ? Math.floor(data.streakBest) : 0;
   p.firstName = (typeof data.firstName === 'string') ? data.firstName : '';
   p.v = PROFILE_VERSION;
   return p;
+}
+
+// Local calendar day as YYYY-MM-DD, offset by `days` (default 0). Local time on
+// purpose: a personal training streak follows the user's own days, and there is
+// no server to anchor to anyway.
+function dayStr(days) {
+  const d = new Date();
+  if (days) d.setDate(d.getDate() + days);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+// The stored streak still counts only if the last active day was today or
+// yesterday; a bigger gap means the chain broke, so the live streak reads 0
+// (even before the next session resets it).
+function liveStreak(profile) {
+  if (!profile || !profile.streak) return 0;
+  return (profile.streakDay === dayStr(0) || profile.streakDay === dayStr(-1)) ? profile.streak : 0;
 }
 
 // First run after the upgrade: build a profile from the old v1 keys.
@@ -6092,7 +6114,7 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
   const [msg, setMsg] = uS(null);
   const [confirmReset, setConfirmReset] = uS(false);
   const [tab, setTab] = uS('save'); // 'save' (backup/restore) | 'training' (the ledger)
-  uE(() => { if (open) { setPaste(''); setMsg(null); setConfirmReset(false); setTab('save'); } }, [open]);
+  uE(() => { if (open) { setPaste(''); setMsg(null); setConfirmReset(false); setTab('training'); } }, [open]);
   if (!open) return null;
   const code = encodeProgressCode(profile) || '';
   const doneCount = Object.keys((profile && profile.completed) || {}).length;
@@ -6124,46 +6146,21 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
   // YOUR TRAINING tab — the per-fault ledger in plain coach language, no
   // medals. Weakest fault first, so the member can see what to drill.
   const trainingView = () => {
-    const ledger = (profile && profile.ledger) || {};
-    const totalReps = (profile && profile.reps) || 0;
-    const cleanReps = (profile && profile.practiceClean) || 0;
-    const entries = Object.keys(ledger)
-      .map((k) => ({ key: k, ...ledger[k] }))
-      .filter((e) => e.reps > 0)
-      .map((e) => ({ ...e, avgOver: e.overPar / e.reps }))
-      .sort((a, b) => b.avgOver - a.avgOver || b.reps - a.reps);
-    if (totalReps === 0) {
-      return (<div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-        Play a few practice rounds and your training record shows up here: which faults you've seen, and which ones still slow you down.
-      </div>);
-    }
-    const overTxt = (avgOver) => {
-      if (avgOver < 0.5) return 'usually right on par';
-      const n = Math.round(avgOver);
-      return 'usually ' + n + ' move' + (n === 1 ? '' : 's') + ' over par';
-    };
-    const cleanPct = Math.round((cleanReps / totalReps) * 100);
+    // Just the daily streak. The old rep/clean synopsis and per-fault breakdown
+    // were noise: troubleshooting is about getting it done, not efficiency, so
+    // move counts and clean-vs-par framing are out (Kyle 2026-07-06).
+    const streakNow = liveStreak(profile);
+    const streakBest = (profile && profile.streakBest) || 0;
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.5 }}>
-          You've finished <b>{totalReps}</b> practice round{totalReps === 1 ? '' : 's'}, <b>{cleanPct}%</b> of them clean (no hints, at or under par).
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', background: streakNow > 0 ? 'rgba(255,201,58,0.06)' : 'rgba(255,255,255,0.02)', border: '1px solid ' + (streakNow > 0 ? 'rgba(255,201,58,0.3)' : '#2a2a2e'), borderRadius: 6 }}>
+        <div className="display" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, color: streakNow > 0 ? 'var(--accent)' : 'var(--ink-3)', minWidth: 24, textAlign: 'center' }}>{streakNow}</div>
+        <div>
+          <div className="mono" style={{ fontSize: 9, letterSpacing: 1.3, fontWeight: 800, color: streakNow > 0 ? 'var(--accent)' : 'var(--ink-3)' }}>DAY STREAK</div>
+          <div style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.4, marginTop: 2 }}>
+            {streakNow > 0 ? 'Finish a session tomorrow to keep it going.' : 'Finish a session today to start one.'}
+            {streakBest > 1 ? ' Your best is ' + streakBest + ' days.' : ''}
+          </div>
         </div>
-        {entries.length === 0 ? (
-          <div style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.5 }}>
-            Your earlier rounds are counted. New rounds from here on break down fault by fault, right here.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>BY FAULT · WEAKEST FIRST</div>
-            {entries.map((e, i) => (
-              <div key={e.key} style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.45 }}>
-                <b style={{ color: 'var(--ink)' }}>{faultLabel(e.key)}</b>: {e.reps} round{e.reps === 1 ? '' : 's'}, {overTxt(e.avgOver)}.
-                {e.clean > 0 ? ' ' + e.clean + ' clean.' : ''}
-                {i === 0 && entries.length > 1 && e.avgOver >= 1 ? <span style={{ color: 'var(--amber)' }}> Your slowest fault.</span> : null}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     );
   };
@@ -6178,11 +6175,11 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
         boxShadow: '0 12px 40px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 12,
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-          <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>Your progress</div>
+          <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>Your training</div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>{doneCount} complete</div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {[['save', 'SAVE CODE'], ['training', 'YOUR TRAINING']].map(([id, lbl]) => (
+          {[['training', 'YOUR TRAINING'], ['save', 'SAVE CODE']].map(([id, lbl]) => (
             <button key={id} onClick={() => setTab(id)} className="mono ui-no-select" style={{
               padding: '5px 11px', fontSize: 9, fontWeight: 800, letterSpacing: 0.8, borderRadius: 4, cursor: 'pointer',
               background: tab === id ? 'rgba(106,169,255,0.16)' : 'transparent',
@@ -7194,6 +7191,19 @@ function App() {
   // current rep, written by the practice sabotage at load time, read by the
   // debrief.
   const [reps, setReps] = uS(() => profileRef.current.reps);
+  // Daily streak: consecutive days with at least one finished session. Held in
+  // the profile (localStorage + save code) and shown as the live value, which
+  // reads 0 once the chain lapses. bumpStreak() runs on every solve.
+  const [streak, setStreak] = uS(() => liveStreak(profileRef.current));
+  const bumpStreak = () => {
+    const p = profileRef.current;
+    const today = dayStr(0);
+    if (p.streakDay === today) return; // already counted a session today
+    const next = (p.streakDay === dayStr(-1)) ? (p.streak || 0) + 1 : 1; // extend or restart
+    profileRef.current = { ...p, streak: next, streakDay: today, streakBest: Math.max(p.streakBest || 0, next) };
+    saveProfile(profileRef.current);
+    setStreak(next);
+  };
 
   const [practiceFaults, setPracticeFaultsState] = uS(() => {
     const n = profileRef.current.practiceFaults;
@@ -7709,6 +7719,7 @@ function App() {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
           setSolved(true);
+          bumpStreak(); // any finished session (lesson, rep, ring-out) counts today
           setCompleted(c => ({ ...c, [level.id]: true }));
           // A finished practice rep counts, every time — that's the metric
           // the debrief celebrates. Record it into the per-fault ledger first
@@ -9042,7 +9053,7 @@ function App() {
         onRestart={restart} onPrev={prev} onNext={next} onPick={pickLevel}
         completed={completed}
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
-        onOpenProgress={() => setSaveModalOpen(true)}
+        onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
@@ -9192,7 +9203,7 @@ function App() {
                         onGoEssentials={(level.isCustom && TIER !== 'member') ? () => { loadLevel(WALKTHROUGH_INDEX, undefined, true); } : null}
                         practiceFreeLeft={(level.isPractice && TIER !== 'member') ? freeRepsLeft : null}
                         onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}
-                        rank={rank} rankClean={rankClean} rankUp={rankUp} coverage={coverage}
+                        rank={rank} rankClean={rankClean} rankUp={rankUp} coverage={coverage} streak={streak}
                         liveShow={TIER === 'member' && liveShow} dropouts={dropouts}
                         debrief={(level.isChallenge && !level.isCustom && !level.isLibrary) ? {
                           moves: movesRef.current,
@@ -9538,7 +9549,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -9681,7 +9692,12 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           <button onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>INPUT LIST</button>
         )}
         {onOpenProgress && (
-          <button onClick={onOpenProgress} className="mono ui-no-select" title="Back up or restore your progress" style={{ ...navBtn, padding: '6px 12px' }}>PROGRESS</button>
+          <button onClick={onOpenProgress} className="mono ui-no-select" title="Your training record and daily streak" style={{ ...navBtn, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            TRAINING
+            {streak > 0 && (
+              <span title={streak + '-day streak'} style={{ fontSize: 9, fontWeight: 800, color: '#0a0a0c', background: 'var(--accent)', borderRadius: 8, padding: '1px 6px', letterSpacing: 0.3 }}>{streak}</span>
+            )}
+          </button>
         )}
         <button onClick={toggleFullscreen} className="mono ui-no-select" title="Fill the screen" style={{ ...navBtn, padding: '6px 12px' }}>{isFs ? '⤢ EXIT' : '⤢ FULL SCREEN'}</button>
         <button onClick={onRestart} className="mono ui-no-select" style={{ ...navBtn, padding: '6px 14px' }}>↻ RESET</button>
@@ -9994,7 +10010,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage }) {
+function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -10015,7 +10031,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div className="mono" style={{ fontSize: 8, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>◎ DEBRIEF</div>
             <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-              <b style={{ color: 'var(--ink)' }}>{debrief.goalLabel}</b>, done in <b style={{ color: 'var(--ink)' }}>{debrief.moves} move{debrief.moves === 1 ? '' : 's'}</b>{debrief.par != null && <>. A clean approach takes about <b style={{ color: 'var(--ink)' }}>{debrief.par}</b></>}.
+              <b style={{ color: 'var(--ink)' }}>{debrief.goalLabel}</b> — done.
             </div>
             <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
               Hints: {debrief.hints > 0 ? <b style={{ color: 'var(--amber)' }}>{debrief.hints} used</b> : <b style={{ color: 'var(--green)' }}>none</b>}.
@@ -10053,8 +10069,8 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           <div className="mono" style={{ fontSize: 8, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>◎ DEBRIEF</div>
           <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
             {debrief.faults != null
-              ? <>You fixed <b style={{ color: 'var(--ink)' }}>{debrief.faults} fault{debrief.faults === 1 ? '' : 's'}</b> in <b style={{ color: 'var(--ink)' }}>{debrief.moves} move{debrief.moves === 1 ? '' : 's'}</b></>
-              : <>You solved it in <b style={{ color: 'var(--ink)' }}>{debrief.moves} move{debrief.moves === 1 ? '' : 's'}</b></>}{debrief.par != null && <>. A systematic signal-path check does it in about <b style={{ color: 'var(--ink)' }}>{debrief.par}</b></>}.
+              ? <>You found and fixed <b style={{ color: 'var(--ink)' }}>{debrief.faults} fault{debrief.faults === 1 ? '' : 's'}</b>.</>
+              : <>You solved it.</>}
           </div>
           <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
             Hints: {debrief.hints > 0 ? <b style={{ color: 'var(--amber)' }}>{debrief.hints} used</b> : <b style={{ color: 'var(--green)' }}>none</b>}.
@@ -10070,6 +10086,11 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
       ) : (
         <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
           <span style={{ color: 'var(--green)', fontWeight: 600 }}>{(level.task || level.isCustom || level.isLibrary) ? 'Recap: ' : 'Fix: '}</span>{level.solution}
+        </div>
+      )}
+      {streak >= 2 && (
+        <div className="mono" style={{ fontSize: 8.5, letterSpacing: 1, fontWeight: 800, color: 'var(--accent)', borderTop: '1px solid rgba(255,201,58,0.22)', paddingTop: 5 }}>
+          {streak}-DAY STREAK
         </div>
       )}
       {Array.isArray(coaching) && coaching.length > 0 && (
