@@ -47,6 +47,14 @@
     outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px;
   }
   input:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 1px; }
+  /* Entry attention: the prompt breathes a strong accent glow a few times when a
+     new task/step loads, so a user looking at the console still catches it, then
+     settles. --attn is the zone accent (hot = fault, cool = task, green = step).
+     Runs a finite number of cycles (set in the animation shorthand), not forever. */
+  @keyframes briefAttention {
+    0%, 100% { box-shadow: 0 0 0 1px var(--attn), 0 0 7px -1px var(--attn); }
+    50%      { box-shadow: 0 0 0 3px var(--attn), 0 0 24px 4px var(--attn); }
+  }
 
   @keyframes pulse {
     0% { opacity: 0.5; transform: scale(0.95); }
@@ -102,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=55"></script>
+<script src="content.js?v=56"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6572,8 +6580,8 @@ function WalkthroughPanel({ step, steps, total, state, active, onNext, onSkip, l
       </div>
       <div className="display" style={{ fontSize: 15, fontWeight: 800, lineHeight: 1.15 }}>{S.title}</div>
       <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>{S.teach}</div>
-      <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.5, padding: '7px 10px', background: '#0e1a14', border: '1px solid #1e3a2a', borderRadius: 6 }}>
-        <span className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 1, fontWeight: 700, display: 'block', marginBottom: 3 }}>TRY IT</span>
+      <div key={'try-' + step} style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.5, padding: '9px 11px', background: 'rgba(74,222,128,0.10)', border: '1px solid var(--green)', borderRadius: 6, '--attn': 'var(--green)', animation: 'briefAttention 1.5s ease-in-out 3' }}>
+        <span className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 1, fontWeight: 800, display: 'block', marginBottom: 3 }}>TRY IT</span>
         {S.prompt}
       </div>
       {S.aside && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.45, fontStyle: 'italic' }}>{S.aside}</div>}
@@ -6643,8 +6651,8 @@ function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
         <>
           <div className="display" style={{ fontSize: 14, fontWeight: 800, lineHeight: 1.2 }}>{active.title || ('Step ' + (activeIndex + 1))}</div>
           {active.teach && <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>{active.teach}</div>}
-          <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.5, padding: '7px 10px', background: '#0e1a14', border: '1px solid #1e3a2a', borderRadius: 6 }}>
-            <span className="mono" style={{ fontSize: 8.5, color: 'var(--green)', letterSpacing: 1, fontWeight: 700, display: 'block', marginBottom: 3 }}>DO THIS</span>
+          <div key={'do-' + activeIndex} style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.5, padding: '9px 11px', background: 'rgba(74,222,128,0.10)', border: '1px solid var(--green)', borderRadius: 6, '--attn': 'var(--green)', animation: 'briefAttention 1.5s ease-in-out 3' }}>
+            <span className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 1, fontWeight: 800, display: 'block', marginBottom: 3 }}>DO THIS</span>
             {active.text}
           </div>
         </>
@@ -9850,9 +9858,9 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
       {/* SYMPTOM / TASK zone. Setup levels (level.task) aren't describing a
           problem, so they get a neutral TASK label instead of the red
           warning SYMPTOM treatment. */}
-      <div style={zoneStyle(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? 'rgba(255,255,255,0.03)' : 'rgba(255,70,48,0.08)')}>
+      <div key={'task-' + (level.id != null ? level.id : level.title)} style={{ ...zoneStyle(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? 'rgba(106,169,255,0.10)' : 'rgba(255,70,48,0.14)'), '--attn': (level.task ? 'var(--cool)' : 'var(--hot)'), flex: '1.5 1 0', borderLeftWidth: 4, padding: '12px 14px', animation: 'briefAttention 1.5s ease-in-out 3' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          {zoneLabel(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? '▸ TASK' : '⚠ SYMPTOM')}
+          <div className="mono" style={{ fontSize: 11.5, color: (level.task ? 'var(--cool)' : 'var(--hot)'), letterSpacing: 1.4, fontWeight: 800 }}>{level.task ? '▸ TASK' : '⚠ SYMPTOM'}</div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {liveShow && level.isPractice && (
               <div className="mono" title="The audience is listening. Muting a channel or pulling the master is a dropout the room hears. PFL into your headphones is free." style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 1, padding: '3px 7px', borderRadius: 12, background: 'rgba(216,71,63,0.16)', color: '#ff6a5e', border: '1px solid #a8322b' }}>🔴 LIVE · ROOM IS LISTENING</div>
@@ -9861,7 +9869,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
             {workChip}
           </div>
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.4 }}>{level.symptom}</div>
+        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', lineHeight: 1.5 }}>{level.symptom}</div>
         {firstFix && level.isPractice && (
           <div style={{ fontSize: 10, color: 'var(--green)', lineHeight: 1.45, marginTop: 1 }}>
             New here? Watch the channel meters: one just went dead. Find why it dropped out and bring it back. Stuck? Tap "Need a hint?" below.
