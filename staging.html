@@ -47,6 +47,14 @@
     outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px;
   }
   input:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 1px; }
+  /* One-time attention flash on the brief's task/symptom block when a new level
+     loads, so the eye lands on "what to do" first. Accent color is set per zone
+     via --attn (cool for a task, hot for a fault). Fires once, then settles. */
+  @keyframes briefAttention {
+    0%   { box-shadow: 0 0 0 2px var(--attn), 0 0 16px 1px var(--attn); }
+    70%  { box-shadow: 0 0 0 2px var(--attn), 0 0 10px 0 var(--attn); }
+    100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+  }
 
   @keyframes pulse {
     0% { opacity: 0.5; transform: scale(0.95); }
@@ -102,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=18"></script>
+<script src="content-staging.js?v=19"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -9850,7 +9858,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
       {/* SYMPTOM / TASK zone. Setup levels (level.task) aren't describing a
           problem, so they get a neutral TASK label instead of the red
           warning SYMPTOM treatment. */}
-      <div style={zoneStyle(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? 'rgba(255,255,255,0.03)' : 'rgba(255,70,48,0.08)')}>
+      <div key={'task-' + (level.id != null ? level.id : level.title)} style={{ ...zoneStyle(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? 'rgba(255,255,255,0.03)' : 'rgba(255,70,48,0.08)'), '--attn': (level.task ? 'var(--cool)' : 'var(--hot)'), flex: '1.5 1 0', borderLeftWidth: 4, padding: '12px 14px', animation: 'briefAttention 1.4s ease-out 1' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           {zoneLabel(level.task ? 'var(--cool)' : 'var(--hot)', level.task ? '▸ TASK' : '⚠ SYMPTOM')}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -9861,7 +9869,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
             {workChip}
           </div>
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.4 }}>{level.symptom}</div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', lineHeight: 1.5 }}>{level.symptom}</div>
         {firstFix && level.isPractice && (
           <div style={{ fontSize: 10, color: 'var(--green)', lineHeight: 1.45, marginTop: 1 }}>
             New here? Watch the channel meters: one just went dead. Find why it dropped out and bring it back. Stuck? Tap "Need a hint?" below.
