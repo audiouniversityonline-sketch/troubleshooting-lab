@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=34"></script>
+<script src="content-staging.js?v=35"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5056,16 +5056,19 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           horizontal width, the brief uses minimal vertical height in a
           horizontal banner layout below the stage. */}
       <div style={{
-        display: 'flex', flexDirection: (isMobile || stageHidden) ? 'column' : 'row',
-        gap: isMobile ? 8 : 12, zIndex: 2, alignItems: stageHidden ? 'center' : 'stretch',
+        display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 8 : 12, zIndex: 2, alignItems: 'stretch',
       }}>
-        {/* LEFT column: stage + brief. Hidden entirely when stageHidden, and the
-            brief re-renders below the console instead (see the trailing block). */}
-        {!stageHidden && (
-          <div style={{
-            flex: 1, minWidth: 0,
-            display: 'flex', flexDirection: 'column', gap: 12,
-          }}>
+        {/* LEFT column: the stage (hidden when stageHidden) with the brief below
+            it. When the stage is hidden the brief stays in this column beside the
+            console — centered vertically — so the canvas height is the console's
+            height, not console + brief (which would scale the console down). */}
+        <div style={{
+          flex: 1, minWidth: 0,
+          display: 'flex', flexDirection: 'column', gap: 12,
+          justifyContent: stageHidden ? 'center' : 'flex-start',
+        }}>
+          {!stageHidden && (
             <div ref={stageZoneRef}>
               <StageRow state={state} setState={setState} audio={audio}
                 sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
@@ -5073,9 +5076,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                 wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
                 paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
             </div>
-            {sidebarContent}
-          </div>
-        )}
+          )}
+          {sidebarContent}
+        </div>
         <div style={{ flexShrink: 0, display: 'flex' }}>
           <ConsolePanel state={state} setState={setState} audio={audio}
             channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef}
@@ -5083,12 +5086,6 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             fanOutRef={fanOutRef} sourceKeys={sourceKeys}
             surface={surface} onSetSurface={onSetSurface} canDigital={canDigital} surfaceLocked={surfaceLocked}/>
         </div>
-        {/* Stage hidden: brief sits under the console, matched to its width. */}
-        {stageHidden && (
-          <div style={{ width: 755, maxWidth: '100%' }}>
-            {sidebarContent}
-          </div>
-        )}
       </div>
 
       {!stageHidden && (
@@ -5478,10 +5475,11 @@ const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } 
 // uniformly to fit (see useFitScale). Tune this once so nothing overlaps at
 // scale 1; everything else follows.
 const DESIGN_W = 1680;
-// When the stage is hidden, the canvas is just the console (~755 wide) plus a
-// little breathing room, so fit-to-screen scales it up (a big win on the narrow
-// embed) and leaves horizontal room for more channels later.
-const DESIGN_W_STAGE_HIDDEN = 800;
+// When the stage is hidden the brief stays BESIDE the console (not below it, or
+// the taller canvas would scale DOWN on a height-limited wide screen). The canvas
+// narrows to the console plus a brief column, so fit-to-screen scales it up on
+// the narrow embed and frees horizontal room for more channels later.
+const DESIGN_W_STAGE_HIDDEN = 1300;
 
 // Member progress persistence. Completed levels are saved to the browser keyed
 // by stable level id, so a monthly content drop never wipes what a student
