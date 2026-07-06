@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=32"></script>
+<script src="content-staging.js?v=34"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4494,7 +4494,7 @@ function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRe
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement }) {
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, stageHidden }) {
   const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
   const [hoverCable, setHoverCable] = useS2(null);
   const isMobile = useViewport();
@@ -5056,22 +5056,26 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           horizontal width, the brief uses minimal vertical height in a
           horizontal banner layout below the stage. */}
       <div style={{
-        display: 'flex', flexDirection: isMobile ? 'column' : 'row',
-        gap: isMobile ? 8 : 12, zIndex: 2, alignItems: 'stretch',
+        display: 'flex', flexDirection: (isMobile || stageHidden) ? 'column' : 'row',
+        gap: isMobile ? 8 : 12, zIndex: 2, alignItems: stageHidden ? 'center' : 'stretch',
       }}>
-        <div style={{
-          flex: 1, minWidth: 0,
-          display: 'flex', flexDirection: 'column', gap: 12,
-        }}>
-          <div ref={stageZoneRef}>
-            <StageRow state={state} setState={setState} audio={audio}
-              sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
-              snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
-              wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
-              paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
+        {/* LEFT column: stage + brief. Hidden entirely when stageHidden, and the
+            brief re-renders below the console instead (see the trailing block). */}
+        {!stageHidden && (
+          <div style={{
+            flex: 1, minWidth: 0,
+            display: 'flex', flexDirection: 'column', gap: 12,
+          }}>
+            <div ref={stageZoneRef}>
+              <StageRow state={state} setState={setState} audio={audio}
+                sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
+                snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
+                wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
+                paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
+            </div>
+            {sidebarContent}
           </div>
-          {sidebarContent}
-        </div>
+        )}
         <div style={{ flexShrink: 0, display: 'flex' }}>
           <ConsolePanel state={state} setState={setState} audio={audio}
             channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef}
@@ -5079,8 +5083,15 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             fanOutRef={fanOutRef} sourceKeys={sourceKeys}
             surface={surface} onSetSurface={onSetSurface} canDigital={canDigital} surfaceLocked={surfaceLocked}/>
         </div>
+        {/* Stage hidden: brief sits under the console, matched to its width. */}
+        {stageHidden && (
+          <div style={{ width: 755, maxWidth: '100%' }}>
+            {sidebarContent}
+          </div>
+        )}
       </div>
 
+      {!stageHidden && (
       <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', zIndex: 5 }}>
         {/* Cable path helpers. Two shapes:
               _cableCurve  — direct bezier from source to stage box. Used for
@@ -5445,6 +5456,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           );
         })}
       </svg>
+      )}
     </div>
   );
 }
@@ -5466,6 +5478,10 @@ const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } 
 // uniformly to fit (see useFitScale). Tune this once so nothing overlaps at
 // scale 1; everything else follows.
 const DESIGN_W = 1680;
+// When the stage is hidden, the canvas is just the console (~755 wide) plus a
+// little breathing room, so fit-to-screen scales it up (a big win on the narrow
+// embed) and leaves horizontal room for more channels later.
+const DESIGN_W_STAGE_HIDDEN = 800;
 
 // Member progress persistence. Completed levels are saved to the browser keyed
 // by stable level id, so a monthly content drop never wipes what a student
@@ -5509,6 +5525,7 @@ function defaultProfile() {
     streak: 0,          // daily streak: consecutive days with at least one finished session
     streakDay: '',      // YYYY-MM-DD (local) of the last day counted toward the streak
     streakBest: 0,      // longest daily streak reached, ever
+    stageHidden: false, // view pref: hide the stage so the console gets the screen
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -5537,6 +5554,7 @@ function normalizeProfile(data) {
   p.streak = (Number.isFinite(data.streak) && data.streak >= 0) ? Math.floor(data.streak) : 0;
   p.streakDay = (typeof data.streakDay === 'string') ? data.streakDay : '';
   p.streakBest = (Number.isFinite(data.streakBest) && data.streakBest >= 0) ? Math.floor(data.streakBest) : 0;
+  p.stageHidden = !!data.stageHidden;
   p.firstName = (typeof data.firstName === 'string') ? data.firstName : '';
   p.v = PROFILE_VERSION;
   return p;
@@ -7225,6 +7243,11 @@ function App() {
     setSurface(next === 'digital' ? 'digital' : 'analog');
   };
 
+  // Hide-the-stage view pref: tuck the stage away so the console gets the whole
+  // canvas (bigger on the narrow embed; horizontal room for more channels later).
+  // Persisted like surface, via the profile-save effect below.
+  const [stageHidden, setStageHidden] = uS(() => !!profileRef.current.stageHidden);
+
   // Free-tier email gate. emailDone is true once the viewer has either given an
   // email or chosen "skip for now" — both are remembered so the gate never
   // nags twice. Members and shared-link viewers are never gated.
@@ -7276,9 +7299,9 @@ function App() {
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
   // feedbackByEar drive "resume where I left off" on the next load.
   uE(() => {
-    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow };
+    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow, stageHidden };
     saveProfile(profileRef.current);
-  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow]);
+  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow, stageHidden]);
 
   // Keep the fault-draw's surface global in sync. Digital-only faults (mute
   // groups, DCA) carry digital:true and are skipped by the draw unless this is
@@ -8875,7 +8898,15 @@ function App() {
   const fitViewportRef = uR(null);
   const designRef = uR(null);
   const [designH, setDesignH] = uS(760);
-  const fitScale = useFitScale(fitViewportRef, DESIGN_W, designH, !isMobile);
+  // Hiding the stage narrows the canvas to the console, so fit-to-screen scales
+  // it up. Height still measured live (designH), width switches with the pref.
+  // Guided lessons and the walkthrough teach ON the stage (patching, power-up,
+  // cables), so they always show it; the toggle is only offered elsewhere. The
+  // pref itself sticks, so leaving a lesson restores the hidden view.
+  const stageHideable = !isMobile && !level.isWalkthrough && !level.isLesson;
+  const effStageHidden = stageHidden && stageHideable;
+  const designW = effStageHidden ? DESIGN_W_STAGE_HIDDEN : DESIGN_W;
+  const fitScale = useFitScale(fitViewportRef, designW, designH, !isMobile);
 
   // Track the canvas's natural height. offsetHeight is layout (transform-
   // independent), so this stays correct under the scale transform. Re-measures
@@ -9054,6 +9085,7 @@ function App() {
         completed={completed}
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
+        stageHidden={stageHidden} onToggleStage={stageHideable ? () => setStageHidden(v => !v) : null}
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
@@ -9190,11 +9222,11 @@ function App() {
       <div ref={fitViewportRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
         <window.FitScaleContext.Provider value={fitScale}>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            <div ref={designRef} style={{ width: DESIGN_W, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
+            <div ref={designRef} style={{ width: designW, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
                 surface={(level.isWalkthrough || level.isLesson) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital}
-                surfaceLocked={level.isWalkthrough || level.isLesson}
+                surfaceLocked={level.isWalkthrough || level.isLesson} stageHidden={effStageHidden}
                 sidebarContent={
                   <StableSlot levelKey={levelIdx}>
                   {solved
@@ -9549,7 +9581,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -9690,6 +9722,9 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         )}
         {onOpenIoList && (
           <button onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>INPUT LIST</button>
+        )}
+        {onToggleStage && (
+          <button onClick={onToggleStage} className="mono ui-no-select" title={stageHidden ? 'Show the stage: sources, cables, and speakers' : 'Hide the stage to give the console the whole screen'} style={{ ...navBtn, padding: '6px 12px' }}>{stageHidden ? 'SHOW STAGE' : 'HIDE STAGE'}</button>
         )}
         {onOpenProgress && (
           <button onClick={onOpenProgress} className="mono ui-no-select" title="Your training record and daily streak" style={{ ...navBtn, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
