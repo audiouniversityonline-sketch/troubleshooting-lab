@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=29"></script>
+<script src="content-staging.js?v=30"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6114,7 +6114,7 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
   const [msg, setMsg] = uS(null);
   const [confirmReset, setConfirmReset] = uS(false);
   const [tab, setTab] = uS('save'); // 'save' (backup/restore) | 'training' (the ledger)
-  uE(() => { if (open) { setPaste(''); setMsg(null); setConfirmReset(false); setTab('save'); } }, [open]);
+  uE(() => { if (open) { setPaste(''); setMsg(null); setConfirmReset(false); setTab('training'); } }, [open]);
   if (!open) return null;
   const code = encodeProgressCode(profile) || '';
   const doneCount = Object.keys((profile && profile.completed) || {}).length;
@@ -6219,11 +6219,11 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
         boxShadow: '0 12px 40px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 12,
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-          <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>Your progress</div>
+          <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>Your training</div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)' }}>{doneCount} complete</div>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {[['save', 'SAVE CODE'], ['training', 'YOUR TRAINING']].map(([id, lbl]) => (
+          {[['training', 'YOUR TRAINING'], ['save', 'SAVE CODE']].map(([id, lbl]) => (
             <button key={id} onClick={() => setTab(id)} className="mono ui-no-select" style={{
               padding: '5px 11px', fontSize: 9, fontWeight: 800, letterSpacing: 0.8, borderRadius: 4, cursor: 'pointer',
               background: tab === id ? 'rgba(106,169,255,0.16)' : 'transparent',
@@ -9097,7 +9097,7 @@ function App() {
         onRestart={restart} onPrev={prev} onNext={next} onPick={pickLevel}
         completed={completed}
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
-        onOpenProgress={() => setSaveModalOpen(true)}
+        onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
@@ -9593,7 +9593,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -9736,7 +9736,12 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           <button onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>INPUT LIST</button>
         )}
         {onOpenProgress && (
-          <button onClick={onOpenProgress} className="mono ui-no-select" title="Back up or restore your progress" style={{ ...navBtn, padding: '6px 12px' }}>PROGRESS</button>
+          <button onClick={onOpenProgress} className="mono ui-no-select" title="Your training record and daily streak" style={{ ...navBtn, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            TRAINING
+            {streak > 0 && (
+              <span title={streak + '-day streak'} style={{ fontSize: 9, fontWeight: 800, color: '#0a0a0c', background: 'var(--accent)', borderRadius: 8, padding: '1px 6px', letterSpacing: 0.3 }}>{streak}</span>
+            )}
+          </button>
         )}
         <button onClick={toggleFullscreen} className="mono ui-no-select" title="Fill the screen" style={{ ...navBtn, padding: '6px 12px' }}>{isFs ? '⤢ EXIT' : '⤢ FULL SCREEN'}</button>
         <button onClick={onRestart} className="mono ui-no-select" style={{ ...navBtn, padding: '6px 14px' }}>↻ RESET</button>
