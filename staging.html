@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=27"></script>
+<script src="content-staging.js?v=28"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7655,22 +7655,28 @@ function App() {
       const gs = level.gainStructure;
       const unity = gs.unity != null ? gs.unity : 0.75;
       const tol = gs.faderTol != null ? gs.faderTol : 0.06;
-      const masterOk = !state.master.mute && Math.abs(state.master.fader - unity) <= tol;
-      // No refChannel = master-only gain lesson (The Gig: playback gets pulled
-      // back down after the speaker test, so no single channel is pinned).
-      if (!gs.refChannel) return masterOk;
-      const refCh = state.channels[gs.refChannel - 1];
-      if (!refCh) return false;
-      // "Up at unity" = unmuted AND fader at the unity mark. The student has to
-      // actually bring the channel and master up, not just nudge the faders.
-      const fadersOk = !refCh.mute && Math.abs(refCh.fader - unity) <= tol && masterOk;
-      // Optional: the input gain must sit in a healthy band (set by hand in PFL).
+      // The gain-structure skill is the INPUT gain: level set at the top of the
+      // chain, in a healthy band, by hand in PFL.
       let inputOk = true;
       if (gs.inputBand) {
         const a = window.computeAudio(state);
         const lvl = (a.chanInBaseline && a.chanInBaseline[(gs.refChannel || 1) - 1]) || 0;
         inputOk = lvl >= gs.inputBand[0] && lvl <= gs.inputBand[1];
       }
+      // gainOnly = test the input gain and nothing else. The fader position is a
+      // mix choice, not a pass/fail — requiring it at unity would teach that a
+      // fader must always sit at unity, which is false (Kyle 2026-07-06).
+      if (gs.gainOnly) return inputOk;
+      const masterOk = !state.master.mute && Math.abs(state.master.fader - unity) <= tol;
+      // No refChannel = master-only gain lesson (The Gig: playback gets pulled
+      // back down after the speaker test, so no single channel is pinned).
+      if (!gs.refChannel) return masterOk;
+      const refCh = state.channels[gs.refChannel - 1];
+      if (!refCh) return false;
+      // "Up at unity" = unmuted AND fader at the unity mark. Used by the guided
+      // Set the Input Level lesson, where bringing the channel up to the unity
+      // reference is the taught step, not a claim that faders live at unity.
+      const fadersOk = !refCh.mute && Math.abs(refCh.fader - unity) <= tol && masterOk;
       return fadersOk && inputOk;
     })();
     // Patch gate (the patch lesson + every practice rep): sources on their
@@ -8974,6 +8980,9 @@ function App() {
       // The "up at unity" objective names the actual ref channel (bass, playback,
       // etc.), not a hardcoded one. '5/6' is the playback strip; show it by name.
       refLabel: refCh ? (refCh.label === '5/6' ? 'Playback' : refCh.label) : '',
+      // gainOnly tasks test the input gain only; the fader-at-unity objectives
+      // are hidden because the fader is a mix choice, not a requirement.
+      gainOnly: !!gs.gainOnly,
     };
   }
 
@@ -9770,8 +9779,12 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   }
   if (level.gainStructure && gainStatus) {
     if (gainStatus.hasInput) extras.push({ label: 'Input level healthy', pass: !!gainStatus.input, color: 'var(--cool)' });
-    if (gainStatus.hasRef) extras.push({ label: (gainStatus.refLabel || 'Channel') + ' up at unity', pass: !!gainStatus.fader, color: 'var(--cool)' });
-    extras.push({ label: 'Master up at unity', pass: !!gainStatus.master, color: 'var(--cool)' });
+    // Fader-at-unity objectives only for tasks that actually teach it. gainOnly
+    // tasks leave the fader as a mix choice, so they are hidden there.
+    if (!gainStatus.gainOnly) {
+      if (gainStatus.hasRef) extras.push({ label: (gainStatus.refLabel || 'Channel') + ' up at unity', pass: !!gainStatus.fader, color: 'var(--cool)' });
+      extras.push({ label: 'Master up at unity', pass: !!gainStatus.master, color: 'var(--cool)' });
+    }
   }
   const allFlowPass = condStates.length === 0 || condStates.every(s => s.pass);
   const allExtrasPass = extras.every(e => e.pass);

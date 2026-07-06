@@ -872,17 +872,20 @@ window.PRACTICE_GOALS = [
     key: 'gain-stage', label: 'Fix the gain structure', par: 2,
     apply: (s) => {
       // The bass came in weak: its gain got cracked down to half of where a
-      // passive bass needs to sit, and the fader was ridden up past unity to
-      // compensate. Set the gain healthy (high on the knob for a bass) and the
-      // fader back to unity.
+      // passive bass needs to sit, and the fader was ridden up to compensate.
+      // The fix is at the top of the chain: bring the GAIN up until the bass
+      // sits healthy on its meter. gainOnly = the win tests the input gain ONLY,
+      // never the fader position. The fader is a mix choice — near unity by habit
+      // but legitimately above or below — so requiring it at unity would teach a
+      // false rule (Kyle 2026-07-06). Where the student leaves the fader is theirs.
       s.channels[2].gain = window.HEALTHY_GAIN_BY_CH[2] * 0.5; s.channels[2].fader = 0.9;
       return {
         conditions: [{ source: 'guitar', dest: 'pa', min: 0.3 }],
-        gainStructure: { refChannel: 3, unity: 0.75, faderTol: 0.08, inputBand: [0.575, 1.148] },
-        symptom: 'The bass gain is set far too low, with the fader pushed up to make up for it. That is backwards. Set the gain structure properly: gain healthy on the meter, fader back at unity.',
+        gainStructure: { refChannel: 3, inputBand: [0.575, 1.148], gainOnly: true },
+        symptom: 'The bass gain is set far too low, and the fader has been pushed up to make up for it. That is backwards. Set the level at the top of the chain: bring the GAIN up until the bass sits healthy on its meter. Where you take the fader from there is a mix call.',
         title: 'Fix the Gain Structure',
-        hint: 'PFL the bass (channel 3) and bring its GAIN up until the input meter sits in the healthy zone, then drop the fader back to the unity mark.',
-        solution: "Bass gain set healthy in PFL, fader at unity. That's proper gain structure, level set at the top of the chain, not the bottom.",
+        hint: 'PFL the bass (channel 3) and bring its GAIN up until the input meter sits in the healthy zone. That is the fix. The fader is yours to set the balance after.',
+        solution: "Bass gain set healthy in PFL, so the level is set at the top of the chain, not by riding the fader. Where the fader sits from there is a mix choice.",
       };
     },
   },
