@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=30"></script>
+<script src="content-staging.js?v=31"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6146,7 +6146,6 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
   // YOUR TRAINING tab — the per-fault ledger in plain coach language, no
   // medals. Weakest fault first, so the member can see what to drill.
   const trainingView = () => {
-    const ledger = (profile && profile.ledger) || {};
     const totalReps = (profile && profile.reps) || 0;
     const cleanReps = (profile && profile.practiceClean) || 0;
     // Daily streak card, always at the top (it counts lessons too, not just reps).
@@ -6164,24 +6163,14 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
         </div>
       </div>
     );
-    const entries = Object.keys(ledger)
-      .map((k) => ({ key: k, ...ledger[k] }))
-      .filter((e) => e.reps > 0)
-      .map((e) => ({ ...e, avgOver: e.overPar / e.reps }))
-      .sort((a, b) => b.avgOver - a.avgOver || b.reps - a.reps);
     if (totalReps === 0) {
       return (<div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {streakCard}
         <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-          Play a few practice rounds and your training record shows up here: which faults you've seen, and which ones still slow you down.
+          Finish a few practice rounds and your record fills in here.
         </div>
       </div>);
     }
-    const overTxt = (avgOver) => {
-      if (avgOver < 0.5) return 'usually right on par';
-      const n = Math.round(avgOver);
-      return 'usually ' + n + ' move' + (n === 1 ? '' : 's') + ' over par';
-    };
     const cleanPct = Math.round((cleanReps / totalReps) * 100);
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -6189,22 +6178,6 @@ function ProgressModal({ open, onClose, profile, onRestore, onResetProgress }) {
         <div style={{ fontSize: 11.5, color: 'var(--ink)', lineHeight: 1.5 }}>
           You've finished <b>{totalReps}</b> practice round{totalReps === 1 ? '' : 's'}, <b>{cleanPct}%</b> of them clean (no hints, at or under par).
         </div>
-        {entries.length === 0 ? (
-          <div style={{ fontSize: 11, color: 'var(--ink-3)', lineHeight: 1.5 }}>
-            Your earlier rounds are counted. New rounds from here on break down fault by fault, right here.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>BY FAULT · WEAKEST FIRST</div>
-            {entries.map((e, i) => (
-              <div key={e.key} style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.45 }}>
-                <b style={{ color: 'var(--ink)' }}>{faultLabel(e.key)}</b>: {e.reps} round{e.reps === 1 ? '' : 's'}, {overTxt(e.avgOver)}.
-                {e.clean > 0 ? ' ' + e.clean + ' clean.' : ''}
-                {i === 0 && entries.length > 1 && e.avgOver >= 1 ? <span style={{ color: 'var(--amber)' }}> Your slowest fault.</span> : null}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     );
   };
