@@ -652,6 +652,42 @@ const BAND_SOURCES = ['vocal', 'vocal2', 'guitar', 'laptop'];
 // active DI. The phantom fault can only land where phantom matters.
 const POWERED_IDX = [1, 2];
 
+// A live mic amplified on a channel gained for a DI feeds back through the PA.
+// The bass channel is the only one gained hot enough to do it (its healthy gain
+// is the highest), so a crosspatch must never leave a mic there or the rep opens
+// howling and the app misreads the PA feedback as a wedge ring (Kyle 2026-07-06:
+// "starts with howling feedback, but the problem is actually a crosspatch"). A
+// DI landing on a hot channel just runs hot, which reads on the correct channel
+// and is fine. These helpers let the crosspatch faults reject the mic-on-hot
+// swaps and keep the rest.
+const MIC_SOURCES = ['vocal', 'vocal2'];
+function hotMicChannel() {
+  const g = (window.HEALTHY_GAIN_BY_CH || []).slice(0, 4);
+  if (!g.length) return 2;
+  let hi = 0; for (let i = 1; i < g.length; i++) if (g[i] > g[hi]) hi = i;
+  return hi;
+}
+// Channel index a source currently lands on: source -> its cable's port ->
+// the channel that port feeds (fanOut). Reflects whatever cables/fanOut hold now.
+function sourceChannel(s, src) { return s.fanOut[s.cables[src] - 1] - 1; }
+// A crosspatch swap to reject: it would either howl (a live mic on the hot
+// channel) or scream (a very low-gain source slammed onto a much hotter channel,
+// e.g. the keyboard on the bass channel, which opens at ~117 dB and reads as a
+// distortion fault, not a crosspatch). A MODERATE hot channel is left alone: a
+// crosspatch really does mis-gain a channel, and that clue reads on the correct
+// channel and clears when you re-patch (Kyle 2026-07-06: no feedback, stay
+// realistic). The 6.0 ceiling is well above the deliberate 'gain too hot' fault
+// (~3.6) so ordinary hot channels pass; only the absurd overloads are rejected.
+function crosspatchBad(s) {
+  const hot = hotMicChannel();
+  if (MIC_SOURCES.some((m) => sourceChannel(s, m) === hot)) return true;
+  const a = window.computeAudio ? window.computeAudio(s) : null;
+  if (a && a.chanInBaseline) {
+    for (let i = 0; i < 4; i++) { if (a.chanInBaseline[i] > 6) return true; }
+  }
+  return false;
+}
+
 // The fault pool. Each entry is ONE thing that can go wrong, applied on top
 // of the bandUp() start state. `apply` places the fault with the seeded rng.
 // `par` is the move count of the systematic fix — inspecting and listening
@@ -763,15 +799,30 @@ window.PRACTICE_FAULTS = [
   // patch on a live channel POPS: the safe fix is master down (one move,
   // covers both channels) -> swap -> master back up.
   { key: 'crosspatch-stage', label: 'Crosspatch at the stage box', blurb: 'Two inputs are swapped at the stage box.', par: 3, apply: (s, rng) => {
-    const i = Math.floor(rng() * 4);
-    let j = Math.floor(rng() * 3); if (j >= i) j += 1;
-    const a = BAND_SOURCES[i], b = BAND_SOURCES[j];
-    const t = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = t;
+    // Random source-port swaps, but reject any that leave a live mic on the hot
+    // (bass) channel — that howls and reads as feedback, not a crosspatch. Falls
+    // back to trading the two mics, which can never land a mic on the DI channel.
+    for (let tries = 0; tries < 16; tries++) {
+      const i = Math.floor(rng() * 4);
+      let j = Math.floor(rng() * 3); if (j >= i) j += 1;
+      const a = BAND_SOURCES[i], b = BAND_SOURCES[j];
+      const t = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = t;
+      if (!crosspatchBad(s)) return;
+      const u = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = u; // undo, retry
+    }
+    const t = s.cables['vocal']; s.cables['vocal'] = s.cables['vocal2']; s.cables['vocal2'] = t;
   } },
   { key: 'crosspatch-snake', label: 'Crosspatch at the snake', blurb: 'Two channels are swapped at the snake.', par: 3, apply: (s, rng) => {
-    const i = Math.floor(rng() * 4);
-    let j = Math.floor(rng() * 3); if (j >= i) j += 1;
-    const t = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = t;
+    // Same guard for the snake variant (swaps which channel each port feeds).
+    // Fallback trades the two non-mic channel tails, so the mics stay put.
+    for (let tries = 0; tries < 16; tries++) {
+      const i = Math.floor(rng() * 4);
+      let j = Math.floor(rng() * 3); if (j >= i) j += 1;
+      const t = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = t;
+      if (!crosspatchBad(s)) return;
+      const u = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = u; // undo, retry
+    }
+    const t = s.fanOut[2]; s.fanOut[2] = s.fanOut[3]; s.fanOut[3] = t;
   } },
 ];
 
