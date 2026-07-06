@@ -670,6 +670,20 @@ const POWERED_IDX = [1, 2];
 window.PRACTICE_FAULTS = [
   { key: 'cable',        label: 'Cable unplugged',   blurb: "A channel's input cable is unplugged.",                  par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
   { key: 'gain',         label: 'Gain at zero',      blurb: "A channel's gain is at zero, so its meter never moves.",  par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].gain = 0; } },
+  // GAIN TOO HOT — the opposite of 'gain at zero'. A channel's gain is set a few
+  // dB into the red, so the preamp clips and the channel distorts even though
+  // signal is flowing fine. The win engine already blocks a solve while anything
+  // is in the red (the `clean` gate in the App), so this is a real diagnosis,
+  // not an auto-win: the fix is to read the red meter and pull GAIN back down.
+  // The gain knob is exponential (~+3 dB per 0.05), so a FIXED knob value would
+  // clip wildly differently per channel; instead we offset from each channel's
+  // calibrated healthy gain. +0.22 puts chanIn baseline ~3.6-3.8 on any of the
+  // three candidates — solidly clipping (verified against detectClipping,
+  // including the condenser on ch1 which needs the most gain to clip), yet a
+  // realistic few-dB overshoot, not an absurd slam. Restricted to vox 1/2 and
+  // keys (bass's quiet source reads borderline). Aux sends are 0 in the base
+  // Practice state, so cranking the preamp distorts without ringing a wedge.
+  { key: 'gain-hot',     label: 'Gain too hot',      blurb: "A channel's gain is set so hot the preamp clips and the channel distorts.", par: 2, apply: (s, rng) => { const ch = [0, 1, 3][Math.floor((rng ? rng() : 0) * 3)]; s.channels[ch].gain = Math.min(1, window.HEALTHY_GAIN_BY_CH[ch] + 0.22); } },
   { key: 'fader',        label: 'Fader down',        blurb: 'A channel fader is all the way down.',                    par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].fader = 0; } },
   { key: 'mute',         label: 'Channel muted',     blurb: 'A channel is muted.',                                    par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].mute = true; } },
   // NOTE: no 'pan' fault. The win reads the LOUDER PA side (pan is a free
