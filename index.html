@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=56"></script>
+<script src="content.js?v=57"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6257,7 +6257,7 @@ function TourOverlay({ open, onClose }) {
   if (!open) return null;
   const row = (icon, title, body) => (
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      <div style={{ fontSize: 16, lineHeight: 1.2, width: 22, textAlign: 'center', flexShrink: 0 }}>{icon}</div>
+      <div className="mono" style={{ fontSize: 13, lineHeight: 1.3, width: 22, textAlign: 'center', flexShrink: 0, color: 'var(--accent)', fontWeight: 800 }}>{icon}</div>
       <div>
         <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>{title}</div>
         <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>{body}</div>
@@ -6282,10 +6282,10 @@ function TourOverlay({ open, onClose }) {
             <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 2 }}>Four things before you start</div>
           </div>
         </div>
-        {row('🎤', 'THE STAGE', 'The top half is the stage: the band\'s sources, the speakers, and every cable. Click a speaker to listen to it. Grab a cable end to move it.')}
-        {row('🎛', 'THE CONSOLE', 'The right side is the mixing console. Every knob, fader and button works like the real thing, and mistakes have consequences you can hear. Nothing is permanent though: Reset starts any level over, so explore freely. Hover any control for a quick description.')}
-        {row('🔊', 'TURN ON SOUND', 'This lab makes sound. Hit the SOUND button in the top bar so you can hear what you\'re doing. The bar at the bottom shows which speaker your ears are on.')}
-        {row('📋', 'THE BRIEF', 'The card next to the stage tells you the task or the symptom, tracks your objectives, and offers a hint. Green checks mean you\'re done.')}
+        {row('1', 'THE STAGE', 'The top half is the stage: the band\'s sources, the speakers, and every cable. Click a speaker to listen to it. Grab a cable end to move it.')}
+        {row('2', 'THE CONSOLE', 'The right side is the mixing console. Every knob, fader and button works like the real thing, and mistakes have consequences you can hear. Nothing is permanent though: Reset starts any level over, so explore freely. Hover any control for a quick description.')}
+        {row('3', 'TURN ON SOUND', 'This lab makes sound. Hit the SOUND button in the top bar so you can hear what you\'re doing. The bar at the bottom shows which speaker your ears are on.')}
+        {row('4', 'THE BRIEF', 'The card next to the stage tells you the task or the symptom, tracks your objectives, and offers a hint. Green checks mean you\'re done.')}
         <button onClick={onClose} className="mono ui-no-select" style={{
           alignSelf: 'flex-start', padding: '9px 18px', fontSize: 11, fontWeight: 800, letterSpacing: 1,
           background: 'linear-gradient(180deg, var(--accent), #c79a1f)', color: '#0a0a0c',
@@ -6313,7 +6313,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 16px 48px rgba(0,0,0,0.8)',
         display: 'flex', flexDirection: 'column', gap: 12,
       }}>
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>🎓 FINAL EXAM · PASSED</div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FINAL EXAM · PASSED</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You can run a system now.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
           You just ran a full show from a cold system: powered on in order, set your levels, tested every speaker, brought in the mics and DIs, built a monitor mix, and kept it clean through feedback. That's the job.
@@ -6380,7 +6380,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
         boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 16px 48px rgba(0,0,0,0.8)',
         display: 'flex', flexDirection: 'column', gap: 13,
       }}>
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>🎧 FREE · HANDS-ON</div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · HANDS-ON</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Learn live sound by doing it.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
           Jump onto a real mixing console. The band is playing and something just broke: find it, fix it, and get sharp. Enter your email to start.
@@ -6472,7 +6472,7 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
         }}
           onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
           onMouseLeave={(e) => e.currentTarget.style.borderColor = '#38383e'}>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700 }}>🎓 LEARN THE FULL SETUP · 10 LESSONS</div>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700 }}>LEARN THE FULL SETUP · 10 LESSONS</div>
           <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>Build a live system from a cold start.</div>
           <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>Start at the beginning: patch it, power up in order, set your levels, build a monitor mix, and run a full show. Step by step.</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--accent)', fontWeight: 800, letterSpacing: 0.6, marginTop: 3 }}>START THE ESSENTIALS →</div>
@@ -6749,7 +6749,7 @@ function WalkthroughWrap({ open, onEmail, onLessons, onExplore }) {
           <div style={{ fontSize: 12, color: 'var(--green)', lineHeight: 1.5, padding: '10px 12px', background: '#0e2415', border: '1px solid #1e3a2a', borderRadius: 8 }}>Thanks{name ? ', ' + name : ''}. Check your inbox for the next step. Where to now?</div>
         )}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button onClick={onLessons} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 6, cursor: 'pointer' }}>🎓 SEE THE FULL COURSE →</button>
+          <button onClick={onLessons} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 6, cursor: 'pointer' }}>SEE THE FULL COURSE →</button>
           <button onClick={onExplore} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--cool)', border: '1px solid #38383e', borderRadius: 6, cursor: 'pointer' }}>▶ EXPLORE THE BOARD</button>
         </div>
       </div>
@@ -6998,12 +6998,12 @@ function AuthorPanel({ text, setText, goal, onCapture, onClearGoal, onCopy, onCo
         {fld('solution', 'RECAP (after they solve)', "What they just did")}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button onClick={onCapture} className="mono ui-no-select" style={btn('var(--cool)')}>📷 CAPTURE GOAL FROM THIS STATE</button>
+        <button onClick={onCapture} className="mono ui-no-select" style={btn('var(--cool)')}>CAPTURE GOAL FROM THIS STATE</button>
         <div className="mono" style={{ fontSize: 9, color: goal ? 'var(--green)' : 'var(--ink-3)', fontWeight: 700 }}>
           {goal ? ('GOAL: ' + goal.length + ' target' + (goal.length === 1 ? '' : 's') + ' captured') : 'GOAL: restore the full mix (default)'}
         </div>
         {goal && <button onClick={onClearGoal} className="mono ui-no-select" style={btn('var(--ink-3)')}>CLEAR GOAL</button>}
-        <button onClick={onCopyEntry} className="mono ui-no-select" title="Copy a paste-ready entry for window.SCENARIO_LIBRARY in content.js" style={{ ...btn('var(--green)'), marginLeft: 'auto' }}>📚 COPY LIBRARY ENTRY</button>
+        <button onClick={onCopyEntry} className="mono ui-no-select" title="Copy a paste-ready entry for window.SCENARIO_LIBRARY in content.js" style={{ ...btn('var(--green)'), marginLeft: 'auto' }}>COPY LIBRARY ENTRY</button>
         <button onClick={onCopy} className="mono ui-no-select" style={btn('var(--accent)', true)}>⎘ COPY SCENARIO LINK</button>
       </div>
     </div>
@@ -7655,22 +7655,28 @@ function App() {
       const gs = level.gainStructure;
       const unity = gs.unity != null ? gs.unity : 0.75;
       const tol = gs.faderTol != null ? gs.faderTol : 0.06;
-      const masterOk = !state.master.mute && Math.abs(state.master.fader - unity) <= tol;
-      // No refChannel = master-only gain lesson (The Gig: playback gets pulled
-      // back down after the speaker test, so no single channel is pinned).
-      if (!gs.refChannel) return masterOk;
-      const refCh = state.channels[gs.refChannel - 1];
-      if (!refCh) return false;
-      // "Up at unity" = unmuted AND fader at the unity mark. The student has to
-      // actually bring the channel and master up, not just nudge the faders.
-      const fadersOk = !refCh.mute && Math.abs(refCh.fader - unity) <= tol && masterOk;
-      // Optional: the input gain must sit in a healthy band (set by hand in PFL).
+      // The gain-structure skill is the INPUT gain: level set at the top of the
+      // chain, in a healthy band, by hand in PFL.
       let inputOk = true;
       if (gs.inputBand) {
         const a = window.computeAudio(state);
         const lvl = (a.chanInBaseline && a.chanInBaseline[(gs.refChannel || 1) - 1]) || 0;
         inputOk = lvl >= gs.inputBand[0] && lvl <= gs.inputBand[1];
       }
+      // gainOnly = test the input gain and nothing else. The fader position is a
+      // mix choice, not a pass/fail — requiring it at unity would teach that a
+      // fader must always sit at unity, which is false (Kyle 2026-07-06).
+      if (gs.gainOnly) return inputOk;
+      const masterOk = !state.master.mute && Math.abs(state.master.fader - unity) <= tol;
+      // No refChannel = master-only gain lesson (The Gig: playback gets pulled
+      // back down after the speaker test, so no single channel is pinned).
+      if (!gs.refChannel) return masterOk;
+      const refCh = state.channels[gs.refChannel - 1];
+      if (!refCh) return false;
+      // "Up at unity" = unmuted AND fader at the unity mark. Used by the guided
+      // Set the Input Level lesson, where bringing the channel up to the unity
+      // reference is the taught step, not a claim that faders live at unity.
+      const fadersOk = !refCh.mute && Math.abs(refCh.fader - unity) <= tol && masterOk;
       return fadersOk && inputOk;
     })();
     // Patch gate (the patch lesson + every practice rep): sources on their
@@ -8971,6 +8977,12 @@ function App() {
       input: inputOk,
       fader: !!refCh && !refCh.mute && Math.abs(refCh.fader - unity) <= tol,
       master: !state.master.mute && Math.abs(state.master.fader - unity) <= tol,
+      // The "up at unity" objective names the actual ref channel (bass, playback,
+      // etc.), not a hardcoded one. '5/6' is the playback strip; show it by name.
+      refLabel: refCh ? (refCh.label === '5/6' ? 'Playback' : refCh.label) : '',
+      // gainOnly tasks test the input gain only; the fader-at-unity objectives
+      // are hidden because the fader is a mix choice, not a requirement.
+      gainOnly: !!gs.gainOnly,
     };
   }
 
@@ -9351,11 +9363,10 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // Free Play board behind it; members keep Free Play as Free Play.
   const curMode = level.isWalkthrough ? 'learn'
     : level.isSandbox ? (TIER !== 'member' ? 'learn' : 'play')
-    : (level.isPractice || level.isFeedbackMode || level.isLibrary) ? 'practice'
+    : level.isFeedbackMode ? 'feedback'
+    : (level.isPractice || level.isLibrary) ? 'practice'
     : 'learn';
-  const curTab = level.isFeedbackMode ? 'feedback' : 'trouble';
   const [mode, setMode] = uS(curMode);
-  const [tab, setTab] = uS(curTab);
   // Which Learn course is expanded. Defaults to the one holding the current
   // level (a returning member lands on their open course); otherwise every
   // course starts collapsed so the Learn tab opens as a clean list of titles.
@@ -9386,8 +9397,9 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
     }}>{label}</button>
   );
   const MODES = [
-    { key: 'learn', icon: '🎓', label: 'LEARN', sub: 'Guided courses · step by step', accent: 'var(--accent)' },
-    { key: 'practice', icon: '∞', label: 'PRACTICE', sub: 'Endless practice · find the fault', accent: 'var(--green)' },
+    { key: 'learn', icon: '≡', label: 'LEARN', sub: 'Guided courses · step by step', accent: 'var(--accent)' },
+    { key: 'practice', icon: '∞', label: 'PRACTICE', sub: 'Endless reps · find the fault', accent: 'var(--green)' },
+    { key: 'feedback', icon: '∿', label: 'MIC FEEDBACK', sub: 'Ring out a wedge · train your ear', accent: 'var(--aux)' },
     { key: 'play', icon: '▶', label: 'FREE PLAY', sub: 'A working system · explore', accent: 'var(--cool)' },
   ];
   // A course row in the Learn pane. `num` is the lesson's position WITHIN its
@@ -9491,17 +9503,8 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
             )}
             {mode === 'practice' && (
               <div>
-                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--green)', marginBottom: 10 }}>PRACTICE</div>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-                  {[{ k: 'trouble', l: 'TROUBLESHOOTING', lock: false }, { k: 'feedback', l: 'MIC FEEDBACK', lock: !isMember }].map((t) => {
-                    const on = tab === t.k;
-                    return (
-                      <div key={t.k} onClick={() => setTab(t.k)} className="mono ui-no-select"
-                        style={{ cursor: 'pointer', fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, padding: '6px 10px', borderRadius: 5, border: '1px solid ' + (on ? '#2c9d52' : '#38383e'), background: on ? 'linear-gradient(180deg, var(--green), #2c9d52)' : '#1a1a1d', color: on ? '#0a0a0c' : 'var(--ink-2)' }}>{t.l}{t.lock ? ' 🔒' : ''}</div>
-                    );
-                  })}
-                </div>
-                {tab === 'trouble' && (practicePanel
+                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--green)', marginBottom: 10 }}>PRACTICE · TROUBLESHOOTING</div>
+                {practicePanel
                   ? practicePanel
                   : (
                     <div>
@@ -9509,38 +9512,23 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                       {practiceFreeLeft != null && practiceFreeLeft > 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>{practiceFreeLeft} FREE TRIES LEFT</div>}
                       {startBtn('START SESSION →', () => go(practiceIdx))}
                     </div>
-                  ))}
-                {tab === 'feedback' && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Ring out a wedge: push the send until it rings, find the frequency on the graphic EQ, and cut it. A monitor engineer's core skill.</div>
-                    {isMember && onSetFeedbackByEar && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
-                        <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>DIFFICULTY</span>
-                        {[{ v: false, l: 'GUIDED' }, { v: true, l: 'BY EAR' }].map((opt) => (
-                          <div key={opt.l} onClick={() => onSetFeedbackByEar(opt.v)} className="mono ui-no-select"
-                            style={{ cursor: 'pointer', fontSize: 9, fontWeight: 700, padding: '5px 10px', borderRadius: 4, border: '1px solid ' + (feedbackByEar === opt.v ? '#2c5d9e' : '#38383e'), background: feedbackByEar === opt.v ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d', color: feedbackByEar === opt.v ? '#0a0a0c' : 'var(--ink-2)' }}>{opt.l}</div>
-                        ))}
-                      </div>
-                    )}
-                    {startBtn(isMember ? 'START →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
-                  </div>
-                )}
-                {tab === 'library' && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 10 }}>Hand-picked situations pulled from real gigs.{isMember ? '' : ' Part of the membership.'}</div>
-                    {libraries.map(({ s, i }) => (
-                      <div key={s.id} onClick={() => go(i)} className="ui-no-select"
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 5, cursor: 'pointer', opacity: isMember ? 1 : 0.7 }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                        <div style={{ width: 20, textAlign: 'center', color: 'var(--cool)', fontSize: 11 }}>◆</div>
-                        <div style={{ flex: 1, fontSize: 12, color: 'var(--ink)' }}>{s.title}</div>
-                        {!isMember && <div style={{ fontSize: 11 }}>🔒</div>}
-                      </div>
+                  )}
+              </div>
+            )}
+            {mode === 'feedback' && (
+              <div>
+                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--aux)', marginBottom: 10 }}>MIC FEEDBACK · EAR TRAINING</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Ring out a wedge: push the send until it starts to ring, find the frequency on the graphic EQ, and cut it by ear. This is the ear you keep sharpening for years, and a monitor engineer's core skill.</div>
+                {isMember && onSetFeedbackByEar && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+                    <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>DIFFICULTY</span>
+                    {[{ v: false, l: 'GUIDED' }, { v: true, l: 'BY EAR' }].map((opt) => (
+                      <div key={opt.l} onClick={() => onSetFeedbackByEar(opt.v)} className="mono ui-no-select"
+                        style={{ cursor: 'pointer', fontSize: 9, fontWeight: 700, padding: '5px 10px', borderRadius: 4, border: '1px solid ' + (feedbackByEar === opt.v ? '#2c5d9e' : '#38383e'), background: feedbackByEar === opt.v ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d', color: feedbackByEar === opt.v ? '#0a0a0c' : 'var(--ink-2)' }}>{opt.l}</div>
                     ))}
-                    {libraries.length === 0 && <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>No scenarios yet.</div>}
                   </div>
                 )}
+                {startBtn(isMember ? 'START →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
               </div>
             )}
           </div>
@@ -9607,7 +9595,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           marginTop: 8, width: '100%', padding: '7px 10px', fontSize: 9, fontWeight: 800, letterSpacing: 0.5, borderRadius: 5, cursor: 'pointer',
           background: liveShow ? 'linear-gradient(180deg, #d8473f, #a8322b)' : '#16161a',
           color: liveShow ? '#fff' : 'var(--ink-3)', border: '1px solid ' + (liveShow ? '#a8322b' : '#38383e'),
-        }}>{liveShow ? '🔴 LIVE SHOW ON · the room is listening' : 'START WITH LIVE SHOW · the room is listening'}</button>
+        }}>{liveShow ? '● LIVE SHOW ON · the room is listening' : 'START WITH LIVE SHOW · the room is listening'}</button>
       )}
     </div>
   ) : null;
@@ -9679,7 +9667,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           borderColor: audioOn ? '#2c9d52' : (nudgeSound ? 'var(--green)' : '#38383e'),
           fontWeight: 700, padding: '6px 12px',
           animation: nudgeSound ? 'soundNudge 1.6s ease-in-out infinite' : 'none',
-        }}>{audioOn ? '🔊 SOUND ON' : '🔇 SOUND OFF'}</button>
+        }}>{audioOn ? 'SOUND ON' : 'SOUND OFF'}</button>
         {onToggleEq && (
           <button onClick={onToggleEq} className="mono ui-no-select" title="Graphic EQ on the monitor sends" style={{
             ...navBtn, padding: '6px 12px',
@@ -9687,13 +9675,13 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             color: eqOpen ? '#0a0a0c' : (eqRinging ? 'var(--hot)' : 'var(--ink-2)'),
             borderColor: eqOpen ? '#c79a1f' : (eqRinging ? 'var(--hot)' : '#38383e'),
             boxShadow: eqRinging && !eqOpen ? '0 0 8px rgba(255,70,48,0.4)' : 'none', fontWeight: 700,
-          }}>🎛 MONITOR EQ</button>
+          }}>MONITOR EQ</button>
         )}
         {onOpenIoList && (
-          <button onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>📋 INPUT LIST</button>
+          <button onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>INPUT LIST</button>
         )}
         {onOpenProgress && (
-          <button onClick={onOpenProgress} className="mono ui-no-select" title="Back up or restore your progress" style={{ ...navBtn, padding: '6px 12px' }}>💾 PROGRESS</button>
+          <button onClick={onOpenProgress} className="mono ui-no-select" title="Back up or restore your progress" style={{ ...navBtn, padding: '6px 12px' }}>PROGRESS</button>
         )}
         <button onClick={toggleFullscreen} className="mono ui-no-select" title="Fill the screen" style={{ ...navBtn, padding: '6px 12px' }}>{isFs ? '⤢ EXIT' : '⤢ FULL SCREEN'}</button>
         <button onClick={onRestart} className="mono ui-no-select" style={{ ...navBtn, padding: '6px 14px' }}>↻ RESET</button>
@@ -9791,8 +9779,12 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   }
   if (level.gainStructure && gainStatus) {
     if (gainStatus.hasInput) extras.push({ label: 'Input level healthy', pass: !!gainStatus.input, color: 'var(--cool)' });
-    if (gainStatus.hasRef) extras.push({ label: 'Playback up at unity', pass: !!gainStatus.fader, color: 'var(--cool)' });
-    extras.push({ label: 'Master up at unity', pass: !!gainStatus.master, color: 'var(--cool)' });
+    // Fader-at-unity objectives only for tasks that actually teach it. gainOnly
+    // tasks leave the fader as a mix choice, so they are hidden there.
+    if (!gainStatus.gainOnly) {
+      if (gainStatus.hasRef) extras.push({ label: (gainStatus.refLabel || 'Channel') + ' up at unity', pass: !!gainStatus.fader, color: 'var(--cool)' });
+      extras.push({ label: 'Master up at unity', pass: !!gainStatus.master, color: 'var(--cool)' });
+    }
   }
   const allFlowPass = condStates.length === 0 || condStates.every(s => s.pass);
   const allExtrasPass = extras.every(e => e.pass);
@@ -9863,7 +9855,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
           <div className="mono" style={{ fontSize: 11.5, color: (level.task ? 'var(--cool)' : 'var(--hot)'), letterSpacing: 1.4, fontWeight: 800 }}>{level.task ? '▸ TASK' : '⚠ SYMPTOM'}</div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {liveShow && level.isPractice && (
-              <div className="mono" title="The audience is listening. Muting a channel or pulling the master is a dropout the room hears. PFL into your headphones is free." style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 1, padding: '3px 7px', borderRadius: 12, background: 'rgba(216,71,63,0.16)', color: '#ff6a5e', border: '1px solid #a8322b' }}>🔴 LIVE · ROOM IS LISTENING</div>
+              <div className="mono" title="The audience is listening. Muting a channel or pulling the master is a dropout the room hears. PFL into your headphones is free." style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 1, padding: '3px 7px', borderRadius: 12, background: 'rgba(216,71,63,0.16)', color: '#ff6a5e', border: '1px solid #a8322b' }}>● LIVE · ROOM IS LISTENING</div>
             )}
             {statusPill}
             {workChip}
@@ -9939,7 +9931,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
           at something already handled. */}
       {pendingHints && pendingHints.length > 0 && (
         <div style={zoneStyle('var(--amber)', hintCount > 0 ? 'rgba(255,181,71,0.06)' : 'rgba(255,181,71,0.04)')}>
-          {zoneLabel('var(--amber)', '💡 HINT')}
+          {zoneLabel('var(--amber)', 'HINT')}
           {hintCount === 0 ? (
             <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
               Read the task and try it with what you know. Stuck? Reveal a hint one step at a time. It just gets noted in your debrief.
@@ -10094,7 +10086,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           never show here, which is the whole point. */}
       {level.isPractice && practiceFreeLeft == null && liveShow && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, borderTop: '1px solid rgba(216,71,63,0.25)', paddingTop: 5 }}>
-          <div className="mono" style={{ fontSize: 8, color: dropouts > 0 ? 'var(--hot)' : 'var(--green)', letterSpacing: 1.2, fontWeight: 700 }}>🔴 LIVE SHOW</div>
+          <div className="mono" style={{ fontSize: 8, color: dropouts > 0 ? 'var(--hot)' : 'var(--green)', letterSpacing: 1.2, fontWeight: 700 }}>● LIVE SHOW</div>
           <div style={{ fontSize: 9, color: 'var(--ink-2)', lineHeight: 1.4 }}>
             {dropouts > 0
               ? <>The room heard <b style={{ color: 'var(--hot)' }}>{dropouts} dropout{dropouts === 1 ? '' : 's'}</b> while you worked. PFL lets you check a channel in your headphones without the audience hearing it, and the master never needs to move.</>
@@ -10115,7 +10107,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
               width: '100%', padding: '7px 10px', fontSize: 10, fontWeight: 800, letterSpacing: 1,
               background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
               border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-            }}>🎧 START THE FREE TOUR →</button>
+            }}>START THE FREE TOUR →</button>
           )}
           <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
             width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
@@ -10151,7 +10143,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
           border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
         }}>NEXT LEVEL →</button>
       ) : (
-        <div className="mono" style={{ width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1, background: '#0a0a0c', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, textAlign: 'center' }}>🎓 ALL LEVELS COMPLETE</div>
+        <div className="mono" style={{ width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1, background: '#0a0a0c', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, textAlign: 'center' }}>ALL LEVELS COMPLETE</div>
       )}
       {onCopyRepLink && (
         <button onClick={onCopyRepLink} className="mono ui-no-select" title="Copy a link that loads this exact problem for anyone" style={{

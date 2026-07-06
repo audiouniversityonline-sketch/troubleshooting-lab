@@ -652,6 +652,42 @@ const BAND_SOURCES = ['vocal', 'vocal2', 'guitar', 'laptop'];
 // active DI. The phantom fault can only land where phantom matters.
 const POWERED_IDX = [1, 2];
 
+// A live mic amplified on a channel gained for a DI feeds back through the PA.
+// The bass channel is the only one gained hot enough to do it (its healthy gain
+// is the highest), so a crosspatch must never leave a mic there or the rep opens
+// howling and the app misreads the PA feedback as a wedge ring (Kyle 2026-07-06:
+// "starts with howling feedback, but the problem is actually a crosspatch"). A
+// DI landing on a hot channel just runs hot, which reads on the correct channel
+// and is fine. These helpers let the crosspatch faults reject the mic-on-hot
+// swaps and keep the rest.
+const MIC_SOURCES = ['vocal', 'vocal2'];
+function hotMicChannel() {
+  const g = (window.HEALTHY_GAIN_BY_CH || []).slice(0, 4);
+  if (!g.length) return 2;
+  let hi = 0; for (let i = 1; i < g.length; i++) if (g[i] > g[hi]) hi = i;
+  return hi;
+}
+// Channel index a source currently lands on: source -> its cable's port ->
+// the channel that port feeds (fanOut). Reflects whatever cables/fanOut hold now.
+function sourceChannel(s, src) { return s.fanOut[s.cables[src] - 1] - 1; }
+// A crosspatch swap to reject: it would either howl (a live mic on the hot
+// channel) or scream (a very low-gain source slammed onto a much hotter channel,
+// e.g. the keyboard on the bass channel, which opens at ~117 dB and reads as a
+// distortion fault, not a crosspatch). A MODERATE hot channel is left alone: a
+// crosspatch really does mis-gain a channel, and that clue reads on the correct
+// channel and clears when you re-patch (Kyle 2026-07-06: no feedback, stay
+// realistic). The 6.0 ceiling is well above the deliberate 'gain too hot' fault
+// (~3.6) so ordinary hot channels pass; only the absurd overloads are rejected.
+function crosspatchBad(s) {
+  const hot = hotMicChannel();
+  if (MIC_SOURCES.some((m) => sourceChannel(s, m) === hot)) return true;
+  const a = window.computeAudio ? window.computeAudio(s) : null;
+  if (a && a.chanInBaseline) {
+    for (let i = 0; i < 4; i++) { if (a.chanInBaseline[i] > 6) return true; }
+  }
+  return false;
+}
+
 // The fault pool. Each entry is ONE thing that can go wrong, applied on top
 // of the bandUp() start state. `apply` places the fault with the seeded rng.
 // `par` is the move count of the systematic fix — inspecting and listening
@@ -670,6 +706,20 @@ const POWERED_IDX = [1, 2];
 window.PRACTICE_FAULTS = [
   { key: 'cable',        label: 'Cable unplugged',   blurb: "A channel's input cable is unplugged.",                  par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
   { key: 'gain',         label: 'Gain at zero',      blurb: "A channel's gain is at zero, so its meter never moves.",  par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].gain = 0; } },
+  // GAIN TOO HOT — the opposite of 'gain at zero'. A channel's gain is set a few
+  // dB into the red, so the preamp clips and the channel distorts even though
+  // signal is flowing fine. The win engine already blocks a solve while anything
+  // is in the red (the `clean` gate in the App), so this is a real diagnosis,
+  // not an auto-win: the fix is to read the red meter and pull GAIN back down.
+  // The gain knob is exponential (~+3 dB per 0.05), so a FIXED knob value would
+  // clip wildly differently per channel; instead we offset from each channel's
+  // calibrated healthy gain. +0.22 puts chanIn baseline ~3.6-3.8 on any of the
+  // three candidates — solidly clipping (verified against detectClipping,
+  // including the condenser on ch1 which needs the most gain to clip), yet a
+  // realistic few-dB overshoot, not an absurd slam. Restricted to vox 1/2 and
+  // keys (bass's quiet source reads borderline). Aux sends are 0 in the base
+  // Practice state, so cranking the preamp distorts without ringing a wedge.
+  { key: 'gain-hot',     label: 'Gain too hot',      blurb: "A channel's gain is set so hot the preamp clips and the channel distorts.", par: 2, apply: (s, rng) => { const ch = [0, 1, 3][Math.floor((rng ? rng() : 0) * 3)]; s.channels[ch].gain = Math.min(1, window.HEALTHY_GAIN_BY_CH[ch] + 0.22); } },
   { key: 'fader',        label: 'Fader down',        blurb: 'A channel fader is all the way down.',                    par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].fader = 0; } },
   { key: 'mute',         label: 'Channel muted',     blurb: 'A channel is muted.',                                    par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].mute = true; } },
   // NOTE: no 'pan' fault. The win reads the LOUDER PA side (pan is a free
@@ -749,15 +799,30 @@ window.PRACTICE_FAULTS = [
   // patch on a live channel POPS: the safe fix is master down (one move,
   // covers both channels) -> swap -> master back up.
   { key: 'crosspatch-stage', label: 'Crosspatch at the stage box', blurb: 'Two inputs are swapped at the stage box.', par: 3, apply: (s, rng) => {
-    const i = Math.floor(rng() * 4);
-    let j = Math.floor(rng() * 3); if (j >= i) j += 1;
-    const a = BAND_SOURCES[i], b = BAND_SOURCES[j];
-    const t = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = t;
+    // Random source-port swaps, but reject any that leave a live mic on the hot
+    // (bass) channel — that howls and reads as feedback, not a crosspatch. Falls
+    // back to trading the two mics, which can never land a mic on the DI channel.
+    for (let tries = 0; tries < 16; tries++) {
+      const i = Math.floor(rng() * 4);
+      let j = Math.floor(rng() * 3); if (j >= i) j += 1;
+      const a = BAND_SOURCES[i], b = BAND_SOURCES[j];
+      const t = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = t;
+      if (!crosspatchBad(s)) return;
+      const u = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = u; // undo, retry
+    }
+    const t = s.cables['vocal']; s.cables['vocal'] = s.cables['vocal2']; s.cables['vocal2'] = t;
   } },
   { key: 'crosspatch-snake', label: 'Crosspatch at the snake', blurb: 'Two channels are swapped at the snake.', par: 3, apply: (s, rng) => {
-    const i = Math.floor(rng() * 4);
-    let j = Math.floor(rng() * 3); if (j >= i) j += 1;
-    const t = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = t;
+    // Same guard for the snake variant (swaps which channel each port feeds).
+    // Fallback trades the two non-mic channel tails, so the mics stay put.
+    for (let tries = 0; tries < 16; tries++) {
+      const i = Math.floor(rng() * 4);
+      let j = Math.floor(rng() * 3); if (j >= i) j += 1;
+      const t = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = t;
+      if (!crosspatchBad(s)) return;
+      const u = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = u; // undo, retry
+    }
+    const t = s.fanOut[2]; s.fanOut[2] = s.fanOut[3]; s.fanOut[3] = t;
   } },
 ];
 
@@ -807,17 +872,20 @@ window.PRACTICE_GOALS = [
     key: 'gain-stage', label: 'Fix the gain structure', par: 2,
     apply: (s) => {
       // The bass came in weak: its gain got cracked down to half of where a
-      // passive bass needs to sit, and the fader was ridden up past unity to
-      // compensate. Set the gain healthy (high on the knob for a bass) and the
-      // fader back to unity.
+      // passive bass needs to sit, and the fader was ridden up to compensate.
+      // The fix is at the top of the chain: bring the GAIN up until the bass
+      // sits healthy on its meter. gainOnly = the win tests the input gain ONLY,
+      // never the fader position. The fader is a mix choice — near unity by habit
+      // but legitimately above or below — so requiring it at unity would teach a
+      // false rule (Kyle 2026-07-06). Where the student leaves the fader is theirs.
       s.channels[2].gain = window.HEALTHY_GAIN_BY_CH[2] * 0.5; s.channels[2].fader = 0.9;
       return {
         conditions: [{ source: 'guitar', dest: 'pa', min: 0.3 }],
-        gainStructure: { refChannel: 3, unity: 0.75, faderTol: 0.08, inputBand: [0.575, 1.148] },
-        symptom: 'The bass gain is set far too low, with the fader pushed up to make up for it. That is backwards. Set the gain structure properly: gain healthy on the meter, fader back at unity.',
+        gainStructure: { refChannel: 3, inputBand: [0.575, 1.148], gainOnly: true },
+        symptom: 'The bass gain is set far too low, and the fader has been pushed up to make up for it. That is backwards. Set the level at the top of the chain: bring the GAIN up until the bass sits healthy on its meter. Where you take the fader from there is a mix call.',
         title: 'Fix the Gain Structure',
-        hint: 'PFL the bass (channel 3) and bring its GAIN up until the input meter sits in the healthy zone, then drop the fader back to the unity mark.',
-        solution: "Bass gain set healthy in PFL, fader at unity. That's proper gain structure, level set at the top of the chain, not the bottom.",
+        hint: 'PFL the bass (channel 3) and bring its GAIN up until the input meter sits in the healthy zone. That is the fix. The fader is yours to set the balance after.',
+        solution: "Bass gain set healthy in PFL, so the level is set at the top of the chain, not by riding the fader. Where the fader sits from there is a mix choice.",
       };
     },
   },
