@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=20"></script>
+<script src="content-staging.js?v=21"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -9351,11 +9351,10 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // Free Play board behind it; members keep Free Play as Free Play.
   const curMode = level.isWalkthrough ? 'learn'
     : level.isSandbox ? (TIER !== 'member' ? 'learn' : 'play')
-    : (level.isPractice || level.isFeedbackMode || level.isLibrary) ? 'practice'
+    : level.isFeedbackMode ? 'feedback'
+    : (level.isPractice || level.isLibrary) ? 'practice'
     : 'learn';
-  const curTab = level.isFeedbackMode ? 'feedback' : 'trouble';
   const [mode, setMode] = uS(curMode);
-  const [tab, setTab] = uS(curTab);
   // Which Learn course is expanded. Defaults to the one holding the current
   // level (a returning member lands on their open course); otherwise every
   // course starts collapsed so the Learn tab opens as a clean list of titles.
@@ -9387,7 +9386,8 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
   const MODES = [
     { key: 'learn', icon: '🎓', label: 'LEARN', sub: 'Guided courses · step by step', accent: 'var(--accent)' },
-    { key: 'practice', icon: '∞', label: 'PRACTICE', sub: 'Endless practice · find the fault', accent: 'var(--green)' },
+    { key: 'practice', icon: '∞', label: 'PRACTICE', sub: 'Endless reps · find the fault', accent: 'var(--green)' },
+    { key: 'feedback', icon: '👂', label: 'MIC FEEDBACK', sub: 'Ring out a wedge · train your ear', accent: 'var(--aux)' },
     { key: 'play', icon: '▶', label: 'FREE PLAY', sub: 'A working system · explore', accent: 'var(--cool)' },
   ];
   // A course row in the Learn pane. `num` is the lesson's position WITHIN its
@@ -9491,17 +9491,8 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
             )}
             {mode === 'practice' && (
               <div>
-                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--green)', marginBottom: 10 }}>PRACTICE</div>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-                  {[{ k: 'trouble', l: 'TROUBLESHOOTING', lock: false }, { k: 'feedback', l: 'MIC FEEDBACK', lock: !isMember }].map((t) => {
-                    const on = tab === t.k;
-                    return (
-                      <div key={t.k} onClick={() => setTab(t.k)} className="mono ui-no-select"
-                        style={{ cursor: 'pointer', fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, padding: '6px 10px', borderRadius: 5, border: '1px solid ' + (on ? '#2c9d52' : '#38383e'), background: on ? 'linear-gradient(180deg, var(--green), #2c9d52)' : '#1a1a1d', color: on ? '#0a0a0c' : 'var(--ink-2)' }}>{t.l}{t.lock ? ' 🔒' : ''}</div>
-                    );
-                  })}
-                </div>
-                {tab === 'trouble' && (practicePanel
+                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--green)', marginBottom: 10 }}>PRACTICE · TROUBLESHOOTING</div>
+                {practicePanel
                   ? practicePanel
                   : (
                     <div>
@@ -9509,38 +9500,23 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                       {practiceFreeLeft != null && practiceFreeLeft > 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>{practiceFreeLeft} FREE TRIES LEFT</div>}
                       {startBtn('START SESSION →', () => go(practiceIdx))}
                     </div>
-                  ))}
-                {tab === 'feedback' && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Ring out a wedge: push the send until it rings, find the frequency on the graphic EQ, and cut it. A monitor engineer's core skill.</div>
-                    {isMember && onSetFeedbackByEar && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
-                        <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>DIFFICULTY</span>
-                        {[{ v: false, l: 'GUIDED' }, { v: true, l: 'BY EAR' }].map((opt) => (
-                          <div key={opt.l} onClick={() => onSetFeedbackByEar(opt.v)} className="mono ui-no-select"
-                            style={{ cursor: 'pointer', fontSize: 9, fontWeight: 700, padding: '5px 10px', borderRadius: 4, border: '1px solid ' + (feedbackByEar === opt.v ? '#2c5d9e' : '#38383e'), background: feedbackByEar === opt.v ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d', color: feedbackByEar === opt.v ? '#0a0a0c' : 'var(--ink-2)' }}>{opt.l}</div>
-                        ))}
-                      </div>
-                    )}
-                    {startBtn(isMember ? 'START →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
-                  </div>
-                )}
-                {tab === 'library' && (
-                  <div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5, marginBottom: 10 }}>Hand-picked situations pulled from real gigs.{isMember ? '' : ' Part of the membership.'}</div>
-                    {libraries.map(({ s, i }) => (
-                      <div key={s.id} onClick={() => go(i)} className="ui-no-select"
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 5, cursor: 'pointer', opacity: isMember ? 1 : 0.7 }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                        <div style={{ width: 20, textAlign: 'center', color: 'var(--cool)', fontSize: 11 }}>◆</div>
-                        <div style={{ flex: 1, fontSize: 12, color: 'var(--ink)' }}>{s.title}</div>
-                        {!isMember && <div style={{ fontSize: 11 }}>🔒</div>}
-                      </div>
+                  )}
+              </div>
+            )}
+            {mode === 'feedback' && (
+              <div>
+                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--aux)', marginBottom: 10 }}>MIC FEEDBACK · EAR TRAINING</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Ring out a wedge: push the send until it starts to ring, find the frequency on the graphic EQ, and cut it by ear. This is the ear you keep sharpening for years, and a monitor engineer's core skill.</div>
+                {isMember && onSetFeedbackByEar && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+                    <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>DIFFICULTY</span>
+                    {[{ v: false, l: 'GUIDED' }, { v: true, l: 'BY EAR' }].map((opt) => (
+                      <div key={opt.l} onClick={() => onSetFeedbackByEar(opt.v)} className="mono ui-no-select"
+                        style={{ cursor: 'pointer', fontSize: 9, fontWeight: 700, padding: '5px 10px', borderRadius: 4, border: '1px solid ' + (feedbackByEar === opt.v ? '#2c5d9e' : '#38383e'), background: feedbackByEar === opt.v ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d', color: feedbackByEar === opt.v ? '#0a0a0c' : 'var(--ink-2)' }}>{opt.l}</div>
                     ))}
-                    {libraries.length === 0 && <div style={{ fontSize: 11, color: 'var(--ink-3)' }}>No scenarios yet.</div>}
                   </div>
                 )}
+                {startBtn(isMember ? 'START →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
               </div>
             )}
           </div>
