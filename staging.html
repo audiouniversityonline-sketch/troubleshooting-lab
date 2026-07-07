@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=47"></script>
+<script src="content-staging.js?v=48"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6139,11 +6139,27 @@ if (SCENARIO_PARAM) {
     sabotage: (s) => applyCapturedState(s, sp.s),
   });
 }
+// Build environment: staging (content-staging.js / staging.html) vs production
+// (content.js / index.html). Detected exactly like the version badge, so the two
+// deployed files stay identical except for the one <script src> line. Used to
+// keep prototype-only surfaces (the 8/16 console-size selector, the ?band entry)
+// live on staging but hidden on production while the bigger console is built out.
+const IS_STAGING = (() => {
+  try {
+    const srcs = Array.prototype.map.call(document.scripts, (s) => s.src);
+    const src = srcs.filter((s) => /content[a-z-]*\.js\?v=/.test(s))[0] || '';
+    const path = (typeof location !== 'undefined' && location.pathname) || '';
+    return /content-staging/.test(src) || /staging/i.test(path);
+  } catch (e) { return false; }
+})();
+window.IS_STAGING = IS_STAGING;
+
 // The 16-input full band (?band=1). A sandbox-style board (no fault, no win, no
 // lock) that swaps the console over to the 16-input band via bandState(). Kept
 // off the normal menu for now — appended only when the ?band link is used —
-// while the stage/snake views are still being built. Lock is bypassed at load.
-const BAND_PARAM = (() => { try { return new URLSearchParams(window.location.search).get('band') === '1'; } catch (e) { return false; } })();
+// while the stage/snake views are still being built. Staging-only for now.
+// Lock is bypassed at load.
+const BAND_PARAM = IS_STAGING && (() => { try { return new URLSearchParams(window.location.search).get('band') === '1'; } catch (e) { return false; } })();
 const BAND_INDEX = BAND_PARAM ? SCENARIOS.length : -1;
 if (BAND_PARAM) {
   SCENARIOS.push({
@@ -9156,8 +9172,10 @@ function App() {
   const effStageHidden = stageHideable && (stageHidden || !!level.isBand);
   // Big-desk view is offered in the same places the stage toggle is: not in
   // guided lessons or the walkthrough (authored against the 5-strip band) and
-  // not on mobile. Elsewhere the console can present as an 8/16/24-channel desk.
-  const sizeSelectable = stageHideable;
+  // not on mobile. Elsewhere the console can present as an 8/16-channel desk.
+  // Staging-only while the bigger console is prototyped: production runs the
+  // single MX-8 desk with no size selector (IS_STAGING gates it).
+  const sizeSelectable = stageHideable && IS_STAGING;
   const effConsoleSize = sizeSelectable ? consoleSize : 0;
   const nCh = state && Array.isArray(state.channels) ? state.channels.length : NATIVE_CH;
   // The console footprint grows with the TOTAL strip count above the native 5 —

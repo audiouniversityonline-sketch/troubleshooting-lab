@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=58"></script>
+<script src="content.js?v=59"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -121,19 +121,55 @@
 <!-- levels.jsx — signal flow simulator + level definitions       -->
 <!-- ============================================================ -->
 <script type="text/babel">
+// The input CATALOG — one entry per source is the single home for everything
+// about it: how it reads on the stage (label/short/kind/icon/color/diActive),
+// its program level at the connector (`dbu`, which drives gain-staging), and its
+// dynamics envelope (`env`, which drives meter bounce). SRC_DBU_BY_SOURCE and
+// ENV_PROFILES are DERIVED from this below, so adding an input is one entry here
+// (plus an audio voice + a channel patch when it goes live). The multi-input
+// band (Phase 3+) will add group/snake/perf fields for stage clustering,
+// sub-snake routing, and which of the four performers owns the input.
 const SOURCES = {
-  vocal:  { label: 'Vocal Mic 1', short: 'VOCAL 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630' },
+  vocal:  { label: 'Vocal Mic 1', short: 'VOCAL 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25,
+            env: { syllableRate: 5.0, syllableDepth: 0.06, phraseRate: 0.7, phraseDepth: 0.03, burstRate: 0.30, burstDur: 0.05, burstAmp: 0.15, syllablePhase: 0.0, burstSeed: 0.10 } },
   // Bass DI is ACTIVE (buffered electronics, needs +48V phantom like a
   // condenser). Keyboard DI is PASSIVE (transformer, no power). The diActive
   // flag drives the phantom gate and the source-card label. (Real rule of
   // thumb is the opposite pairing, but either box works on either source;
   // this assignment is Kyle's choice for the lesson.)
-  guitar: { label: 'Bass DI',     short: 'BASS',    kind: 'di', diActive: true, icon: 'di', color: '#ffc93a' },
-  laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di',        icon: 'di',  color: '#4ade80' },
-  vocal2: { label: 'Vocal Mic 2', short: 'VOCAL 2', kind: 'condenser', icon: 'mic', color: '#ff8e4a' },
+  guitar: { label: 'Bass DI',     short: 'BASS',    kind: 'di', diActive: true, icon: 'di', color: '#ffc93a', dbu: -42,
+            env: { syllableRate: 2.5, syllableDepth: 0.04, phraseRate: 0.4, phraseDepth: 0.02, burstRate: 0.15, burstDur: 0.05, burstAmp: 0.08, syllablePhase: 2.3, burstSeed: 0.40 } },
+  laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -10,
+            env: { syllableRate: 1.2, syllableDepth: 0.03, phraseRate: 0.3, phraseDepth: 0.02, burstRate: 0.10, burstDur: 0.10, burstAmp: 0.05, syllablePhase: 3.1, burstSeed: 0.90 } },
+  vocal2: { label: 'Vocal Mic 2', short: 'VOCAL 2', kind: 'condenser', icon: 'mic', color: '#ff8e4a', dbu: -21,
+            env: { syllableRate: 4.5, syllableDepth: 0.05, phraseRate: 0.6, phraseDepth: 0.03, burstRate: 0.25, burstDur: 0.04, burstAmp: 0.13, syllablePhase: 1.7, burstSeed: 0.60 } },
   // Front-of-house stereo playback (a media player at the desk, not on stage).
   // A line input on a dedicated 5/6 channel used to test the system with music.
-  playback: { label: 'Playback 5/6', short: 'PLAYBACK', kind: 'playback', icon: 'media', color: '#6aa9ff' },
+  // No env: its meter is analyser-only and the bed plays flat.
+  playback: { label: 'Playback', short: 'PLAYBACK', kind: 'playback', icon: 'media', color: '#6aa9ff', dbu: -8 },
+
+  // ---- The 16-input BAND (big-desk scenarios). Four players, each singing:
+  // guitarist=lead (perf 0 · W1), bassist (perf 1 · W2, stage right), keys
+  // (perf 2 · W3, stage left), drummer (perf 3 · W4). snake: up = drums + drum
+  // vocal (upstage sub-snake), down = everything else (downstage sub-snake).
+  // No env/voice yet — they meter at a steady baseline until voices are wired
+  // (kept OUT of METER_SOURCES so the audio-voice loop doesn't touch them). ----
+  kick:  { label: 'Kick',         short: 'KICK',  kind: 'dynamic',   icon: 'mic', color: '#c084fc', dbu: -28, group: 'drums', snake: 'up',   perf: 3 },
+  snare: { label: 'Snare',        short: 'SNARE', kind: 'dynamic',   icon: 'mic', color: '#c084fc', dbu: -26, group: 'drums', snake: 'up',   perf: 3 },
+  hat:   { label: 'Hi-hat',       short: 'HI-HAT',kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -38, group: 'drums', snake: 'up',   perf: 3 },
+  rack:  { label: 'Rack tom',     short: 'RACK',  kind: 'dynamic',   icon: 'mic', color: '#c084fc', dbu: -30, group: 'drums', snake: 'up',   perf: 3 },
+  floor: { label: 'Floor tom',    short: 'FLOOR', kind: 'dynamic',   icon: 'mic', color: '#c084fc', dbu: -28, group: 'drums', snake: 'up',   perf: 3 },
+  ohl:   { label: 'Overhead L',   short: 'OH L',  kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -42, group: 'drums', snake: 'up',   perf: 3 },
+  ohr:   { label: 'Overhead R',   short: 'OH R',  kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -42, group: 'drums', snake: 'up',   perf: 3 },
+  bass:  { label: 'Bass',         short: 'BASS',  kind: 'di', diActive: true, icon: 'di', color: '#ffc93a', dbu: -42, group: 'bass', snake: 'down', perf: 1 },
+  egtr:  { label: 'Electric gtr', short: 'E GTR', kind: 'dynamic',   icon: 'mic', color: '#ff8e4a', dbu: -30, group: 'gtr',   snake: 'down', perf: 0 },
+  agtr:  { label: 'Acoustic gtr', short: 'A GTR', kind: 'di',        icon: 'di',  color: '#ff8e4a', dbu: -35, group: 'gtr',   snake: 'down', perf: 0 },
+  keysl: { label: 'Keys L',       short: 'KEYS L',kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -12, group: 'keys',  snake: 'down', perf: 2 },
+  keysr: { label: 'Keys R',       short: 'KEYS R',kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -12, group: 'keys',  snake: 'down', perf: 2 },
+  vx1:   { label: 'Vocal 1',      short: 'VOX 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 0 },
+  vx2:   { label: 'Vocal 2',      short: 'VOX 2', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 1 },
+  vx3:   { label: 'Vocal 3',      short: 'VOX 3', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 2 },
+  vx4:   { label: 'Vocal 4',      short: 'VOX 4', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'up',   perf: 3 },
 };
 
 // Per-source amplitude envelope. Real instruments and voices have dynamics:
@@ -146,15 +182,15 @@ const SOURCES = {
 // The result rides between roughly 0.85 and 1.20 around baseline. Meters
 // bounce realistically and a student learning gain staging has to leave room
 // for the occasional peak instead of pinning the steady level to the top.
-const ENV_PROFILES = {
-  vocal:  { syllableRate: 5.0, syllableDepth: 0.06, phraseRate: 0.7, phraseDepth: 0.03, burstRate: 0.30, burstDur: 0.05, burstAmp: 0.15, syllablePhase: 0.0, burstSeed: 0.10 },
-  vocal2: { syllableRate: 4.5, syllableDepth: 0.05, phraseRate: 0.6, phraseDepth: 0.03, burstRate: 0.25, burstDur: 0.04, burstAmp: 0.13, syllablePhase: 1.7, burstSeed: 0.60 },
-  guitar: { syllableRate: 2.5, syllableDepth: 0.04, phraseRate: 0.4, phraseDepth: 0.02, burstRate: 0.15, burstDur: 0.05, burstAmp: 0.08, syllablePhase: 2.3, burstSeed: 0.40 },
-  laptop: { syllableRate: 1.2, syllableDepth: 0.03, phraseRate: 0.3, phraseDepth: 0.02, burstRate: 0.10, burstDur: 0.10, burstAmp: 0.05, syllablePhase: 3.1, burstSeed: 0.90 },
-};
+// The profiles live per-source in the catalog (SOURCES[k].env); this derives
+// the { key: profile } lookup the engine reads.
+const ENV_PROFILES = Object.fromEntries(
+  Object.entries(SOURCES).filter(([, v]) => v.env).map(([k, v]) => [k, v.env])
+);
 
-// Every metered source. The four band channels have synthetic ENV_PROFILES;
-// playback (5/6) has none (its meter is analyser-only, the bed plays flat).
+// Every metered source (the ones with a synthesised audio voice). The band
+// channels have envelopes; playback (5/6) has none (analyser-only, plays flat).
+// A new input joins this list only once it has a voice wired in the audio graph.
 const METER_SOURCES = ['vocal', 'vocal2', 'guitar', 'laptop', 'playback'];
 
 function envelopeFactor(srcKey, tSec) {
@@ -360,6 +396,14 @@ const DEFAULT_CHANNEL = {
 
 function makeChannel(o = {}) { return { ...DEFAULT_CHANNEL, ...o }; }
 
+// The mixer's input count = the console name suffix (MX-8, MX-16). A stereo
+// strip (the playback pair) counts as two inputs, so this matches the physical
+// channel count on the desk regardless of how many faders it takes.
+function consoleInputs(s) {
+  return (s && Array.isArray(s.channels)) ? s.channels.reduce((n, c) => n + (c.stereo ? 2 : 1), 0) : 0;
+}
+window.consoleInputs = consoleInputs;
+
 function defaultState() {
   return {
     channels: [
@@ -375,7 +419,13 @@ function defaultState() {
       makeChannel({ id: 2, label: 'Vocal 2', gain: HEALTHY_GAIN_BY_CH[1], phantom: true,  fader: 0.72, pan: 0.5, aux1: 0.0 }),
       makeChannel({ id: 3, label: 'Bass',    gain: HEALTHY_GAIN_BY_CH[2],                 fader: 0.65, pan: 0.5, aux1: 0.0 }),
       makeChannel({ id: 4, label: 'Keys',    gain: HEALTHY_GAIN_BY_CH[3],                 fader: 0.60, pan: 0.5, aux1: 0.0 }),
-      makeChannel({ id: 5, label: '5/6',     gain: HEALTHY_GAIN_BY_CH[4], stereo: true,   fader: 0.70, pan: 0.5, aux1: 0.0 }),
+      // Two spare mono inputs (5-6) on the MX-8, nothing patched — silent until
+      // used. They sit between the band and the FOH playback line on 7/8.
+      makeChannel({ id: 5, label: '—', gain: 0, fader: 0.60, pan: 0.5 }),
+      makeChannel({ id: 6, label: '—', gain: 0, fader: 0.60, pan: 0.5 }),
+      // FOH stereo playback line on the top pair. Its channel number (7/8) renders
+      // from the strip's position; the source label carries the name.
+      makeChannel({ id: 7, label: '',  gain: HEALTHY_GAIN_BY_CH[6], stereo: true, fader: 0.70, pan: 0.5, aux1: 0.0 }),
     ],
     // Mixer / console power state. Default ON for all existing levels.
     // The Power-On Sequence lesson sabotages this to false and teaches the
@@ -478,7 +528,13 @@ function effectiveChannel(s, srcKey) {
   // Playback is a FOH line input hardwired to the 5/6 channel — it plugs into
   // the desk, not the stage snake, so it skips the cable/fan-out path.
   if (srcKey === 'playback') {
-    return s.channels && s.channels.length >= 5 ? 5 : 0;
+    // A board with no FOH playback line (e.g. the 16-input band as first built)
+    // has no playback channel at all.
+    if (s.noPlayback) return 0;
+    // Playback is the FOH stereo line on the desk's TOP pair — the stereo strip,
+    // wherever it sits (7/8 on an MX-8, 15/16 on an MX-16). Derived, not fixed.
+    const i = s.channels ? s.channels.findIndex((c) => c.stereo) : -1;
+    return i >= 0 ? i + 1 : 0;
   }
   const port = s.cables[srcKey];
   if (!port || port < 1) return 0;
@@ -521,7 +577,11 @@ window.linToDbu = linToDbu; window.dbuToLin = dbuToLin;
 //   guitar   passive bass through a DI (mic level!)     -42 dBu
 //   laptop   keyboard/synth through a DI (line-ish)     -10 dBu
 //   playback media player at the desk (consumer line)   -8 dBu
-const SRC_DBU_BY_SOURCE = { vocal: -25, vocal2: -21, guitar: -42, laptop: -10, playback: -8 };
+// DERIVED from the catalog (SOURCES[k].dbu): each source's program level at the
+// connector in dBu. See SOURCES for the single per-source definition.
+const SRC_DBU_BY_SOURCE = Object.fromEntries(
+  Object.entries(SOURCES).filter(([, v]) => v.dbu != null).map(([k, v]) => [k, v.dbu])
+);
 const SRC_DBU_DEFAULT = -21.2; // fallback for any unmapped source
 const srcDbuFor = (srcKey) => (SRC_DBU_BY_SOURCE[srcKey] != null ? SRC_DBU_BY_SOURCE[srcKey] : SRC_DBU_DEFAULT);
 // The gain-knob position that lands each source at nominal (+4 dBu, -18 dBFS):
@@ -530,9 +590,17 @@ const srcDbuFor = (srcKey) => (SRC_DBU_BY_SOURCE[srcKey] != null ? SRC_DBU_BY_SO
 // keys, ch5 playback). defaultState() and the content's "healthy" sabotages
 // read this so a hot source sits low on the knob and a passive bass sits high —
 // the whole point of per-source levels. Change a source's dBu and update here.
-const HEALTHY_GAIN_BY_CH = [0.48, 0.42, 0.77, 0.23, 0.20];
+// Per-CHANNEL healthy gain for the MX-8 base: band on 1-4, empty inputs on 5-6
+// (gain 0), playback on the 7/8 stereo pair (index 6). Playback used to be index
+// 4 (the MX-6 5/6); it moved to 6 when the base grew to 8 inputs.
+const HEALTHY_GAIN_BY_CH = [0.48, 0.42, 0.77, 0.23, 0, 0, 0.20];
 window.srcDbuFor = srcDbuFor;
 window.HEALTHY_GAIN_BY_CH = HEALTHY_GAIN_BY_CH;
+// The gain knob that lands a source at nominal (+4 dBu) from its connector level:
+// gain = (4 - dbu) / 60. Reproduces HEALTHY_GAIN_BY_CH for the original band and
+// derives the healthy knob for any new input (e.g. the 16-input band) from its dbu.
+const healthyGain = (dbu) => Math.max(0.05, Math.min(1, (4 - (dbu != null ? dbu : SRC_DBU_DEFAULT)) / 60));
+window.healthyGain = healthyGain;
 // Preamp: the knob IS the dB. 0..60 dB of gain, linear-in-dB like a real
 // trim pot, and matching the diagnostic's existing "gain x 60 dB" label.
 const preampDb = (g) => g * 60;
@@ -1242,6 +1310,33 @@ window.DEFAULT_OUT_FAN = DEFAULT_OUT_FAN;
 window.DEFAULT_OUT_PATCH = DEFAULT_OUT_PATCH;
 window.OUT_PORT_LABELS = OUT_PORT_LABELS;
 window.defaultState = defaultState;
+
+// The 16-input BAND board (big-desk scenarios). Starts from a healthy default
+// board, then swaps in the 16 band inputs patched 1:1 through a 16-way snake
+// fan-out (source k -> port i+1 -> channel i+1). Each input's gain is its
+// healthy knob (from dbu); condensers + the active bass DI get phantom so they
+// pass. Outputs move to ports 17-22 so they don't collide with the 16 inputs,
+// and noPlayback frees channel 5 (the floor tom) from the hardwired FOH line.
+const BAND_KEYS = ['kick','snare','hat','rack','floor','ohl','ohr','bass','egtr','agtr','keysl','keysr','vx1','vx2','vx3','vx4'];
+function bandState() {
+  const s = defaultState();
+  s.noPlayback = true;
+  s.channels = BAND_KEYS.map((k, i) => {
+    const src = SOURCES[k];
+    const needsPhantom = src.kind === 'condenser' || !!src.diActive;
+    return makeChannel({ id: i + 1, label: src.short, gain: healthyGain(src.dbu), fader: 0.6, pan: 0.5, phantom: needsPhantom });
+  });
+  s.cables = {}; BAND_KEYS.forEach((k, i) => { s.cables[k] = i + 1; });
+  s.fanOut = BAND_KEYS.map((_, i) => i + 1);
+  s.sourceMute = {}; BAND_KEYS.forEach((k) => { s.sourceMute[k] = false; });
+  // Output snake ports live above the 16 inputs.
+  s.outFan = { 17: 'mainL', 18: 'mainR', 19: 'aux1', 20: 'aux2', 21: 'aux3', 22: 'aux4' };
+  s.outPatch = { pa_l: 17, pa_r: 18, wedge: 19, wedge2: 20, wedge3: 21, wedge4: 22 };
+  s.testing = 'kick';
+  s.inspect = 'pa';
+  return s;
+}
+window.bandState = bandState;
 window.computeAudio = computeAudio;
 window.traceTo = traceTo;
 window.checkWin = checkWin;
@@ -2082,29 +2177,16 @@ const { Knob: K, Fader: F, LedMeter: M, ButtonPad: BP, Led: L } = window;
 
 function PFLBar({ level, hot }) {
   const segs = 14;
-  // dBFS bar: full scale = the console's clip point (0 dBFS = +22 dBu). The
-  // gold marker is the healthy AVERAGE zone, around -18 dBFS like a real
-  // digital desk: park the signal's average there and let the program's
-  // peaks dance above it — that's the real gain-staging picture.
+  // dBFS bar: full scale = the console's clip point (0 dBFS = +22 dBu). Read the
+  // meter's own zones like a real digital desk: keep the average up in the
+  // healthy range with peaks staying below the red. No target overlay.
   const db = window.levelToDbfs(level);
   const lit = Math.min(segs, Math.round((window.dbfsFrac ? window.dbfsFrac(db) : 0) * segs));
   const holdRef = React.useRef({ db: -60, t: null, holdUntil: 0 });
   const holdDb = window.advancePeakHold ? window.advancePeakHold(holdRef, db) : db;
   const holdIdx = window.peakHoldIdx ? window.peakHoldIdx(holdDb, segs) : -1;
-  const targetLow = window.dbfsFrac ? window.dbfsFrac(-21) : 0.56;
-  const targetHigh = window.dbfsFrac ? window.dbfsFrac(-15) : 0.69;
   return (
     <div className="ui-no-select" style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
-      <div style={{ position: 'relative', height: 3 }}>
-        <div style={{
-          position: 'absolute',
-          left: (targetLow * 100) + '%',
-          width: ((targetHigh - targetLow) * 100) + '%',
-          top: 0, height: 3,
-          background: 'linear-gradient(180deg, rgba(255,201,58,0.42), rgba(255,181,71,0.55))',
-          borderRadius: 1,
-        }} title="Healthy average zone (about -18 dBFS). Park the average here; peaks ride above it."/>
-      </div>
       <div style={{
         display: 'flex', gap: 1,
         width: '100%',
@@ -2157,8 +2239,10 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       boxShadow: isFaultStrip ? '0 0 0 1.5px rgba(255,70,48,0.5), 0 0 20px rgba(255,70,48,0.25)' : 'none',
       // Console powered down: the whole strip reads as dead — dimmed and
       // desaturated, the same visual language the speakers/amp use when off.
-      opacity: powered ? 1 : 0.5,
-      filter: powered ? 'none' : 'grayscale(0.75)',
+      // An UNUSED input (big-desk padding) reads as a spare strip: dimmed but
+      // not dead, since nothing is patched to it yet.
+      opacity: powered ? (ch.unused ? 0.42 : 1) : 0.5,
+      filter: powered ? (ch.unused ? 'grayscale(0.5)' : 'none') : 'grayscale(0.75)',
       transition: 'box-shadow 0.2s, opacity 0.15s, filter 0.15s',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 2px' }}>
@@ -2394,7 +2478,7 @@ function Console({ state, setState, audio, faultChannelIdx }) {
               boxShadow: mixerOn ? '0 0 6px var(--accent)' : 'inset 0 0 0 1px rgba(90,32,24,0.6)',
               transition: 'background 0.15s, box-shadow 0.15s',
             }}/>
-            <div className="display" style={{ fontSize: 10, color: mixerOn ? 'var(--ink-2)' : '#5a2018', letterSpacing: 1.5, fontWeight: 700, textTransform: 'uppercase' }}>AU · MX-6</div>
+            <div className="display" style={{ fontSize: 10, color: mixerOn ? 'var(--ink-2)' : '#5a2018', letterSpacing: 1.5, fontWeight: 700, textTransform: 'uppercase' }}>AU · MX-{consoleInputs(state)}</div>
             <span data-walk="mixer-power" style={{ display: 'inline-flex' }}>
             <PowerButton on={mixerOn} width={32} height={13}
               onClick={() => {
@@ -4281,7 +4365,7 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
       <ZoneHeader
         label="Console (FOH)"
         sublabel="the mix desk"
-        badge={sfc === 'digital' ? 'DX-6' : 'MX-6'}
+        badge={(sfc === 'digital' ? 'DX-' : 'MX-') + consoleInputs(state)}
         badgeColor="var(--accent)"
       />
       {/* SURFACE toggle — same scenario, analog strip layout or digital
@@ -4494,7 +4578,7 @@ function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRe
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement }) {
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, stageHidden, briefBelow = false }) {
   const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
   const [hoverCable, setHoverCable] = useS2(null);
   const isMobile = useViewport();
@@ -4581,16 +4665,18 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         targets.push({ key: `port-${port}`, x, y, payload: port });
       }
     } else if (drag.type === 'fanout') {
-      // Snake tails land on the four mic/line channels, not the 5/6 line-in
-      // strip (that one is hardwired to the FOH playback, no snake port).
-      for (let ch = 1; ch <= Math.min(4, state.channels.length); ch++) {
+      // Snake tails land on any MONO mic/line channel — the whole desk, not a
+      // fixed four. The one exception is the stereo playback strip (7/8 on an
+      // MX-8): that's a hardwired FOH line-in with no snake port, so skip it.
+      for (let ch = 1; ch <= state.channels.length; ch++) {
+        if (state.channels[ch - 1] && state.channels[ch - 1].stereo) continue;
         const el = channelRefs.current[ch];
         if (!el) continue;
         const { x, y } = local(el);
         targets.push({ key: `ch-${ch}`, x, y, payload: ch });
       }
     } else if (drag.type === 'outpatch') {
-      for (const portId of [5, 6, 7, 8]) {
+      for (const portId of [5, 6, 7, 8, 9, 10]) {
         const el = outRefs.current[portId];
         if (!el) continue;
         const { x, y } = local(el);
@@ -4598,7 +4684,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       }
     } else if (drag.type === 'outfan') {
       // Return tails at FOH drop onto the console's output chips.
-      const chipRefs = { mainL: masterLRef, mainR: masterRRef, aux1: aux1Ref, aux2: aux2Ref };
+      const chipRefs = { mainL: masterLRef, mainR: masterRRef, aux1: aux1Ref, aux2: aux2Ref, aux3: aux3Ref, aux4: aux4Ref };
       for (const outKey of Object.keys(chipRefs)) {
         const el = chipRefs[outKey].current;
         if (!el) continue;
@@ -4702,7 +4788,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         const of2 = { ...(s.outFan || window.DEFAULT_OUT_FAN) };
         if (of2[ch] === target) return s;
         const old = of2[ch] || null;
-        const bumpedCh = [5, 6, 7, 8].find(c2 => c2 !== ch && of2[c2] === target);
+        const bumpedCh = [5, 6, 7, 8, 9, 10].find(c2 => c2 !== ch && of2[c2] === target);
         of2[ch] = target;
         if (bumpedCh) of2[bumpedCh] = old;
         const next = { ...s, outFan: of2 };
@@ -5042,6 +5128,14 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   const retLive = (ch) => (ch && ofanLive[ch]) ? busActiveFor(ofanLive[ch]) : false;
   const topo = state.topology || {};
 
+  const consoleEl = (
+    <ConsolePanel state={state} setState={setState} audio={audio}
+      channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef}
+      aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref}
+      fanOutRef={fanOutRef} sourceKeys={sourceKeys}
+      surface={surface} onSetSurface={onSetSurface} canDigital={canDigital} surfaceLocked={surfaceLocked}/>
+  );
+
   return (
     <div ref={containerRef} style={{
       position: 'relative', width: '100%',
@@ -5055,32 +5149,45 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           Stage and brief share the wide LEFT column; the stage uses the
           horizontal width, the brief uses minimal vertical height in a
           horizontal banner layout below the stage. */}
-      <div style={{
-        display: 'flex', flexDirection: isMobile ? 'column' : 'row',
-        gap: isMobile ? 8 : 12, zIndex: 2, alignItems: 'stretch',
-      }}>
+      {briefBelow ? (
+        /* Stage hidden + big desk: the console is width-limited with spare
+           vertical room, so the brief drops BELOW it (a banner) and the console
+           takes the full width. */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', zIndex: 2 }}>
+          <div style={{ flexShrink: 0, display: 'flex' }}>{consoleEl}</div>
+          <div style={{ width: '100%', maxWidth: 1100 }}>{sidebarContent}</div>
+        </div>
+      ) : (
         <div style={{
-          flex: 1, minWidth: 0,
-          display: 'flex', flexDirection: 'column', gap: 12,
+          display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 8 : 12, zIndex: 2, alignItems: 'stretch',
         }}>
-          <div ref={stageZoneRef}>
-            <StageRow state={state} setState={setState} audio={audio}
-              sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
-              snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
-              wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
-              paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
+          {/* LEFT column: the stage (hidden when stageHidden) with the brief below
+              it. When the stage is hidden at native size the brief stays in this
+              column BESIDE the console — centered vertically — so the canvas height
+              is the console's height, not console + brief (which would scale the
+              console down on a height-limited screen). */}
+          <div style={{
+            flex: 1, minWidth: 0,
+            display: 'flex', flexDirection: 'column', gap: 12,
+            justifyContent: stageHidden ? 'center' : 'flex-start',
+          }}>
+            {!stageHidden && (
+              <div ref={stageZoneRef}>
+                <StageRow state={state} setState={setState} audio={audio}
+                  sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
+                  snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
+                  wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
+                  paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
+              </div>
+            )}
+            {sidebarContent}
           </div>
-          {sidebarContent}
+          <div style={{ flexShrink: 0, display: 'flex' }}>{consoleEl}</div>
         </div>
-        <div style={{ flexShrink: 0, display: 'flex' }}>
-          <ConsolePanel state={state} setState={setState} audio={audio}
-            channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef}
-            aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref}
-            fanOutRef={fanOutRef} sourceKeys={sourceKeys}
-            surface={surface} onSetSurface={onSetSurface} canDigital={canDigital} surfaceLocked={surfaceLocked}/>
-        </div>
-      </div>
+      )}
 
+      {!stageHidden && (
       <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', zIndex: 5 }}>
         {/* Cable path helpers. Two shapes:
               _cableCurve  — direct bezier from source to stage box. Used for
@@ -5445,6 +5552,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           );
         })}
       </svg>
+      )}
     </div>
   );
 }
@@ -5466,6 +5574,25 @@ const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } 
 // uniformly to fit (see useFitScale). Tune this once so nothing overlaps at
 // scale 1; everything else follows.
 const DESIGN_W = 1680;
+// When the stage is hidden the brief stays BESIDE the console (not below it, or
+// the taller canvas would scale DOWN on a height-limited wide screen). The canvas
+// narrows to the console plus a brief column, so fit-to-screen scales it up on
+// the narrow embed and frees horizontal room for more channels later.
+const DESIGN_W_STAGE_HIDDEN = 1300;
+// Big-desk view (Phase 3): each added channel strip widens the design canvas by
+// its own footprint (strip width 100 + gap 8) so the scale-to-fit shrinks the
+// whole board to fit instead of letting a wide console overflow. Native boards
+// (no padding) keep DESIGN_W exactly, so nothing changes for existing content.
+const STRIP_UNIT = 108;
+// Stage hidden AND a big desk selected: the brief drops BELOW the console (a
+// banner) so the console takes the full width. The canvas is then just the
+// console's width (no beside-brief column), growing per added strip. Native at
+// 755; this base leaves a little margin so the console never clips.
+const DESIGN_W_CONSOLE_ONLY = 800;
+// The strip count the base design widths are calibrated for (the original band).
+// Canvas width grows per strip ABOVE this, whether the extra strips are unused
+// big-desk padding or a real multi-input band — both widen the desk the same.
+const NATIVE_CH = 5;
 
 // Member progress persistence. Completed levels are saved to the browser keyed
 // by stable level id, so a monthly content drop never wipes what a student
@@ -5509,6 +5636,8 @@ function defaultProfile() {
     streak: 0,          // daily streak: consecutive days with at least one finished session
     streakDay: '',      // YYYY-MM-DD (local) of the last day counted toward the streak
     streakBest: 0,      // longest daily streak reached, ever
+    stageHidden: false, // view pref: hide the stage so the console gets the screen
+    consoleSize: 0,     // big-desk view: 0 = native band, else 8/16/24 (unused line inputs pad the desk)
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -5537,6 +5666,8 @@ function normalizeProfile(data) {
   p.streak = (Number.isFinite(data.streak) && data.streak >= 0) ? Math.floor(data.streak) : 0;
   p.streakDay = (typeof data.streakDay === 'string') ? data.streakDay : '';
   p.streakBest = (Number.isFinite(data.streakBest) && data.streakBest >= 0) ? Math.floor(data.streakBest) : 0;
+  p.stageHidden = !!data.stageHidden;
+  p.consoleSize = (CONSOLE_SIZES.indexOf(data.consoleSize) !== -1) ? data.consoleSize : 0;
   p.firstName = (typeof data.firstName === 'string') ? data.firstName : '';
   p.v = PROFILE_VERSION;
   return p;
@@ -5671,7 +5802,7 @@ window.deriveInvolves = function deriveInvolves(level) {
   const defaultFanOut = [1, 2, 3, 4];
   for (const cond of (level.conditions || [])) {
     // Playback is the FOH line input on channel 5, outside the snake fan-out.
-    if (cond.source === 'playback') { involved.add(5); continue; }
+    if (cond.source === 'playback') { involved.add(7); continue; }
     if (cond.source && defaultCables[cond.source]) {
       const port = defaultCables[cond.source];
       const ch = defaultFanOut[port - 1];
@@ -5690,6 +5821,46 @@ function normalizeChannels(channels, involves) {
     return { ...ch, mute: true, fader: 0, gain: 0, pan: 0.5, phantom: false, aux1: 0, aux2: 0, aux3: 0, aux4: 0, solo: false, highpass: false };
   });
 }
+
+// Big-desk view (Phase 3): present the console as a larger 8/16/24-channel desk
+// by padding the board with UNUSED line inputs. The band keeps its real
+// channels; the extra strips are inert (muted, fader + gain down, nothing
+// patched in), exactly like the spare inputs on a real console at a small gig.
+// They carry unused:true so a resize regenerates only the padding, and the audio
+// engine (which reads state.channels) is unaffected because nothing feeds them.
+// This is also the seam for "fuller band later" — a padding strip becomes live
+// the moment a source is patched to it.
+const CONSOLE_SIZES = [8, 16];
+function padConsole(channels, target) {
+  if (!Array.isArray(channels)) return channels;
+  const real = channels.filter((c) => !c.unused);
+  // `target` is an INPUT count (MX-8, MX-16); a stereo strip (the FOH playback
+  // pair) counts as two inputs, so the desk name matches the physical input count.
+  const realInputs = real.reduce((n, c) => n + (c.stereo ? 2 : 1), 0);
+  if (!target || target <= realInputs) return real; // native or smaller: never hide a real channel
+  // The FOH stereo playback strip always lives on the desk's LAST two channels
+  // (7/8 on an MX-8, 15/16 on an MX-16). Pad the unused mono strips in BEFORE it,
+  // never after, so the playback line never lands in the middle of the desk.
+  const stereoIdx = real.findIndex((c) => c.stereo);
+  const head = stereoIdx >= 0 ? real.slice(0, stereoIdx) : real.slice();
+  const tail = stereoIdx >= 0 ? real.slice(stereoIdx + 1) : [];
+  const playback = stereoIdx >= 0 ? real[stereoIdx] : null;
+  // Mono strips to insert so total inputs equal the target (playback = 2 inputs).
+  const padCount = target - (head.length + tail.length) - (playback ? 2 : 0);
+  const maxId = real.reduce((m, c) => Math.max(m, c.id || 0), 0);
+  const out = head.slice();
+  // Each padding strip is labelled by its position so the CH number and the
+  // scribble-strip label agree (strip 7 reads "7"), the way an unused input on a
+  // real desk does. ids start past the max real id so there's no key clash.
+  for (let i = 0; i < padCount; i++) {
+    const pos = head.length + i;
+    out.push(makeChannel({ id: maxId + 1 + i, label: String(pos + 1), gain: 0, fader: 0, mute: true, unused: true }));
+  }
+  tail.forEach((c) => out.push(c));
+  if (playback) out.push(playback); // playback strip stays last → 7/8, 15/16, …
+  return out;
+}
+window.padConsole = padConsole;
 
 function rampParam(param, ctx, target) {
   if (!Number.isFinite(target)) target = 0;
@@ -5968,6 +6139,42 @@ if (SCENARIO_PARAM) {
     sabotage: (s) => applyCapturedState(s, sp.s),
   });
 }
+// Build environment: staging (content-staging.js / staging.html) vs production
+// (content.js / index.html). Detected exactly like the version badge, so the two
+// deployed files stay identical except for the one <script src> line. Used to
+// keep prototype-only surfaces (the 8/16 console-size selector, the ?band entry)
+// live on staging but hidden on production while the bigger console is built out.
+const IS_STAGING = (() => {
+  try {
+    const srcs = Array.prototype.map.call(document.scripts, (s) => s.src);
+    const src = srcs.filter((s) => /content[a-z-]*\.js\?v=/.test(s))[0] || '';
+    const path = (typeof location !== 'undefined' && location.pathname) || '';
+    return /content-staging/.test(src) || /staging/i.test(path);
+  } catch (e) { return false; }
+})();
+window.IS_STAGING = IS_STAGING;
+
+// The 16-input full band (?band=1). A sandbox-style board (no fault, no win, no
+// lock) that swaps the console over to the 16-input band via bandState(). Kept
+// off the normal menu for now — appended only when the ?band link is used —
+// while the stage/snake views are still being built. Staging-only for now.
+// Lock is bypassed at load.
+const BAND_PARAM = IS_STAGING && (() => { try { return new URLSearchParams(window.location.search).get('band') === '1'; } catch (e) { return false; } })();
+const BAND_INDEX = BAND_PARAM ? SCENARIOS.length : -1;
+if (BAND_PARAM) {
+  SCENARIOS.push({
+    id: 'band', isSandbox: true, isBand: true,
+    title: 'Full Band',
+    symptom: 'The full 16-input band is patched and up: drums on the upstage sub-snake, everything else downstage, all fanned out to the desk. Nothing is broken and there is no goal here yet — poke around the bigger console. Hide the stage to see it as front of house.',
+    conditions: [], involves: [], defaultInspect: 'pa',
+    sabotage: () => {
+      const s = bandState();
+      ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => { if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.7; } });
+      return s;
+    },
+  });
+}
+
 // Lessons ("Run the show") are members-only now, alongside the challenge modes.
 const isLocked = (sc) => !!(sc && (sc.isChallenge || sc.isLesson) && TIER !== 'member');
 
@@ -6313,7 +6520,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FINAL EXAM · PASSED</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You can run a system now.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You just ran a full show from a cold system: powered on in order, set your levels, tested every speaker, brought in the mics and DIs, built a monitor mix, and kept it clean through feedback. That's the job.
+          You just ran a full show from the start: powered on in order, set your levels, tested every speaker, brought in the mics and DIs, built a monitor mix, and kept it clean through feedback. That's the job.
         </div>
         {tier === 'member' ? (
           <>
@@ -6380,7 +6587,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · HANDS-ON</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Learn live sound by doing it.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          Jump onto a real mixing console. The band is playing and something just broke: find it, fix it, and get sharp. Enter your email to start.
+          Jump onto a real mixing console. The band is playing and something just broke. Find it and fix it. Enter your email to start.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -6470,7 +6677,7 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
           onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
           onMouseLeave={(e) => e.currentTarget.style.borderColor = '#38383e'}>
           <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700 }}>LEARN THE FULL SETUP · 10 LESSONS</div>
-          <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>Build a live system from a cold start.</div>
+          <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>Set up a live system with nothing powered on yet.</div>
           <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>Start at the beginning: patch it, power up in order, set your levels, build a monitor mix, and run a full show. Step by step.</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--accent)', fontWeight: 800, letterSpacing: 0.6, marginTop: 3 }}>START THE ESSENTIALS →</div>
         </div>
@@ -6507,7 +6714,7 @@ const WALK_STEPS = [
   },
   {
     act: 'The channel strip', title: 'Gain', target: 'ch1-gain',
-    teach: "Gain is the preamp knob at the top of the strip. It sets the signal strength right at the input. Turn it up while you watch the meter: park the signal's average in the gold zone, around -18, and let the peaks bounce above it with room to spare before the red. Set gain by the meter, not by ear.",
+    teach: "Gain is the preamp knob at the top of the strip. It sets the signal strength right at the input. Turn it up while you watch the meter: bring the signal's average up into the healthy range, around -18, and let the peaks bounce above it with room to spare before the red. Set gain by the meter, not by ear.",
     prompt: "With the lead vocal in PFL, bring its gain up slowly and watch the meter. Ease it back if it hits the red.",
     aside: "The 48V button powers condenser mics. A dynamic mic like this lead vocal does not need it.",
     takeaway: "Gain is the input level, set with the knob at the top of the channel strip, by the meter.",
@@ -6807,8 +7014,12 @@ function WalkthroughSpotlight({ target }) {
 // the source/instrument, the mic or DI type, phantom, the snake channel, and
 // the console channel — that's exactly what the patch lesson asks the
 // student to wire, and what a crosspatch rep gets compared against.
-function IoListPanel({ open, onClose }) {
+function IoListPanel({ open, onClose, state }) {
   if (!open) return null;
+  // Built from the LIVE board so the list is accurate in every mode (MX-8, the
+  // full band, etc.) — one input row per fader, and every console output bus.
+  const s = (state && Array.isArray(state.channels)) ? state : (window.defaultState ? window.defaultState() : null);
+  if (!s) return null;
   const sc = window.SNAKE_COLORS || [];
   const dot = (ch) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -6830,6 +7041,59 @@ function IoListPanel({ open, onClose }) {
       {label}
     </span>
   );
+  const typeLabel = (src) => {
+    if (!src) return 'Empty · nothing patched';
+    if (src.kind === 'dynamic') return 'Dynamic mic';
+    if (src.kind === 'condenser') return 'Condenser mic · needs +48V';
+    if (src.kind === 'di') return src.diActive ? 'Active DI · needs +48V' : 'Passive DI';
+    if (src.kind === 'playback') return 'Stereo line · plugs straight in';
+    return src.kind || '—';
+  };
+  // One row per fader. The Input List is the PAPERWORK: it shows the INTENDED
+  // patch (what belongs on each channel), not the current live cabling — so it's
+  // a usable map even before the first cable goes in (Patch the System starts
+  // fully unpatched). We read the plan off a reference patch: identity fan-out,
+  // each source on its home port. For the standard band that home layout is
+  // fixed; other boards (the 16-input band) never start unpatched, so their live
+  // cabling already IS the plan.
+  const liveCables = s.cables || {};
+  const isStdBand = ['vocal', 'vocal2', 'guitar', 'laptop'].every((k) => k in liveCables) && Object.keys(liveCables).length <= 6;
+  const planCables = isStdBand ? { vocal: 1, vocal2: 2, guitar: 3, laptop: 4 } : liveCables;
+  const planFanOut = isStdBand ? [1, 2, 3, 4] : (s.fanOut || [1, 2, 3, 4]);
+  const planStereoIdx = s.channels.findIndex((c) => c.stereo);
+  const srcKeysAll = Object.keys(window.SOURCES || {});
+  // The intended channel for a source: its home snake port carried through the
+  // plan's fan-out. Playback is the FOH stereo line on the stereo strip.
+  const planChannelFor = (k) => {
+    if (k === 'playback') return (!s.noPlayback && planStereoIdx >= 0) ? planStereoIdx + 1 : 0;
+    const port = planCables[k];
+    if (!(port >= 1)) return 0;
+    const ch = planFanOut[port - 1];
+    return (ch >= 1 && ch <= s.channels.length) ? ch : 0;
+  };
+  // Invert: the intended source for each channel.
+  const planSourceForChannel = (i) => {
+    if (s.channels[i] && s.channels[i].stereo) return s.noPlayback ? null : 'playback';
+    return srcKeysAll.find((k) => k !== 'playback' && planChannelFor(k) === i + 1) || null;
+  };
+  const inputRows = s.channels.map((ch, i) => {
+    const srcKey = planSourceForChannel(i);
+    const src = srcKey ? window.SOURCES[srcKey] : null;
+    const chNum = ch.stereo ? `${i + 1}/${i + 2}` : `${i + 1}`;
+    const snakeIdx = (src && srcKey !== 'playback') ? planChannelFor(srcKey) : null;
+    return { key: i, chNum, source: src ? src.label : 'Empty', type: typeLabel(src), snakeIdx, empty: !src };
+  });
+  // Every console output bus and where it goes — all four wedges.
+  const outFan = s.outFan || window.DEFAULT_OUT_FAN || {};
+  const portFor = (busKey) => { const p = Object.keys(outFan).find((pp) => outFan[pp] === busKey); return p ? +p : null; };
+  const outputDefs = [
+    { bus: 'mainL', label: 'Main L', to: 'The left PA speaker (the room)' },
+    { bus: 'mainR', label: 'Main R', to: 'The right PA speaker (the room)' },
+    { bus: 'aux1', label: 'Aux 1', to: "Wedge 1 (the singer's monitor)" },
+    { bus: 'aux2', label: 'Aux 2', to: 'Wedge 2' },
+    { bus: 'aux3', label: 'Aux 3', to: 'Wedge 3' },
+    { bus: 'aux4', label: 'Aux 4', to: 'Wedge 4' },
+  ];
   return (
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.55)',
@@ -6857,11 +7121,13 @@ function IoListPanel({ open, onClose }) {
             <th style={th}>Channel</th><th style={th}>Source</th><th style={th}>Type</th>
           </tr></thead>
           <tbody>
-            <tr><td style={td}>{chCell(1, 'CH 1')}</td><td style={td}>Vocal Mic 1</td><td style={td}>Dynamic mic</td></tr>
-            <tr><td style={td}>{chCell(2, 'CH 2')}</td><td style={td}>Vocal Mic 2</td><td style={td}>Condenser mic · needs +48V</td></tr>
-            <tr><td style={td}>{chCell(3, 'CH 3')}</td><td style={td}>Bass</td><td style={td}>Active DI · needs +48V</td></tr>
-            <tr><td style={td}>{chCell(4, 'CH 4')}</td><td style={td}>Keyboard</td><td style={td}>Passive DI</td></tr>
-            <tr><td style={td}>{chCell(null, 'CH 5/6')}</td><td style={td}>Playback (phone or laptop)</td><td style={td}>Stereo line · plugs straight in</td></tr>
+            {inputRows.map((r) => (
+              <tr key={r.key}>
+                <td style={td}>{chCell(r.snakeIdx, 'CH ' + r.chNum)}</td>
+                <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink)' }}>{r.source}</td>
+                <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink-2)' }}>{r.type}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
         {sectionTitle('OUTPUTS · TO THE SPEAKERS')}
@@ -6870,10 +7136,12 @@ function IoListPanel({ open, onClose }) {
             <th style={th}>Signal</th><th style={th}>Goes to</th>
           </tr></thead>
           <tbody>
-            <tr><td style={td}>{chCell(5, 'Main L')}</td><td style={td}>The left PA speaker (the room)</td></tr>
-            <tr><td style={td}>{chCell(6, 'Main R')}</td><td style={td}>The right PA speaker (the room)</td></tr>
-            <tr><td style={td}>{chCell(7, 'Aux 1')}</td><td style={td}>Wedge 1 (the singer's monitor)</td></tr>
-            <tr><td style={td}>{chCell(8, 'Aux 2')}</td><td style={td}>Wedge 2 (a second monitor)</td></tr>
+            {outputDefs.map((o) => (
+              <tr key={o.bus}>
+                <td style={td}>{chCell(portFor(o.bus), o.label)}</td>
+                <td style={td}>{o.to}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -7225,6 +7493,14 @@ function App() {
     setSurface(next === 'digital' ? 'digital' : 'analog');
   };
 
+  // Hide-the-stage view pref: tuck the stage away so the console gets the whole
+  // canvas (bigger on the narrow embed; horizontal room for more channels later).
+  // Persisted like surface, via the profile-save effect below.
+  const [stageHidden, setStageHidden] = uS(() => !!profileRef.current.stageHidden);
+  const [consoleSize, setConsoleSize] = uS(() => (CONSOLE_SIZES.indexOf(profileRef.current.consoleSize) !== -1 ? profileRef.current.consoleSize : 0));
+  const consoleSizeRef = uR(consoleSize);
+  uE(() => { consoleSizeRef.current = consoleSize; }, [consoleSize]);
+
   // Free-tier email gate. emailDone is true once the viewer has either given an
   // email or chosen "skip for now" — both are remembered so the gate never
   // nags twice. Members and shared-link viewers are never gated.
@@ -7276,9 +7552,9 @@ function App() {
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
   // feedbackByEar drive "resume where I left off" on the next load.
   uE(() => {
-    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow };
+    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow, stageHidden, consoleSize };
     saveProfile(profileRef.current);
-  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow]);
+  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow, stageHidden, consoleSize]);
 
   // Keep the fault-draw's surface global in sync. Digital-only faults (mute
   // groups, DCA) carry digital:true and are skipped by the draw unless this is
@@ -7691,7 +7967,7 @@ function App() {
     })();
     // Patch gate (the patch lesson + every practice rep): sources on their
     // listed ports, snake tails on their numbered channels, console outputs
-    // into snake 5-8, speaker lines on their planned ports. A pro's patch
+    // into snake 5-10, speaker lines on their planned ports. A pro's patch
     // matches the paperwork (the Input List).
     const patchOk = !level.requirePatch || (() => {
       const c = state.cables || {};
@@ -7699,9 +7975,9 @@ function App() {
       const fo = state.fanOut || [1, 2, 3, 4];
       const fanOutOk = fo.length === 4 && fo[0] === 1 && fo[1] === 2 && fo[2] === 3 && fo[3] === 4;
       const ofn = state.outFan || window.DEFAULT_OUT_FAN;
-      const outFanOk = ofn[5] === 'mainL' && ofn[6] === 'mainR' && ofn[7] === 'aux1' && ofn[8] === 'aux2';
+      const outFanOk = ofn[5] === 'mainL' && ofn[6] === 'mainR' && ofn[7] === 'aux1' && ofn[8] === 'aux2' && ofn[9] === 'aux3' && ofn[10] === 'aux4';
       const op = state.outPatch || window.DEFAULT_OUT_PATCH;
-      const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8;
+      const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8 && op.wedge3 === 9 && op.wedge4 === 10;
       return cablesOk && fanOutOk && outFanOk && outOk;
     })();
     const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk;
@@ -8513,6 +8789,11 @@ function App() {
       loadLevel(CUSTOM_INDEX, undefined, true);
       return;
     }
+    // The full 16-input band (?band=1), bypassing the lock like a shared link.
+    if (BAND_PARAM && BAND_INDEX >= 0) {
+      loadLevel(BAND_INDEX, undefined, true);
+      return;
+    }
     // A shared-rep link wins over resume: load that exact Practice rep,
     // bypassing the member lock, at the link's fault count.
     if (REP_PARAM) {
@@ -8627,6 +8908,10 @@ function App() {
     const prev = prevStateRef.current;
     prevStateRef.current = state;
     if (!prev || prev === state || solved) return;
+    // A change in channel COUNT is a structural resize (big-desk padding adding
+    // or dropping unused strips), not a user gesture. The per-channel diffs below
+    // assume prev and state line up index-for-index, so skip the resize frame.
+    if (!prev.channels || !state.channels || prev.channels.length !== state.channels.length) return;
     // Live Show: charge the room for destructive diagnosis. Silencing a channel
     // the audience was hearing (mute, or fader to the floor) or pulling the
     // master is a dropout they heard. Touching a FAULTED channel doesn't count
@@ -8875,7 +9160,50 @@ function App() {
   const fitViewportRef = uR(null);
   const designRef = uR(null);
   const [designH, setDesignH] = uS(760);
-  const fitScale = useFitScale(fitViewportRef, DESIGN_W, designH, !isMobile);
+  // Hiding the stage narrows the canvas to the console, so fit-to-screen scales
+  // it up. Height still measured live (designH), width switches with the pref.
+  // Guided lessons and the walkthrough teach ON the stage (patching, power-up,
+  // cables), so they always show it; the toggle is only offered elsewhere. The
+  // pref itself sticks, so leaving a lesson restores the hidden view.
+  const stageHideable = !isMobile && !level.isWalkthrough && !level.isLesson;
+  // The 16-input band has no stage graphic yet (step 2 rebuilds the stage +
+  // sub-snakes for it), so it stays on the front-of-house view: stage forced
+  // hidden, and the SHOW STAGE toggle is withheld until that stage exists.
+  const effStageHidden = stageHideable && (stageHidden || !!level.isBand);
+  // Big-desk view is offered in the same places the stage toggle is: not in
+  // guided lessons or the walkthrough (authored against the 5-strip band) and
+  // not on mobile. Elsewhere the console can present as an 8/16-channel desk.
+  // Staging-only while the bigger console is prototyped: production runs the
+  // single MX-8 desk with no size selector (IS_STAGING gates it).
+  const sizeSelectable = stageHideable && IS_STAGING;
+  const effConsoleSize = sizeSelectable ? consoleSize : 0;
+  const nCh = state && Array.isArray(state.channels) ? state.channels.length : NATIVE_CH;
+  // The console footprint grows with the TOTAL strip count above the native 5 —
+  // whether the extra strips are unused big-desk padding or a real band's inputs.
+  const stripsOver = Math.max(0, nCh - NATIVE_CH);
+  // Brief placement when the stage is hidden. A wide console (padded big desk OR
+  // a real multi-input band) is WIDTH-limited with spare vertical room, so the
+  // brief drops BELOW it to reclaim the horizontal space the beside-column ate.
+  // Native is HEIGHT-limited (the console is tall), so the brief stays BESIDE it
+  // — below would make the taller canvas scale the console down (the v35 fix).
+  const briefBelow = effStageHidden && nCh > NATIVE_CH;
+  // Strips above native widen the canvas by their footprint so scale-to-fit
+  // shrinks the whole board to fit; a native board keeps DESIGN_W exactly.
+  const baseW = briefBelow ? DESIGN_W_CONSOLE_ONLY : (effStageHidden ? DESIGN_W_STAGE_HIDDEN : DESIGN_W);
+  const designW = baseW + stripsOver * STRIP_UNIT;
+  const fitScale = useFitScale(fitViewportRef, designW, designH, !isMobile);
+
+  // Keep the rendered channel count in step with the selected desk size. Padding
+  // only ever adds or removes UNUSED strips (real channels are untouched), so
+  // this is idempotent and safe to run on every size/level change. Layout effect
+  // so the resize lands before paint, with no flash of the native board.
+  React.useLayoutEffect(() => {
+    setState((s) => {
+      if (!s || !Array.isArray(s.channels)) return s;
+      const next = padConsole(s.channels, effConsoleSize);
+      return next.length === s.channels.length ? s : { ...s, channels: next };
+    });
+  }, [effConsoleSize, levelIdx]);
 
   // Track the canvas's natural height. offsetHeight is layout (transform-
   // independent), so this stays correct under the scale transform. Re-measures
@@ -8951,16 +9279,16 @@ function App() {
     const fo = state.fanOut || [];
     const fanOutOk = [1, 2, 3, 4].every((v, i) => fo[i] === v);
     const ofn = state.outFan || window.DEFAULT_OUT_FAN;
-    const outFanOk = ofn[5] === 'mainL' && ofn[6] === 'mainR' && ofn[7] === 'aux1' && ofn[8] === 'aux2';
+    const outFanOk = ofn[5] === 'mainL' && ofn[6] === 'mainR' && ofn[7] === 'aux1' && ofn[8] === 'aux2' && ofn[9] === 'aux3' && ofn[10] === 'aux4';
     const op = state.outPatch || window.DEFAULT_OUT_PATCH;
-    const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8;
+    const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8 && op.wedge3 === 9 && op.wedge4 === 10;
     patchStatus = level.isPractice
       ? [{ label: 'Patched per the I/O list', pass: cablesOk && fanOutOk && outFanOk && outOk }]
       : [
           { label: 'Inputs on snake 1-4 per the list', pass: cablesOk },
           { label: 'Snake tails 1-4 on their channels', pass: fanOutOk },
-          { label: 'Console outputs into snake 5-8', pass: outFanOk },
-          { label: 'Speaker lines on snake 5-8', pass: outOk },
+          { label: 'Console outputs into snake 5-10', pass: outFanOk },
+          { label: 'Speaker lines on snake 5-10', pass: outOk },
         ];
   }
 
@@ -9054,6 +9382,8 @@ function App() {
         completed={completed}
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
+        stageHidden={effStageHidden} onToggleStage={(stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null}
+        consoleSize={consoleSize} onSetConsoleSize={setConsoleSize} sizeSelectable={sizeSelectable}
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
@@ -9064,10 +9394,10 @@ function App() {
         liveShow={false} onSetLiveShow={null}
         onSelectDifficulty={(TIER === 'member' && !repShareFree) ? selectDifficulty : null}
         onPracticeFaults={(TIER === 'member' && !repShareFree) ? practiceAtFaults : null} onPracticeLive={null}
-        startOpen={!shouldWalk && !SCENARIO_PARAM && !REP_PARAM && !tourOpen}
+        startOpen={!shouldWalk && !SCENARIO_PARAM && !REP_PARAM && !BAND_PARAM && !tourOpen}
       />
 
-      <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
+      <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)} state={state}/>
       <FaultCatalog open={catalogOpen} onClose={() => setCatalogOpen(false)} tier={TIER}/>
       {AUTHOR_MODE && (
         <AuthorPanel text={authorText} setText={setAuthorText} goal={authorGoal}
@@ -9093,7 +9423,7 @@ function App() {
           never gated. Members never see it. The Mixer Tutorial captures at its
           own wrap-up, so a free viewer is asked at most once (emailDone shared). */}
       <EmailGate
-        open={TIER !== 'member' && !emailDone && !tourOpen && !REP_PARAM && !SCENARIO_PARAM && levelIdx >= 0 && levelIdx <= window.LEVELS.length}
+        open={TIER !== 'member' && !emailDone && !tourOpen && !REP_PARAM && !SCENARIO_PARAM && !BAND_PARAM && levelIdx >= 0 && levelIdx <= window.LEVELS.length}
         onSubmit={captureEmail} onSkip={skipEmail}/>
       {/* The welcome chooser is retired: a fresh free visitor gets the "Know
           your console" walkthrough, and everyone else lands with the mode menu
@@ -9148,7 +9478,7 @@ function App() {
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
               {pitchFor.isLesson
-                ? 'Run the show is the full course: set up a live system from a cold start and run a real show, step by step. Ten lessons, from patching and powering up in order to setting levels, building a monitor mix, and staying clean through feedback. It is part of the Audio University membership.'
+                ? 'Run the show is the full course: set up a live system with nothing powered on yet and run a real show, step by step. Ten lessons, from patching and powering up in order to setting levels, building a monitor mix, and staying clean through feedback. It is part of the Audio University membership.'
                 : pitchFor.isDigital
                 ? 'The digital console surface teaches the part of modern live sound the analog desk cannot: one shared channel section that follows whatever you SELECT, so the real skill is confirming what is selected before you touch a knob. Same signal flow and faults, a different surface. It is part of the membership.'
                 : pitchFor.isLibrary
@@ -9190,11 +9520,11 @@ function App() {
       <div ref={fitViewportRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
         <window.FitScaleContext.Provider value={fitScale}>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            <div ref={designRef} style={{ width: DESIGN_W, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
+            <div ref={designRef} style={{ width: designW, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
                 surface={(level.isWalkthrough || level.isLesson) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital}
-                surfaceLocked={level.isWalkthrough || level.isLesson}
+                surfaceLocked={level.isWalkthrough || level.isLesson} stageHidden={effStageHidden} briefBelow={briefBelow}
                 sidebarContent={
                   <StableSlot levelKey={levelIdx}>
                   {solved
@@ -9433,7 +9763,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   const COURSES = [];
   const mixerLessons = SCENARIOS.map((s, i) => ({ s, i })).filter((x) => x.s.isMixerLesson);
   if (mixerLessons.length) COURSES.push({ key: 'mixer', label: 'MIXER TUTORIAL', color: 'var(--cool)', tag: 'FREE', free: true, blurb: 'Learn the console one part at a time. Jump into any piece to refresh it, no need to run the whole thing.', rows: mixerLessons });
-  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a live system from a cold start and run a full show. Ten lessons, in order.', rows: lessons });
+  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a live system with nothing powered on yet and run a full show. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MONITOR WORLD', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build a separate mix for each performer: their own source, a bit of the vocals, a sensible level, rung out so it stays clean.', rows: monitors });
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -9549,7 +9879,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, consoleSize, onSetConsoleSize, sizeSelectable }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -9690,6 +10020,23 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         )}
         {onOpenIoList && (
           <button onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>INPUT LIST</button>
+        )}
+        {onToggleStage && (
+          <button onClick={onToggleStage} className="mono ui-no-select" title={stageHidden ? 'Show the stage: sources, cables, and speakers' : 'Hide the stage to give the console the whole screen'} style={{ ...navBtn, padding: '6px 12px' }}>{stageHidden ? 'SHOW STAGE' : 'HIDE STAGE'}</button>
+        )}
+        {sizeSelectable && onSetConsoleSize && (
+          <div className="mono ui-no-select" title="Console size: show the desk as 8, 16, or 24 channels. The band keeps the first strips; the rest are spare line inputs." style={{ ...navBtn, padding: 0, display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden' }}>
+            {[8, 16].map((sz, ix) => {
+              const on = consoleSize === sz;
+              return (
+                <button key={sz} onClick={() => onSetConsoleSize(on ? 0 : sz)} className="mono ui-no-select"
+                  title={on ? 'Back to the band (native size)' : ('Show the console as a ' + sz + '-channel desk')}
+                  style={{ border: 'none', borderLeft: ix ? '1px solid #38383e' : 'none', background: on ? 'var(--cool)' : 'transparent', color: on ? '#08080a' : 'var(--ink-2)', padding: '6px 8px', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: 'pointer' }}>
+                  {sz}
+                </button>
+              );
+            })}
+          </div>
         )}
         {onOpenProgress && (
           <button onClick={onOpenProgress} className="mono ui-no-select" title="Your training record and daily streak" style={{ ...navBtn, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
