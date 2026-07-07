@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=37"></script>
+<script src="content-staging.js?v=38"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -121,19 +121,32 @@
 <!-- levels.jsx — signal flow simulator + level definitions       -->
 <!-- ============================================================ -->
 <script type="text/babel">
+// The input CATALOG — one entry per source is the single home for everything
+// about it: how it reads on the stage (label/short/kind/icon/color/diActive),
+// its program level at the connector (`dbu`, which drives gain-staging), and its
+// dynamics envelope (`env`, which drives meter bounce). SRC_DBU_BY_SOURCE and
+// ENV_PROFILES are DERIVED from this below, so adding an input is one entry here
+// (plus an audio voice + a channel patch when it goes live). The multi-input
+// band (Phase 3+) will add group/snake/perf fields for stage clustering,
+// sub-snake routing, and which of the four performers owns the input.
 const SOURCES = {
-  vocal:  { label: 'Vocal Mic 1', short: 'VOCAL 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630' },
+  vocal:  { label: 'Vocal Mic 1', short: 'VOCAL 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25,
+            env: { syllableRate: 5.0, syllableDepth: 0.06, phraseRate: 0.7, phraseDepth: 0.03, burstRate: 0.30, burstDur: 0.05, burstAmp: 0.15, syllablePhase: 0.0, burstSeed: 0.10 } },
   // Bass DI is ACTIVE (buffered electronics, needs +48V phantom like a
   // condenser). Keyboard DI is PASSIVE (transformer, no power). The diActive
   // flag drives the phantom gate and the source-card label. (Real rule of
   // thumb is the opposite pairing, but either box works on either source;
   // this assignment is Kyle's choice for the lesson.)
-  guitar: { label: 'Bass DI',     short: 'BASS',    kind: 'di', diActive: true, icon: 'di', color: '#ffc93a' },
-  laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di',        icon: 'di',  color: '#4ade80' },
-  vocal2: { label: 'Vocal Mic 2', short: 'VOCAL 2', kind: 'condenser', icon: 'mic', color: '#ff8e4a' },
+  guitar: { label: 'Bass DI',     short: 'BASS',    kind: 'di', diActive: true, icon: 'di', color: '#ffc93a', dbu: -42,
+            env: { syllableRate: 2.5, syllableDepth: 0.04, phraseRate: 0.4, phraseDepth: 0.02, burstRate: 0.15, burstDur: 0.05, burstAmp: 0.08, syllablePhase: 2.3, burstSeed: 0.40 } },
+  laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -10,
+            env: { syllableRate: 1.2, syllableDepth: 0.03, phraseRate: 0.3, phraseDepth: 0.02, burstRate: 0.10, burstDur: 0.10, burstAmp: 0.05, syllablePhase: 3.1, burstSeed: 0.90 } },
+  vocal2: { label: 'Vocal Mic 2', short: 'VOCAL 2', kind: 'condenser', icon: 'mic', color: '#ff8e4a', dbu: -21,
+            env: { syllableRate: 4.5, syllableDepth: 0.05, phraseRate: 0.6, phraseDepth: 0.03, burstRate: 0.25, burstDur: 0.04, burstAmp: 0.13, syllablePhase: 1.7, burstSeed: 0.60 } },
   // Front-of-house stereo playback (a media player at the desk, not on stage).
   // A line input on a dedicated 5/6 channel used to test the system with music.
-  playback: { label: 'Playback 5/6', short: 'PLAYBACK', kind: 'playback', icon: 'media', color: '#6aa9ff' },
+  // No env: its meter is analyser-only and the bed plays flat.
+  playback: { label: 'Playback 5/6', short: 'PLAYBACK', kind: 'playback', icon: 'media', color: '#6aa9ff', dbu: -8 },
 };
 
 // Per-source amplitude envelope. Real instruments and voices have dynamics:
@@ -146,15 +159,15 @@ const SOURCES = {
 // The result rides between roughly 0.85 and 1.20 around baseline. Meters
 // bounce realistically and a student learning gain staging has to leave room
 // for the occasional peak instead of pinning the steady level to the top.
-const ENV_PROFILES = {
-  vocal:  { syllableRate: 5.0, syllableDepth: 0.06, phraseRate: 0.7, phraseDepth: 0.03, burstRate: 0.30, burstDur: 0.05, burstAmp: 0.15, syllablePhase: 0.0, burstSeed: 0.10 },
-  vocal2: { syllableRate: 4.5, syllableDepth: 0.05, phraseRate: 0.6, phraseDepth: 0.03, burstRate: 0.25, burstDur: 0.04, burstAmp: 0.13, syllablePhase: 1.7, burstSeed: 0.60 },
-  guitar: { syllableRate: 2.5, syllableDepth: 0.04, phraseRate: 0.4, phraseDepth: 0.02, burstRate: 0.15, burstDur: 0.05, burstAmp: 0.08, syllablePhase: 2.3, burstSeed: 0.40 },
-  laptop: { syllableRate: 1.2, syllableDepth: 0.03, phraseRate: 0.3, phraseDepth: 0.02, burstRate: 0.10, burstDur: 0.10, burstAmp: 0.05, syllablePhase: 3.1, burstSeed: 0.90 },
-};
+// The profiles live per-source in the catalog (SOURCES[k].env); this derives
+// the { key: profile } lookup the engine reads.
+const ENV_PROFILES = Object.fromEntries(
+  Object.entries(SOURCES).filter(([, v]) => v.env).map(([k, v]) => [k, v.env])
+);
 
-// Every metered source. The four band channels have synthetic ENV_PROFILES;
-// playback (5/6) has none (its meter is analyser-only, the bed plays flat).
+// Every metered source (the ones with a synthesised audio voice). The band
+// channels have envelopes; playback (5/6) has none (analyser-only, plays flat).
+// A new input joins this list only once it has a voice wired in the audio graph.
 const METER_SOURCES = ['vocal', 'vocal2', 'guitar', 'laptop', 'playback'];
 
 function envelopeFactor(srcKey, tSec) {
@@ -521,7 +534,11 @@ window.linToDbu = linToDbu; window.dbuToLin = dbuToLin;
 //   guitar   passive bass through a DI (mic level!)     -42 dBu
 //   laptop   keyboard/synth through a DI (line-ish)     -10 dBu
 //   playback media player at the desk (consumer line)   -8 dBu
-const SRC_DBU_BY_SOURCE = { vocal: -25, vocal2: -21, guitar: -42, laptop: -10, playback: -8 };
+// DERIVED from the catalog (SOURCES[k].dbu): each source's program level at the
+// connector in dBu. See SOURCES for the single per-source definition.
+const SRC_DBU_BY_SOURCE = Object.fromEntries(
+  Object.entries(SOURCES).filter(([, v]) => v.dbu != null).map(([k, v]) => [k, v.dbu])
+);
 const SRC_DBU_DEFAULT = -21.2; // fallback for any unmapped source
 const srcDbuFor = (srcKey) => (SRC_DBU_BY_SOURCE[srcKey] != null ? SRC_DBU_BY_SOURCE[srcKey] : SRC_DBU_DEFAULT);
 // The gain-knob position that lands each source at nominal (+4 dBu, -18 dBFS):
