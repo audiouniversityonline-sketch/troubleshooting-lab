@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=45"></script>
+<script src="content-staging.js?v=46"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7017,13 +7017,38 @@ function IoListPanel({ open, onClose, state }) {
     if (src.kind === 'playback') return 'Stereo line · plugs straight in';
     return src.kind || '—';
   };
-  // One row per fader. A stereo strip shows its pair (7/8); the FOH playback line
-  // and empty inputs have no snake cable (faint dot).
+  // One row per fader. The Input List is the PAPERWORK: it shows the INTENDED
+  // patch (what belongs on each channel), not the current live cabling — so it's
+  // a usable map even before the first cable goes in (Patch the System starts
+  // fully unpatched). We read the plan off a reference patch: identity fan-out,
+  // each source on its home port. For the standard band that home layout is
+  // fixed; other boards (the 16-input band) never start unpatched, so their live
+  // cabling already IS the plan.
+  const liveCables = s.cables || {};
+  const isStdBand = ['vocal', 'vocal2', 'guitar', 'laptop'].every((k) => k in liveCables) && Object.keys(liveCables).length <= 6;
+  const planCables = isStdBand ? { vocal: 1, vocal2: 2, guitar: 3, laptop: 4 } : liveCables;
+  const planFanOut = isStdBand ? [1, 2, 3, 4] : (s.fanOut || [1, 2, 3, 4]);
+  const planStereoIdx = s.channels.findIndex((c) => c.stereo);
+  const srcKeysAll = Object.keys(window.SOURCES || {});
+  // The intended channel for a source: its home snake port carried through the
+  // plan's fan-out. Playback is the FOH stereo line on the stereo strip.
+  const planChannelFor = (k) => {
+    if (k === 'playback') return (!s.noPlayback && planStereoIdx >= 0) ? planStereoIdx + 1 : 0;
+    const port = planCables[k];
+    if (!(port >= 1)) return 0;
+    const ch = planFanOut[port - 1];
+    return (ch >= 1 && ch <= s.channels.length) ? ch : 0;
+  };
+  // Invert: the intended source for each channel.
+  const planSourceForChannel = (i) => {
+    if (s.channels[i] && s.channels[i].stereo) return s.noPlayback ? null : 'playback';
+    return srcKeysAll.find((k) => k !== 'playback' && planChannelFor(k) === i + 1) || null;
+  };
   const inputRows = s.channels.map((ch, i) => {
-    const srcKey = window.sourceFor ? window.sourceFor(s, i) : null;
+    const srcKey = planSourceForChannel(i);
     const src = srcKey ? window.SOURCES[srcKey] : null;
     const chNum = ch.stereo ? `${i + 1}/${i + 2}` : `${i + 1}`;
-    const snakeIdx = (src && srcKey !== 'playback') ? (i + 1) : null;
+    const snakeIdx = (src && srcKey !== 'playback') ? planChannelFor(srcKey) : null;
     return { key: i, chNum, source: src ? src.label : 'Empty', type: typeLabel(src), snakeIdx, empty: !src };
   });
   // Every console output bus and where it goes — all four wedges.
