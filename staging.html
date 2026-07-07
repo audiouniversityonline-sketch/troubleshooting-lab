@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=39"></script>
+<script src="content-staging.js?v=40"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -9290,7 +9290,7 @@ function App() {
         liveShow={false} onSetLiveShow={null}
         onSelectDifficulty={(TIER === 'member' && !repShareFree) ? selectDifficulty : null}
         onPracticeFaults={(TIER === 'member' && !repShareFree) ? practiceAtFaults : null} onPracticeLive={null}
-        startOpen={!shouldWalk && !SCENARIO_PARAM && !REP_PARAM && !tourOpen}
+        startOpen={!shouldWalk && !SCENARIO_PARAM && !REP_PARAM && !BAND_PARAM && !tourOpen}
       />
 
       <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
@@ -9319,7 +9319,7 @@ function App() {
           never gated. Members never see it. The Mixer Tutorial captures at its
           own wrap-up, so a free viewer is asked at most once (emailDone shared). */}
       <EmailGate
-        open={TIER !== 'member' && !emailDone && !tourOpen && !REP_PARAM && !SCENARIO_PARAM && levelIdx >= 0 && levelIdx <= window.LEVELS.length}
+        open={TIER !== 'member' && !emailDone && !tourOpen && !REP_PARAM && !SCENARIO_PARAM && !BAND_PARAM && levelIdx >= 0 && levelIdx <= window.LEVELS.length}
         onSubmit={captureEmail} onSkip={skipEmail}/>
       {/* The welcome chooser is retired: a fresh free visitor gets the "Know
           your console" walkthrough, and everyone else lands with the mode menu
