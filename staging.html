@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=43"></script>
+<script src="content-staging.js?v=44"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4678,9 +4678,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         targets.push({ key: `port-${port}`, x, y, payload: port });
       }
     } else if (drag.type === 'fanout') {
-      // Snake tails land on the four mic/line channels, not the 5/6 line-in
-      // strip (that one is hardwired to the FOH playback, no snake port).
-      for (let ch = 1; ch <= Math.min(4, state.channels.length); ch++) {
+      // Snake tails land on any MONO mic/line channel — the whole desk, not a
+      // fixed four. The one exception is the stereo playback strip (7/8 on an
+      // MX-8): that's a hardwired FOH line-in with no snake port, so skip it.
+      for (let ch = 1; ch <= state.channels.length; ch++) {
+        if (state.channels[ch - 1] && state.channels[ch - 1].stereo) continue;
         const el = channelRefs.current[ch];
         if (!el) continue;
         const { x, y } = local(el);
