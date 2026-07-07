@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=40"></script>
+<script src="content-staging.js?v=41"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -146,7 +146,7 @@ const SOURCES = {
   // Front-of-house stereo playback (a media player at the desk, not on stage).
   // A line input on a dedicated 5/6 channel used to test the system with music.
   // No env: its meter is analyser-only and the bed plays flat.
-  playback: { label: 'Playback 5/6', short: 'PLAYBACK', kind: 'playback', icon: 'media', color: '#6aa9ff', dbu: -8 },
+  playback: { label: 'Playback', short: 'PLAYBACK', kind: 'playback', icon: 'media', color: '#6aa9ff', dbu: -8 },
 
   // ---- The 16-input BAND (big-desk scenarios). Four players, each singing:
   // guitarist=lead (perf 0 · W1), bassist (perf 1 · W2, stage right), keys
@@ -395,6 +395,14 @@ const DEFAULT_CHANNEL = {
 };
 
 function makeChannel(o = {}) { return { ...DEFAULT_CHANNEL, ...o }; }
+
+// The mixer's input count = the console name suffix (MX-8, MX-16). A stereo
+// strip (the playback pair) counts as two inputs, so this matches the physical
+// channel count on the desk regardless of how many faders it takes.
+function consoleInputs(s) {
+  return (s && Array.isArray(s.channels)) ? s.channels.reduce((n, c) => n + (c.stereo ? 2 : 1), 0) : 0;
+}
+window.consoleInputs = consoleInputs;
 
 function defaultState() {
   return {
@@ -2471,7 +2479,7 @@ function Console({ state, setState, audio, faultChannelIdx }) {
               boxShadow: mixerOn ? '0 0 6px var(--accent)' : 'inset 0 0 0 1px rgba(90,32,24,0.6)',
               transition: 'background 0.15s, box-shadow 0.15s',
             }}/>
-            <div className="display" style={{ fontSize: 10, color: mixerOn ? 'var(--ink-2)' : '#5a2018', letterSpacing: 1.5, fontWeight: 700, textTransform: 'uppercase' }}>AU · MX-6</div>
+            <div className="display" style={{ fontSize: 10, color: mixerOn ? 'var(--ink-2)' : '#5a2018', letterSpacing: 1.5, fontWeight: 700, textTransform: 'uppercase' }}>AU · MX-{consoleInputs(state)}</div>
             <span data-walk="mixer-power" style={{ display: 'inline-flex' }}>
             <PowerButton on={mixerOn} width={32} height={13}
               onClick={() => {
@@ -4358,7 +4366,7 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
       <ZoneHeader
         label="Console (FOH)"
         sublabel="the mix desk"
-        badge={sfc === 'digital' ? 'DX-6' : 'MX-6'}
+        badge={(sfc === 'digital' ? 'DX-' : 'MX-') + consoleInputs(state)}
         badgeColor="var(--accent)"
       />
       {/* SURFACE toggle — same scenario, analog strip layout or digital
@@ -5821,7 +5829,7 @@ function normalizeChannels(channels, involves) {
 // engine (which reads state.channels) is unaffected because nothing feeds them.
 // This is also the seam for "fuller band later" — a padding strip becomes live
 // the moment a source is patched to it.
-const CONSOLE_SIZES = [8, 16, 24];
+const CONSOLE_SIZES = [8, 16];
 function padConsole(channels, target) {
   if (!Array.isArray(channels)) return channels;
   const real = channels.filter((c) => !c.unused);
@@ -9922,7 +9930,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         )}
         {sizeSelectable && onSetConsoleSize && (
           <div className="mono ui-no-select" title="Console size: show the desk as 8, 16, or 24 channels. The band keeps the first strips; the rest are spare line inputs." style={{ ...navBtn, padding: 0, display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden' }}>
-            {[8, 16, 24].map((sz, ix) => {
+            {[8, 16].map((sz, ix) => {
               const on = consoleSize === sz;
               return (
                 <button key={sz} onClick={() => onSetConsoleSize(on ? 0 : sz)} className="mono ui-no-select"
