@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=49"></script>
+<script src="content-staging.js?v=50"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1312,25 +1312,37 @@ window.DEFAULT_OUT_PATCH = DEFAULT_OUT_PATCH;
 window.OUT_PORT_LABELS = OUT_PORT_LABELS;
 window.defaultState = defaultState;
 
-// The 16-input BAND board (big-desk scenarios). Starts from a healthy default
-// board, then swaps in the 16 band inputs patched 1:1 through a 16-way snake
-// fan-out (source k -> port i+1 -> channel i+1). Each input's gain is its
+// The full-band MX-16 board (big-desk scenarios). Starts from a healthy default
+// board, then swaps in the 14 band inputs patched 1:1 through the input snake
+// fan-out (source k -> port i+1 -> channel i+1), plus the FOH playback line on
+// the top stereo pair (15/16) — 16 inputs total. Each input's gain is its
 // healthy knob (from dbu); condensers + the active bass DI get phantom so they
 // pass. The snake is bidirectional, so the six outputs ride the return side's
-// own channels 1-6 (independent of the 16 input channels); noPlayback frees
-// channel 5 (the floor tom) from the hardwired FOH line.
-const BAND_KEYS = ['kick','snare','hat','rack','floor','ohl','ohr','bass','egtr','agtr','keysl','keysr','vx1','vx2','vx3','vx4'];
+// own channels 1-6, independent of the input channels.
+// 14 real inputs — the two tom mics (rack + floor) come out to make room for the
+// FOH playback line on the top stereo pair (15/16), so the full band is a true
+// MX-16: 14 mics/DIs + playback stereo = 16 inputs. Drum mics left: kick, snare,
+// hi-hat, overheads L/R. (rack/floor stay in the SOURCES catalog, just unpatched.)
+const BAND_KEYS = ['kick','snare','hat','ohl','ohr','bass','egtr','agtr','keysl','keysr','vx1','vx2','vx3','vx4'];
 function bandState() {
   const s = defaultState();
-  s.noPlayback = true;
-  s.channels = BAND_KEYS.map((k, i) => {
+  // The FOH playback line IS present on this desk, on the top stereo pair, so
+  // the band is a true MX-16 (14 band inputs + playback stereo = 16 inputs).
+  s.noPlayback = false;
+  const monoChannels = BAND_KEYS.map((k, i) => {
     const src = SOURCES[k];
     const needsPhantom = src.kind === 'condenser' || !!src.diActive;
     return makeChannel({ id: i + 1, label: src.short, gain: healthyGain(src.dbu), fader: 0.6, pan: 0.5, phantom: needsPhantom });
   });
+  // FOH playback line: a stereo strip on the desk's top pair (15/16), exactly
+  // like the MX-8's 7/8 — hardwired at FOH, so it's not on the input snake.
+  const pb = SOURCES.playback;
+  const playbackCh = makeChannel({ id: BAND_KEYS.length + 1, label: '', gain: healthyGain(pb.dbu), stereo: true, fader: 0.70, pan: 0.5 });
+  s.channels = [...monoChannels, playbackCh];
   s.cables = {}; BAND_KEYS.forEach((k, i) => { s.cables[k] = i + 1; });
   s.fanOut = BAND_KEYS.map((_, i) => i + 1);
   s.sourceMute = {}; BAND_KEYS.forEach((k) => { s.sourceMute[k] = false; });
+  s.sourceMute.playback = false;
   // Bidirectional snake: the return side is its own bundle numbered from 1, so
   // the six outputs ride return channels 1-6 no matter how many inputs there are.
   s.outFan = { ...DEFAULT_OUT_FAN };
@@ -6167,7 +6179,7 @@ if (BAND_PARAM) {
   SCENARIOS.push({
     id: 'band', isSandbox: true, isBand: true,
     title: 'Full Band',
-    symptom: 'The full 16-input band is patched and up: drums on the upstage sub-snake, everything else downstage, all fanned out to the desk. Nothing is broken and there is no goal here yet — poke around the bigger console. Hide the stage to see it as front of house.',
+    symptom: 'The full band is patched and up on an MX-16: fourteen inputs fanned out to the desk plus the FOH playback line on the top pair (15/16). Nothing is broken and there is no goal here yet — poke around the bigger console. Hide the stage to see it as front of house.',
     conditions: [], involves: [], defaultInspect: 'pa',
     sabotage: () => {
       const s = bandState();
