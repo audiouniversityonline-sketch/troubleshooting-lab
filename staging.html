@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=38"></script>
+<script src="content-staging.js?v=39"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -147,6 +147,29 @@ const SOURCES = {
   // A line input on a dedicated 5/6 channel used to test the system with music.
   // No env: its meter is analyser-only and the bed plays flat.
   playback: { label: 'Playback 5/6', short: 'PLAYBACK', kind: 'playback', icon: 'media', color: '#6aa9ff', dbu: -8 },
+
+  // ---- The 16-input BAND (big-desk scenarios). Four players, each singing:
+  // guitarist=lead (perf 0 · W1), bassist (perf 1 · W2, stage right), keys
+  // (perf 2 · W3, stage left), drummer (perf 3 · W4). snake: up = drums + drum
+  // vocal (upstage sub-snake), down = everything else (downstage sub-snake).
+  // No env/voice yet — they meter at a steady baseline until voices are wired
+  // (kept OUT of METER_SOURCES so the audio-voice loop doesn't touch them). ----
+  kick:  { label: 'Kick',         short: 'KICK',  kind: 'dynamic',   icon: 'mic', color: '#c084fc', dbu: -28, group: 'drums', snake: 'up',   perf: 3 },
+  snare: { label: 'Snare',        short: 'SNARE', kind: 'dynamic',   icon: 'mic', color: '#c084fc', dbu: -26, group: 'drums', snake: 'up',   perf: 3 },
+  hat:   { label: 'Hi-hat',       short: 'HI-HAT',kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -38, group: 'drums', snake: 'up',   perf: 3 },
+  rack:  { label: 'Rack tom',     short: 'RACK',  kind: 'dynamic',   icon: 'mic', color: '#c084fc', dbu: -30, group: 'drums', snake: 'up',   perf: 3 },
+  floor: { label: 'Floor tom',    short: 'FLOOR', kind: 'dynamic',   icon: 'mic', color: '#c084fc', dbu: -28, group: 'drums', snake: 'up',   perf: 3 },
+  ohl:   { label: 'Overhead L',   short: 'OH L',  kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -42, group: 'drums', snake: 'up',   perf: 3 },
+  ohr:   { label: 'Overhead R',   short: 'OH R',  kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -42, group: 'drums', snake: 'up',   perf: 3 },
+  bass:  { label: 'Bass',         short: 'BASS',  kind: 'di', diActive: true, icon: 'di', color: '#ffc93a', dbu: -42, group: 'bass', snake: 'down', perf: 1 },
+  egtr:  { label: 'Electric gtr', short: 'E GTR', kind: 'dynamic',   icon: 'mic', color: '#ff8e4a', dbu: -30, group: 'gtr',   snake: 'down', perf: 0 },
+  agtr:  { label: 'Acoustic gtr', short: 'A GTR', kind: 'di',        icon: 'di',  color: '#ff8e4a', dbu: -35, group: 'gtr',   snake: 'down', perf: 0 },
+  keysl: { label: 'Keys L',       short: 'KEYS L',kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -12, group: 'keys',  snake: 'down', perf: 2 },
+  keysr: { label: 'Keys R',       short: 'KEYS R',kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -12, group: 'keys',  snake: 'down', perf: 2 },
+  vx1:   { label: 'Vocal 1',      short: 'VOX 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 0 },
+  vx2:   { label: 'Vocal 2',      short: 'VOX 2', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 1 },
+  vx3:   { label: 'Vocal 3',      short: 'VOX 3', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 2 },
+  vx4:   { label: 'Vocal 4',      short: 'VOX 4', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'up',   perf: 3 },
 };
 
 // Per-source amplitude envelope. Real instruments and voices have dynamics:
@@ -491,6 +514,9 @@ function effectiveChannel(s, srcKey) {
   // Playback is a FOH line input hardwired to the 5/6 channel — it plugs into
   // the desk, not the stage snake, so it skips the cable/fan-out path.
   if (srcKey === 'playback') {
+    // A board with no FOH playback line (the 16-input band) frees channel 5 for
+    // a real input instead of the hardwired media player.
+    if (s.noPlayback) return 0;
     return s.channels && s.channels.length >= 5 ? 5 : 0;
   }
   const port = s.cables[srcKey];
@@ -550,6 +576,11 @@ const srcDbuFor = (srcKey) => (SRC_DBU_BY_SOURCE[srcKey] != null ? SRC_DBU_BY_SO
 const HEALTHY_GAIN_BY_CH = [0.48, 0.42, 0.77, 0.23, 0.20];
 window.srcDbuFor = srcDbuFor;
 window.HEALTHY_GAIN_BY_CH = HEALTHY_GAIN_BY_CH;
+// The gain knob that lands a source at nominal (+4 dBu) from its connector level:
+// gain = (4 - dbu) / 60. Reproduces HEALTHY_GAIN_BY_CH for the original band and
+// derives the healthy knob for any new input (e.g. the 16-input band) from its dbu.
+const healthyGain = (dbu) => Math.max(0.05, Math.min(1, (4 - (dbu != null ? dbu : SRC_DBU_DEFAULT)) / 60));
+window.healthyGain = healthyGain;
 // Preamp: the knob IS the dB. 0..60 dB of gain, linear-in-dB like a real
 // trim pot, and matching the diagnostic's existing "gain x 60 dB" label.
 const preampDb = (g) => g * 60;
@@ -1259,6 +1290,33 @@ window.DEFAULT_OUT_FAN = DEFAULT_OUT_FAN;
 window.DEFAULT_OUT_PATCH = DEFAULT_OUT_PATCH;
 window.OUT_PORT_LABELS = OUT_PORT_LABELS;
 window.defaultState = defaultState;
+
+// The 16-input BAND board (big-desk scenarios). Starts from a healthy default
+// board, then swaps in the 16 band inputs patched 1:1 through a 16-way snake
+// fan-out (source k -> port i+1 -> channel i+1). Each input's gain is its
+// healthy knob (from dbu); condensers + the active bass DI get phantom so they
+// pass. Outputs move to ports 17-22 so they don't collide with the 16 inputs,
+// and noPlayback frees channel 5 (the floor tom) from the hardwired FOH line.
+const BAND_KEYS = ['kick','snare','hat','rack','floor','ohl','ohr','bass','egtr','agtr','keysl','keysr','vx1','vx2','vx3','vx4'];
+function bandState() {
+  const s = defaultState();
+  s.noPlayback = true;
+  s.channels = BAND_KEYS.map((k, i) => {
+    const src = SOURCES[k];
+    const needsPhantom = src.kind === 'condenser' || !!src.diActive;
+    return makeChannel({ id: i + 1, label: src.short, gain: healthyGain(src.dbu), fader: 0.6, pan: 0.5, phantom: needsPhantom });
+  });
+  s.cables = {}; BAND_KEYS.forEach((k, i) => { s.cables[k] = i + 1; });
+  s.fanOut = BAND_KEYS.map((_, i) => i + 1);
+  s.sourceMute = {}; BAND_KEYS.forEach((k) => { s.sourceMute[k] = false; });
+  // Output snake ports live above the 16 inputs.
+  s.outFan = { 17: 'mainL', 18: 'mainR', 19: 'aux1', 20: 'aux2', 21: 'aux3', 22: 'aux4' };
+  s.outPatch = { pa_l: 17, pa_r: 18, wedge: 19, wedge2: 20, wedge3: 21, wedge4: 22 };
+  s.testing = 'kick';
+  s.inspect = 'pa';
+  return s;
+}
+window.bandState = bandState;
 window.computeAudio = computeAudio;
 window.traceTo = traceTo;
 window.checkWin = checkWin;
@@ -5522,6 +5580,10 @@ const STRIP_UNIT = 108;
 // console's width (no beside-brief column), growing per added strip. Native at
 // 755; this base leaves a little margin so the console never clips.
 const DESIGN_W_CONSOLE_ONLY = 800;
+// The strip count the base design widths are calibrated for (the original band).
+// Canvas width grows per strip ABOVE this, whether the extra strips are unused
+// big-desk padding or a real multi-input band — both widen the desk the same.
+const NATIVE_CH = 5;
 
 // Member progress persistence. Completed levels are saved to the browser keyed
 // by stable level id, so a monthly content drop never wipes what a student
@@ -6052,6 +6114,26 @@ if (SCENARIO_PARAM) {
     sabotage: (s) => applyCapturedState(s, sp.s),
   });
 }
+// The 16-input full band (?band=1). A sandbox-style board (no fault, no win, no
+// lock) that swaps the console over to the 16-input band via bandState(). Kept
+// off the normal menu for now — appended only when the ?band link is used —
+// while the stage/snake views are still being built. Lock is bypassed at load.
+const BAND_PARAM = (() => { try { return new URLSearchParams(window.location.search).get('band') === '1'; } catch (e) { return false; } })();
+const BAND_INDEX = BAND_PARAM ? SCENARIOS.length : -1;
+if (BAND_PARAM) {
+  SCENARIOS.push({
+    id: 'band', isSandbox: true, isBand: true,
+    title: 'Full Band',
+    symptom: 'The full 16-input band is patched and up: drums on the upstage sub-snake, everything else downstage, all fanned out to the desk. Nothing is broken and there is no goal here yet — poke around the bigger console. Hide the stage to see it as front of house.',
+    conditions: [], involves: [], defaultInspect: 'pa',
+    sabotage: () => {
+      const s = bandState();
+      ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => { if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.7; } });
+      return s;
+    },
+  });
+}
+
 // Lessons ("Run the show") are members-only now, alongside the challenge modes.
 const isLocked = (sc) => !!(sc && (sc.isChallenge || sc.isLesson) && TIER !== 'member');
 
@@ -8605,6 +8687,11 @@ function App() {
       loadLevel(CUSTOM_INDEX, undefined, true);
       return;
     }
+    // The full 16-input band (?band=1), bypassing the lock like a shared link.
+    if (BAND_PARAM && BAND_INDEX >= 0) {
+      loadLevel(BAND_INDEX, undefined, true);
+      return;
+    }
     // A shared-rep link wins over resume: load that exact Practice rep,
     // bypassing the member lock, at the link's fault count.
     if (REP_PARAM) {
@@ -8977,25 +9064,29 @@ function App() {
   // cables), so they always show it; the toggle is only offered elsewhere. The
   // pref itself sticks, so leaving a lesson restores the hidden view.
   const stageHideable = !isMobile && !level.isWalkthrough && !level.isLesson;
-  const effStageHidden = stageHidden && stageHideable;
+  // The 16-input band has no stage graphic yet (step 2 rebuilds the stage +
+  // sub-snakes for it), so it stays on the front-of-house view: stage forced
+  // hidden, and the SHOW STAGE toggle is withheld until that stage exists.
+  const effStageHidden = stageHideable && (stageHidden || !!level.isBand);
   // Big-desk view is offered in the same places the stage toggle is: not in
   // guided lessons or the walkthrough (authored against the 5-strip band) and
   // not on mobile. Elsewhere the console can present as an 8/16/24-channel desk.
   const sizeSelectable = stageHideable;
   const effConsoleSize = sizeSelectable ? consoleSize : 0;
-  const nRealCh = state && Array.isArray(state.channels) ? state.channels.filter((c) => !c.unused).length : 5;
-  const nCh = state && Array.isArray(state.channels) ? state.channels.length : nRealCh;
-  const stripsExtra = Math.max(0, nCh - nRealCh);
-  // Brief placement when the stage is hidden. A big desk is WIDTH-limited with
-  // spare vertical room, so the brief drops BELOW the console to reclaim the
-  // horizontal space the beside-column ate. Native is HEIGHT-limited (the
-  // console is tall), so the brief stays BESIDE it — below would make the taller
-  // canvas scale the console down (the v35 fix). So: below only for a big desk.
-  const briefBelow = effStageHidden && effConsoleSize > 0;
-  // Added (unused) strips widen the canvas by their footprint so scale-to-fit
+  const nCh = state && Array.isArray(state.channels) ? state.channels.length : NATIVE_CH;
+  // The console footprint grows with the TOTAL strip count above the native 5 —
+  // whether the extra strips are unused big-desk padding or a real band's inputs.
+  const stripsOver = Math.max(0, nCh - NATIVE_CH);
+  // Brief placement when the stage is hidden. A wide console (padded big desk OR
+  // a real multi-input band) is WIDTH-limited with spare vertical room, so the
+  // brief drops BELOW it to reclaim the horizontal space the beside-column ate.
+  // Native is HEIGHT-limited (the console is tall), so the brief stays BESIDE it
+  // — below would make the taller canvas scale the console down (the v35 fix).
+  const briefBelow = effStageHidden && nCh > NATIVE_CH;
+  // Strips above native widen the canvas by their footprint so scale-to-fit
   // shrinks the whole board to fit; a native board keeps DESIGN_W exactly.
   const baseW = briefBelow ? DESIGN_W_CONSOLE_ONLY : (effStageHidden ? DESIGN_W_STAGE_HIDDEN : DESIGN_W);
-  const designW = baseW + stripsExtra * STRIP_UNIT;
+  const designW = baseW + stripsOver * STRIP_UNIT;
   const fitScale = useFitScale(fitViewportRef, designW, designH, !isMobile);
 
   // Keep the rendered channel count in step with the selected desk size. Padding
@@ -9187,7 +9278,7 @@ function App() {
         completed={completed}
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
-        stageHidden={stageHidden} onToggleStage={stageHideable ? () => setStageHidden(v => !v) : null}
+        stageHidden={effStageHidden} onToggleStage={(stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null}
         consoleSize={consoleSize} onSetConsoleSize={setConsoleSize} sizeSelectable={sizeSelectable}
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
