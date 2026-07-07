@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=42"></script>
+<script src="content-staging.js?v=43"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4687,7 +4687,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         targets.push({ key: `ch-${ch}`, x, y, payload: ch });
       }
     } else if (drag.type === 'outpatch') {
-      for (const portId of [5, 6, 7, 8]) {
+      for (const portId of [5, 6, 7, 8, 9, 10]) {
         const el = outRefs.current[portId];
         if (!el) continue;
         const { x, y } = local(el);
@@ -4695,7 +4695,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       }
     } else if (drag.type === 'outfan') {
       // Return tails at FOH drop onto the console's output chips.
-      const chipRefs = { mainL: masterLRef, mainR: masterRRef, aux1: aux1Ref, aux2: aux2Ref };
+      const chipRefs = { mainL: masterLRef, mainR: masterRRef, aux1: aux1Ref, aux2: aux2Ref, aux3: aux3Ref, aux4: aux4Ref };
       for (const outKey of Object.keys(chipRefs)) {
         const el = chipRefs[outKey].current;
         if (!el) continue;
@@ -4799,7 +4799,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         const of2 = { ...(s.outFan || window.DEFAULT_OUT_FAN) };
         if (of2[ch] === target) return s;
         const old = of2[ch] || null;
-        const bumpedCh = [5, 6, 7, 8].find(c2 => c2 !== ch && of2[c2] === target);
+        const bumpedCh = [5, 6, 7, 8, 9, 10].find(c2 => c2 !== ch && of2[c2] === target);
         of2[ch] = target;
         if (bumpedCh) of2[bumpedCh] = old;
         const next = { ...s, outFan: of2 };
@@ -6993,8 +6993,12 @@ function WalkthroughSpotlight({ target }) {
 // the source/instrument, the mic or DI type, phantom, the snake channel, and
 // the console channel — that's exactly what the patch lesson asks the
 // student to wire, and what a crosspatch rep gets compared against.
-function IoListPanel({ open, onClose }) {
+function IoListPanel({ open, onClose, state }) {
   if (!open) return null;
+  // Built from the LIVE board so the list is accurate in every mode (MX-8, the
+  // full band, etc.) — one input row per fader, and every console output bus.
+  const s = (state && Array.isArray(state.channels)) ? state : (window.defaultState ? window.defaultState() : null);
+  if (!s) return null;
   const sc = window.SNAKE_COLORS || [];
   const dot = (ch) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -7016,6 +7020,34 @@ function IoListPanel({ open, onClose }) {
       {label}
     </span>
   );
+  const typeLabel = (src) => {
+    if (!src) return 'Empty · nothing patched';
+    if (src.kind === 'dynamic') return 'Dynamic mic';
+    if (src.kind === 'condenser') return 'Condenser mic · needs +48V';
+    if (src.kind === 'di') return src.diActive ? 'Active DI · needs +48V' : 'Passive DI';
+    if (src.kind === 'playback') return 'Stereo line · plugs straight in';
+    return src.kind || '—';
+  };
+  // One row per fader. A stereo strip shows its pair (7/8); the FOH playback line
+  // and empty inputs have no snake cable (faint dot).
+  const inputRows = s.channels.map((ch, i) => {
+    const srcKey = window.sourceFor ? window.sourceFor(s, i) : null;
+    const src = srcKey ? window.SOURCES[srcKey] : null;
+    const chNum = ch.stereo ? `${i + 1}/${i + 2}` : `${i + 1}`;
+    const snakeIdx = (src && srcKey !== 'playback') ? (i + 1) : null;
+    return { key: i, chNum, source: src ? src.label : 'Empty', type: typeLabel(src), snakeIdx, empty: !src };
+  });
+  // Every console output bus and where it goes — all four wedges.
+  const outFan = s.outFan || window.DEFAULT_OUT_FAN || {};
+  const portFor = (busKey) => { const p = Object.keys(outFan).find((pp) => outFan[pp] === busKey); return p ? +p : null; };
+  const outputDefs = [
+    { bus: 'mainL', label: 'Main L', to: 'The left PA speaker (the room)' },
+    { bus: 'mainR', label: 'Main R', to: 'The right PA speaker (the room)' },
+    { bus: 'aux1', label: 'Aux 1', to: "Wedge 1 (the singer's monitor)" },
+    { bus: 'aux2', label: 'Aux 2', to: 'Wedge 2' },
+    { bus: 'aux3', label: 'Aux 3', to: 'Wedge 3' },
+    { bus: 'aux4', label: 'Aux 4', to: 'Wedge 4' },
+  ];
   return (
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.55)',
@@ -7043,11 +7075,13 @@ function IoListPanel({ open, onClose }) {
             <th style={th}>Channel</th><th style={th}>Source</th><th style={th}>Type</th>
           </tr></thead>
           <tbody>
-            <tr><td style={td}>{chCell(1, 'CH 1')}</td><td style={td}>Vocal Mic 1</td><td style={td}>Dynamic mic</td></tr>
-            <tr><td style={td}>{chCell(2, 'CH 2')}</td><td style={td}>Vocal Mic 2</td><td style={td}>Condenser mic · needs +48V</td></tr>
-            <tr><td style={td}>{chCell(3, 'CH 3')}</td><td style={td}>Bass</td><td style={td}>Active DI · needs +48V</td></tr>
-            <tr><td style={td}>{chCell(4, 'CH 4')}</td><td style={td}>Keyboard</td><td style={td}>Passive DI</td></tr>
-            <tr><td style={td}>{chCell(null, 'CH 5/6')}</td><td style={td}>Playback (phone or laptop)</td><td style={td}>Stereo line · plugs straight in</td></tr>
+            {inputRows.map((r) => (
+              <tr key={r.key}>
+                <td style={td}>{chCell(r.snakeIdx, 'CH ' + r.chNum)}</td>
+                <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink)' }}>{r.source}</td>
+                <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink-2)' }}>{r.type}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
         {sectionTitle('OUTPUTS · TO THE SPEAKERS')}
@@ -7056,10 +7090,12 @@ function IoListPanel({ open, onClose }) {
             <th style={th}>Signal</th><th style={th}>Goes to</th>
           </tr></thead>
           <tbody>
-            <tr><td style={td}>{chCell(5, 'Main L')}</td><td style={td}>The left PA speaker (the room)</td></tr>
-            <tr><td style={td}>{chCell(6, 'Main R')}</td><td style={td}>The right PA speaker (the room)</td></tr>
-            <tr><td style={td}>{chCell(7, 'Aux 1')}</td><td style={td}>Wedge 1 (the singer's monitor)</td></tr>
-            <tr><td style={td}>{chCell(8, 'Aux 2')}</td><td style={td}>Wedge 2 (a second monitor)</td></tr>
+            {outputDefs.map((o) => (
+              <tr key={o.bus}>
+                <td style={td}>{chCell(portFor(o.bus), o.label)}</td>
+                <td style={td}>{o.to}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -9313,7 +9349,7 @@ function App() {
         startOpen={!shouldWalk && !SCENARIO_PARAM && !REP_PARAM && !BAND_PARAM && !tourOpen}
       />
 
-      <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)}/>
+      <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)} state={state}/>
       <FaultCatalog open={catalogOpen} onClose={() => setCatalogOpen(false)} tier={TIER}/>
       {AUTHOR_MODE && (
         <AuthorPanel text={authorText} setText={setAuthorText} goal={authorGoal}
