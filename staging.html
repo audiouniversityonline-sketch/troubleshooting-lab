@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=35"></script>
+<script src="content-staging.js?v=36"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -2157,8 +2157,10 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       boxShadow: isFaultStrip ? '0 0 0 1.5px rgba(255,70,48,0.5), 0 0 20px rgba(255,70,48,0.25)' : 'none',
       // Console powered down: the whole strip reads as dead — dimmed and
       // desaturated, the same visual language the speakers/amp use when off.
-      opacity: powered ? 1 : 0.5,
-      filter: powered ? 'none' : 'grayscale(0.75)',
+      // An UNUSED input (big-desk padding) reads as a spare strip: dimmed but
+      // not dead, since nothing is patched to it yet.
+      opacity: powered ? (ch.unused ? 0.42 : 1) : 0.5,
+      filter: powered ? (ch.unused ? 'grayscale(0.5)' : 'none') : 'grayscale(0.75)',
       transition: 'box-shadow 0.2s, opacity 0.15s, filter 0.15s',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 2px' }}>
@@ -5480,6 +5482,11 @@ const DESIGN_W = 1680;
 // narrows to the console plus a brief column, so fit-to-screen scales it up on
 // the narrow embed and frees horizontal room for more channels later.
 const DESIGN_W_STAGE_HIDDEN = 1300;
+// Big-desk view (Phase 3): each added channel strip widens the design canvas by
+// its own footprint (strip width 100 + gap 8) so the scale-to-fit shrinks the
+// whole board to fit instead of letting a wide console overflow. Native boards
+// (no padding) keep DESIGN_W exactly, so nothing changes for existing content.
+const STRIP_UNIT = 108;
 
 // Member progress persistence. Completed levels are saved to the browser keyed
 // by stable level id, so a monthly content drop never wipes what a student
@@ -5524,6 +5531,7 @@ function defaultProfile() {
     streakDay: '',      // YYYY-MM-DD (local) of the last day counted toward the streak
     streakBest: 0,      // longest daily streak reached, ever
     stageHidden: false, // view pref: hide the stage so the console gets the screen
+    consoleSize: 0,     // big-desk view: 0 = native band, else 8/16/24 (unused line inputs pad the desk)
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -5553,6 +5561,7 @@ function normalizeProfile(data) {
   p.streakDay = (typeof data.streakDay === 'string') ? data.streakDay : '';
   p.streakBest = (Number.isFinite(data.streakBest) && data.streakBest >= 0) ? Math.floor(data.streakBest) : 0;
   p.stageHidden = !!data.stageHidden;
+  p.consoleSize = (CONSOLE_SIZES.indexOf(data.consoleSize) !== -1) ? data.consoleSize : 0;
   p.firstName = (typeof data.firstName === 'string') ? data.firstName : '';
   p.v = PROFILE_VERSION;
   return p;
@@ -5706,6 +5715,30 @@ function normalizeChannels(channels, involves) {
     return { ...ch, mute: true, fader: 0, gain: 0, pan: 0.5, phantom: false, aux1: 0, aux2: 0, aux3: 0, aux4: 0, solo: false, highpass: false };
   });
 }
+
+// Big-desk view (Phase 3): present the console as a larger 8/16/24-channel desk
+// by padding the board with UNUSED line inputs. The band keeps its real
+// channels; the extra strips are inert (muted, fader + gain down, nothing
+// patched in), exactly like the spare inputs on a real console at a small gig.
+// They carry unused:true so a resize regenerates only the padding, and the audio
+// engine (which reads state.channels) is unaffected because nothing feeds them.
+// This is also the seam for "fuller band later" — a padding strip becomes live
+// the moment a source is patched to it.
+const CONSOLE_SIZES = [8, 16, 24];
+function padConsole(channels, target) {
+  if (!Array.isArray(channels)) return channels;
+  const real = channels.filter((c) => !c.unused);
+  if (!target || target <= real.length) return real; // native or smaller: never hide a real channel
+  const out = real.slice();
+  // Each padding strip is labelled by its position so the CH number and the
+  // scribble-strip label agree (strip 6 reads "6"), the way an unused input on a
+  // real desk does. ids continue past the band (real ids are 1..5) with no clash.
+  for (let i = real.length; i < target; i++) {
+    out.push(makeChannel({ id: i + 1, label: String(i + 1), gain: 0, fader: 0, mute: true, unused: true }));
+  }
+  return out;
+}
+window.padConsole = padConsole;
 
 function rampParam(param, ctx, target) {
   if (!Number.isFinite(target)) target = 0;
@@ -7245,6 +7278,9 @@ function App() {
   // canvas (bigger on the narrow embed; horizontal room for more channels later).
   // Persisted like surface, via the profile-save effect below.
   const [stageHidden, setStageHidden] = uS(() => !!profileRef.current.stageHidden);
+  const [consoleSize, setConsoleSize] = uS(() => (CONSOLE_SIZES.indexOf(profileRef.current.consoleSize) !== -1 ? profileRef.current.consoleSize : 0));
+  const consoleSizeRef = uR(consoleSize);
+  uE(() => { consoleSizeRef.current = consoleSize; }, [consoleSize]);
 
   // Free-tier email gate. emailDone is true once the viewer has either given an
   // email or chosen "skip for now" — both are remembered so the gate never
@@ -7297,9 +7333,9 @@ function App() {
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
   // feedbackByEar drive "resume where I left off" on the next load.
   uE(() => {
-    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow, stageHidden };
+    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow, stageHidden, consoleSize };
     saveProfile(profileRef.current);
-  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow, stageHidden]);
+  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow, stageHidden, consoleSize]);
 
   // Keep the fault-draw's surface global in sync. Digital-only faults (mute
   // groups, DCA) carry digital:true and are skipped by the draw unless this is
@@ -8648,6 +8684,10 @@ function App() {
     const prev = prevStateRef.current;
     prevStateRef.current = state;
     if (!prev || prev === state || solved) return;
+    // A change in channel COUNT is a structural resize (big-desk padding adding
+    // or dropping unused strips), not a user gesture. The per-channel diffs below
+    // assume prev and state line up index-for-index, so skip the resize frame.
+    if (!prev.channels || !state.channels || prev.channels.length !== state.channels.length) return;
     // Live Show: charge the room for destructive diagnosis. Silencing a channel
     // the audience was hearing (mute, or fader to the floor) or pulling the
     // master is a dropout they heard. Touching a FAULTED channel doesn't count
@@ -8903,8 +8943,30 @@ function App() {
   // pref itself sticks, so leaving a lesson restores the hidden view.
   const stageHideable = !isMobile && !level.isWalkthrough && !level.isLesson;
   const effStageHidden = stageHidden && stageHideable;
-  const designW = effStageHidden ? DESIGN_W_STAGE_HIDDEN : DESIGN_W;
+  // Big-desk view is offered in the same places the stage toggle is: not in
+  // guided lessons or the walkthrough (authored against the 5-strip band) and
+  // not on mobile. Elsewhere the console can present as an 8/16/24-channel desk.
+  const sizeSelectable = stageHideable;
+  const effConsoleSize = sizeSelectable ? consoleSize : 0;
+  const nRealCh = state && Array.isArray(state.channels) ? state.channels.filter((c) => !c.unused).length : 5;
+  const nCh = state && Array.isArray(state.channels) ? state.channels.length : nRealCh;
+  const baseW = effStageHidden ? DESIGN_W_STAGE_HIDDEN : DESIGN_W;
+  // Added (unused) strips widen the canvas by their footprint so scale-to-fit
+  // shrinks the whole board to fit; a native board keeps DESIGN_W exactly.
+  const designW = baseW + Math.max(0, nCh - nRealCh) * STRIP_UNIT;
   const fitScale = useFitScale(fitViewportRef, designW, designH, !isMobile);
+
+  // Keep the rendered channel count in step with the selected desk size. Padding
+  // only ever adds or removes UNUSED strips (real channels are untouched), so
+  // this is idempotent and safe to run on every size/level change. Layout effect
+  // so the resize lands before paint, with no flash of the native board.
+  React.useLayoutEffect(() => {
+    setState((s) => {
+      if (!s || !Array.isArray(s.channels)) return s;
+      const next = padConsole(s.channels, effConsoleSize);
+      return next.length === s.channels.length ? s : { ...s, channels: next };
+    });
+  }, [effConsoleSize, levelIdx]);
 
   // Track the canvas's natural height. offsetHeight is layout (transform-
   // independent), so this stays correct under the scale transform. Re-measures
@@ -9084,6 +9146,7 @@ function App() {
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
         stageHidden={stageHidden} onToggleStage={stageHideable ? () => setStageHidden(v => !v) : null}
+        consoleSize={consoleSize} onSetConsoleSize={setConsoleSize} sizeSelectable={sizeSelectable}
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
@@ -9579,7 +9642,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, consoleSize, onSetConsoleSize, sizeSelectable }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -9723,6 +9786,20 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         )}
         {onToggleStage && (
           <button onClick={onToggleStage} className="mono ui-no-select" title={stageHidden ? 'Show the stage: sources, cables, and speakers' : 'Hide the stage to give the console the whole screen'} style={{ ...navBtn, padding: '6px 12px' }}>{stageHidden ? 'SHOW STAGE' : 'HIDE STAGE'}</button>
+        )}
+        {sizeSelectable && onSetConsoleSize && (
+          <div className="mono ui-no-select" title="Console size: show the desk as 8, 16, or 24 channels. The band keeps the first strips; the rest are spare line inputs." style={{ ...navBtn, padding: 0, display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden' }}>
+            {[8, 16, 24].map((sz, ix) => {
+              const on = consoleSize === sz;
+              return (
+                <button key={sz} onClick={() => onSetConsoleSize(on ? 0 : sz)} className="mono ui-no-select"
+                  title={on ? 'Back to the band (native size)' : ('Show the console as a ' + sz + '-channel desk')}
+                  style={{ border: 'none', borderLeft: ix ? '1px solid #38383e' : 'none', background: on ? 'var(--cool)' : 'transparent', color: on ? '#08080a' : 'var(--ink-2)', padding: '6px 8px', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: 'pointer' }}>
+                  {sz}
+                </button>
+              );
+            })}
+          </div>
         )}
         {onOpenProgress && (
           <button onClick={onOpenProgress} className="mono ui-no-select" title="Your training record and daily streak" style={{ ...navBtn, padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
