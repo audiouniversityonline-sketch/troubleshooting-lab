@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=60"></script>
+<script src="content.js?v=61"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -164,6 +164,9 @@ const SOURCES = {
   bass:  { label: 'Bass',         short: 'BASS',  kind: 'di', diActive: true, icon: 'di', color: '#ffc93a', dbu: -42, group: 'bass', snake: 'down', perf: 1 },
   egtr:  { label: 'Electric gtr', short: 'E GTR', kind: 'dynamic',   icon: 'mic', color: '#ff8e4a', dbu: -30, group: 'gtr',   snake: 'down', perf: 0 },
   agtr:  { label: 'Acoustic gtr', short: 'A GTR', kind: 'di',        icon: 'di',  color: '#ff8e4a', dbu: -35, group: 'gtr',   snake: 'down', perf: 0 },
+  // Keys is a single mono DI on the current band (one recorded stem). keysl/keysr
+  // stay for a possible future stereo-keys rig but aren't patched today.
+  keys:  { label: 'Keys',         short: 'KEYS',  kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -12, group: 'keys',  snake: 'down', perf: 2 },
   keysl: { label: 'Keys L',       short: 'KEYS L',kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -12, group: 'keys',  snake: 'down', perf: 2 },
   keysr: { label: 'Keys R',       short: 'KEYS R',kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -12, group: 'keys',  snake: 'down', perf: 2 },
   vx1:   { label: 'Vocal 1',      short: 'VOX 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 0 },
@@ -1312,25 +1315,42 @@ window.DEFAULT_OUT_PATCH = DEFAULT_OUT_PATCH;
 window.OUT_PORT_LABELS = OUT_PORT_LABELS;
 window.defaultState = defaultState;
 
-// The 16-input BAND board (big-desk scenarios). Starts from a healthy default
-// board, then swaps in the 16 band inputs patched 1:1 through a 16-way snake
-// fan-out (source k -> port i+1 -> channel i+1). Each input's gain is its
+// The full-band MX-16 board (big-desk scenarios). Starts from a healthy default
+// board, then swaps in the 14 band inputs patched 1:1 through the input snake
+// fan-out (source k -> port i+1 -> channel i+1), plus the FOH playback line on
+// the top stereo pair (15/16) — 16 inputs total. Each input's gain is its
 // healthy knob (from dbu); condensers + the active bass DI get phantom so they
 // pass. The snake is bidirectional, so the six outputs ride the return side's
-// own channels 1-6 (independent of the 16 input channels); noPlayback frees
-// channel 5 (the floor tom) from the hardwired FOH line.
-const BAND_KEYS = ['kick','snare','hat','rack','floor','ohl','ohr','bass','egtr','agtr','keysl','keysr','vx1','vx2','vx3','vx4'];
+// own channels 1-6, independent of the input channels.
+// 14 real inputs (matching the 14 recorded stems in audio/) — kit is kick, snare,
+// rack tom, floor tom, overheads L/R (no hi-hat mic), then bass, electric +
+// acoustic guitar, a single mono keys, and the four vocals. Plus the FOH playback
+// line on the top stereo pair (15/16), so the full band is a true MX-16: 14
+// mics/DIs + playback stereo = 16 inputs. (hi-hat + the stereo keys L/R stay in
+// the SOURCES catalog, just unpatched.)
+const BAND_KEYS = ['kick','snare','rack','floor','ohl','ohr','bass','egtr','agtr','keys','vx1','vx2','vx3','vx4'];
+// Every band input meters + plays its recorded stem, so it needs the analyser
+// tap the meter loop reads. (playback + the four MX-8 sources are already listed.)
+BAND_KEYS.forEach((k) => { if (!METER_SOURCES.includes(k)) METER_SOURCES.push(k); });
 function bandState() {
   const s = defaultState();
-  s.noPlayback = true;
-  s.channels = BAND_KEYS.map((k, i) => {
+  // The FOH playback line IS present on this desk, on the top stereo pair, so
+  // the band is a true MX-16 (14 band inputs + playback stereo = 16 inputs).
+  s.noPlayback = false;
+  const monoChannels = BAND_KEYS.map((k, i) => {
     const src = SOURCES[k];
     const needsPhantom = src.kind === 'condenser' || !!src.diActive;
     return makeChannel({ id: i + 1, label: src.short, gain: healthyGain(src.dbu), fader: 0.6, pan: 0.5, phantom: needsPhantom });
   });
+  // FOH playback line: a stereo strip on the desk's top pair (15/16), exactly
+  // like the MX-8's 7/8 — hardwired at FOH, so it's not on the input snake.
+  const pb = SOURCES.playback;
+  const playbackCh = makeChannel({ id: BAND_KEYS.length + 1, label: '', gain: healthyGain(pb.dbu), stereo: true, fader: 0.70, pan: 0.5 });
+  s.channels = [...monoChannels, playbackCh];
   s.cables = {}; BAND_KEYS.forEach((k, i) => { s.cables[k] = i + 1; });
   s.fanOut = BAND_KEYS.map((_, i) => i + 1);
   s.sourceMute = {}; BAND_KEYS.forEach((k) => { s.sourceMute[k] = false; });
+  s.sourceMute.playback = false;
   // Bidirectional snake: the return side is its own bundle numbered from 1, so
   // the six outputs ride return channels 1-6 no matter how many inputs there are.
   s.outFan = { ...DEFAULT_OUT_FAN };
@@ -6167,7 +6187,7 @@ if (BAND_PARAM) {
   SCENARIOS.push({
     id: 'band', isSandbox: true, isBand: true,
     title: 'Full Band',
-    symptom: 'The full 16-input band is patched and up: drums on the upstage sub-snake, everything else downstage, all fanned out to the desk. Nothing is broken and there is no goal here yet — poke around the bigger console. Hide the stage to see it as front of house.',
+    symptom: 'The full band is patched and up on an MX-16: fourteen inputs fanned out to the desk plus the FOH playback line on the top pair (15/16). Nothing is broken and there is no goal here yet — poke around the bigger console. Hide the stage to see it as front of house.',
     conditions: [], involves: [], defaultInspect: 'pa',
     sabotage: () => {
       const s = bandState();
@@ -8229,6 +8249,11 @@ function App() {
       // extra chord oscillators sum hotter than a normal two-osc source.
       playback: { f: 130.81, det: 0.7, lp: 2800, lfo: 0, type: 'triangle', chord: [164.81, 196.0, 261.63, 329.63], mixGain: 0.07 },
     };
+    // Band inputs (kick, snare, …) play recorded stems, not synth voices, so any
+    // board source without a synth profile gets this SILENT fallback: the chain
+    // (gain staging, drive, EQ, meter tap) is what the clip feeds into, and the
+    // muted oscillators never tone out before the stems decode.
+    const CLIP_ONLY_PROFILE = { f: 100, det: 0, lp: 6000, lfo: 0, type: 'sine', mixGain: 0 };
     // Build the saturation curve once — used by every source's shaper. tanh
     // is odd-symmetric (no DC offset) and gives a musical-sounding soft
     // clip: roughly linear at low input, compressing through the knee, and
@@ -8241,8 +8266,12 @@ function App() {
       shaperCurve[i] = Math.tanh(x * 1.5);
     }
 
-    for (const k of Object.keys(profiles)) {
-      const p = profiles[k];
+    // Build a chain only for the sources on THIS board (its snake inputs = the
+    // keys of state.cables) plus the playback line — so the MX-8 builds 5 chains,
+    // the 16-band builds its 15, and neither carries the other's idle voices.
+    const chainKeys = [...new Set([...(state && state.cables ? Object.keys(state.cables) : []), 'playback'])];
+    for (const k of chainKeys) {
+      const p = profiles[k] || CLIP_ONLY_PROFILE;
       // Per-side output gains. Both fanout from `makeup` so the source's
       // post-shaper mono signal is split into independent L/R levels.
       const gainL = ctx.createGain(); gainL.gain.value = 0;
@@ -8420,8 +8449,21 @@ function App() {
     // channel (the labels the student sees live in defaultState/SOURCES). The
     // ?v= tag cache-busts the audio when a stem is replaced (browsers/CDN cache
     // the bare filename); bump it whenever the .wav bytes change.
-    const CLIP_SOURCES = { guitar: 'audio/bass.wav?v=2', laptop: 'audio/keys.wav?v=2', vocal: 'audio/vocal1.wav?v=2', vocal2: 'audio/vocal2.wav?v=2' };
-    Promise.all(Object.keys(CLIP_SOURCES).map(k =>
+    const CLIP_SOURCES = {
+      // MX-8 band (Golden V2 stems, shared with the full band's same instruments).
+      guitar: 'audio/bass.m4a?v=3', laptop: 'audio/keys.m4a?v=3', vocal: 'audio/vocal1.m4a?v=3', vocal2: 'audio/vocal2.m4a?v=3',
+      // Full 16-input band (?band=1). vx1/vx2 reuse the shared vocal1/vocal2 stems;
+      // bass/keys reuse the shared bass/keys stems, so those files load once.
+      kick: 'audio/kick.m4a?v=3', snare: 'audio/snare.m4a?v=3', rack: 'audio/rack.m4a?v=3', floor: 'audio/floor.m4a?v=3',
+      ohl: 'audio/ohl.m4a?v=3', ohr: 'audio/ohr.m4a?v=3', bass: 'audio/bass.m4a?v=3', egtr: 'audio/egtr.m4a?v=3',
+      agtr: 'audio/agtr.m4a?v=3', keys: 'audio/keys.m4a?v=3', vx1: 'audio/vocal1.m4a?v=3', vx2: 'audio/vocal2.m4a?v=3',
+      vx3: 'audio/vocal3.m4a?v=3', vx4: 'audio/vocal4.m4a?v=3',
+    };
+    // Only fetch the stems for sources actually on THIS board (its snake inputs =
+    // the keys of state.cables, patch-independent), so the MX-8 loads its 4 stems
+    // and never downloads the 14 band stems, and the band loads only its own.
+    const boardSources = (state && state.cables) ? state.cables : {};
+    Promise.all(Object.keys(CLIP_SOURCES).filter(k => k in boardSources).map(k =>
       fetch(CLIP_SOURCES[k])
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
         .then(ab => ctx.decodeAudioData(ab))
