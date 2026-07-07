@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=46"></script>
+<script src="content-staging.js?v=47"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5834,14 +5834,30 @@ const CONSOLE_SIZES = [8, 16];
 function padConsole(channels, target) {
   if (!Array.isArray(channels)) return channels;
   const real = channels.filter((c) => !c.unused);
-  if (!target || target <= real.length) return real; // native or smaller: never hide a real channel
-  const out = real.slice();
+  // `target` is an INPUT count (MX-8, MX-16); a stereo strip (the FOH playback
+  // pair) counts as two inputs, so the desk name matches the physical input count.
+  const realInputs = real.reduce((n, c) => n + (c.stereo ? 2 : 1), 0);
+  if (!target || target <= realInputs) return real; // native or smaller: never hide a real channel
+  // The FOH stereo playback strip always lives on the desk's LAST two channels
+  // (7/8 on an MX-8, 15/16 on an MX-16). Pad the unused mono strips in BEFORE it,
+  // never after, so the playback line never lands in the middle of the desk.
+  const stereoIdx = real.findIndex((c) => c.stereo);
+  const head = stereoIdx >= 0 ? real.slice(0, stereoIdx) : real.slice();
+  const tail = stereoIdx >= 0 ? real.slice(stereoIdx + 1) : [];
+  const playback = stereoIdx >= 0 ? real[stereoIdx] : null;
+  // Mono strips to insert so total inputs equal the target (playback = 2 inputs).
+  const padCount = target - (head.length + tail.length) - (playback ? 2 : 0);
+  const maxId = real.reduce((m, c) => Math.max(m, c.id || 0), 0);
+  const out = head.slice();
   // Each padding strip is labelled by its position so the CH number and the
-  // scribble-strip label agree (strip 6 reads "6"), the way an unused input on a
-  // real desk does. ids continue past the band (real ids are 1..5) with no clash.
-  for (let i = real.length; i < target; i++) {
-    out.push(makeChannel({ id: i + 1, label: String(i + 1), gain: 0, fader: 0, mute: true, unused: true }));
+  // scribble-strip label agree (strip 7 reads "7"), the way an unused input on a
+  // real desk does. ids start past the max real id so there's no key clash.
+  for (let i = 0; i < padCount; i++) {
+    const pos = head.length + i;
+    out.push(makeChannel({ id: maxId + 1 + i, label: String(pos + 1), gain: 0, fader: 0, mute: true, unused: true }));
   }
+  tail.forEach((c) => out.push(c));
+  if (playback) out.push(playback); // playback strip stays last → 7/8, 15/16, …
   return out;
 }
 window.padConsole = padConsole;
