@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=44"></script>
+<script src="content-staging.js?v=45"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -2177,29 +2177,16 @@ const { Knob: K, Fader: F, LedMeter: M, ButtonPad: BP, Led: L } = window;
 
 function PFLBar({ level, hot }) {
   const segs = 14;
-  // dBFS bar: full scale = the console's clip point (0 dBFS = +22 dBu). The
-  // gold marker is the healthy AVERAGE zone, around -18 dBFS like a real
-  // digital desk: park the signal's average there and let the program's
-  // peaks dance above it — that's the real gain-staging picture.
+  // dBFS bar: full scale = the console's clip point (0 dBFS = +22 dBu). Read the
+  // meter's own zones like a real digital desk: keep the average up in the
+  // healthy range with peaks staying below the red. No target overlay.
   const db = window.levelToDbfs(level);
   const lit = Math.min(segs, Math.round((window.dbfsFrac ? window.dbfsFrac(db) : 0) * segs));
   const holdRef = React.useRef({ db: -60, t: null, holdUntil: 0 });
   const holdDb = window.advancePeakHold ? window.advancePeakHold(holdRef, db) : db;
   const holdIdx = window.peakHoldIdx ? window.peakHoldIdx(holdDb, segs) : -1;
-  const targetLow = window.dbfsFrac ? window.dbfsFrac(-21) : 0.56;
-  const targetHigh = window.dbfsFrac ? window.dbfsFrac(-15) : 0.69;
   return (
     <div className="ui-no-select" style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
-      <div style={{ position: 'relative', height: 3 }}>
-        <div style={{
-          position: 'absolute',
-          left: (targetLow * 100) + '%',
-          width: ((targetHigh - targetLow) * 100) + '%',
-          top: 0, height: 3,
-          background: 'linear-gradient(180deg, rgba(255,201,58,0.42), rgba(255,181,71,0.55))',
-          borderRadius: 1,
-        }} title="Healthy average zone (about -18 dBFS). Park the average here; peaks ride above it."/>
-      </div>
       <div style={{
         display: 'flex', gap: 1,
         width: '100%',
@@ -6501,7 +6488,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FINAL EXAM · PASSED</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You can run a system now.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You just ran a full show from a cold system: powered on in order, set your levels, tested every speaker, brought in the mics and DIs, built a monitor mix, and kept it clean through feedback. That's the job.
+          You just ran a full show from the start: powered on in order, set your levels, tested every speaker, brought in the mics and DIs, built a monitor mix, and kept it clean through feedback. That's the job.
         </div>
         {tier === 'member' ? (
           <>
@@ -6568,7 +6555,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · HANDS-ON</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Learn live sound by doing it.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          Jump onto a real mixing console. The band is playing and something just broke: find it, fix it, and get sharp. Enter your email to start.
+          Jump onto a real mixing console. The band is playing and something just broke. Find it and fix it. Enter your email to start.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -6658,7 +6645,7 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
           onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
           onMouseLeave={(e) => e.currentTarget.style.borderColor = '#38383e'}>
           <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700 }}>LEARN THE FULL SETUP · 10 LESSONS</div>
-          <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>Build a live system from a cold start.</div>
+          <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>Set up a live system with nothing powered on yet.</div>
           <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>Start at the beginning: patch it, power up in order, set your levels, build a monitor mix, and run a full show. Step by step.</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--accent)', fontWeight: 800, letterSpacing: 0.6, marginTop: 3 }}>START THE ESSENTIALS →</div>
         </div>
@@ -6695,7 +6682,7 @@ const WALK_STEPS = [
   },
   {
     act: 'The channel strip', title: 'Gain', target: 'ch1-gain',
-    teach: "Gain is the preamp knob at the top of the strip. It sets the signal strength right at the input. Turn it up while you watch the meter: park the signal's average in the gold zone, around -18, and let the peaks bounce above it with room to spare before the red. Set gain by the meter, not by ear.",
+    teach: "Gain is the preamp knob at the top of the strip. It sets the signal strength right at the input. Turn it up while you watch the meter: bring the signal's average up into the healthy range, around -18, and let the peaks bounce above it with room to spare before the red. Set gain by the meter, not by ear.",
     prompt: "With the lead vocal in PFL, bring its gain up slowly and watch the meter. Ease it back if it hits the red.",
     aside: "The 48V button powers condenser mics. A dynamic mic like this lead vocal does not need it.",
     takeaway: "Gain is the input level, set with the knob at the top of the channel strip, by the meter.",
@@ -7923,7 +7910,7 @@ function App() {
     })();
     // Patch gate (the patch lesson + every practice rep): sources on their
     // listed ports, snake tails on their numbered channels, console outputs
-    // into snake 5-8, speaker lines on their planned ports. A pro's patch
+    // into snake 5-10, speaker lines on their planned ports. A pro's patch
     // matches the paperwork (the Input List).
     const patchOk = !level.requirePatch || (() => {
       const c = state.cables || {};
@@ -7931,9 +7918,9 @@ function App() {
       const fo = state.fanOut || [1, 2, 3, 4];
       const fanOutOk = fo.length === 4 && fo[0] === 1 && fo[1] === 2 && fo[2] === 3 && fo[3] === 4;
       const ofn = state.outFan || window.DEFAULT_OUT_FAN;
-      const outFanOk = ofn[5] === 'mainL' && ofn[6] === 'mainR' && ofn[7] === 'aux1' && ofn[8] === 'aux2';
+      const outFanOk = ofn[5] === 'mainL' && ofn[6] === 'mainR' && ofn[7] === 'aux1' && ofn[8] === 'aux2' && ofn[9] === 'aux3' && ofn[10] === 'aux4';
       const op = state.outPatch || window.DEFAULT_OUT_PATCH;
-      const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8;
+      const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8 && op.wedge3 === 9 && op.wedge4 === 10;
       return cablesOk && fanOutOk && outFanOk && outOk;
     })();
     const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk;
@@ -9233,16 +9220,16 @@ function App() {
     const fo = state.fanOut || [];
     const fanOutOk = [1, 2, 3, 4].every((v, i) => fo[i] === v);
     const ofn = state.outFan || window.DEFAULT_OUT_FAN;
-    const outFanOk = ofn[5] === 'mainL' && ofn[6] === 'mainR' && ofn[7] === 'aux1' && ofn[8] === 'aux2';
+    const outFanOk = ofn[5] === 'mainL' && ofn[6] === 'mainR' && ofn[7] === 'aux1' && ofn[8] === 'aux2' && ofn[9] === 'aux3' && ofn[10] === 'aux4';
     const op = state.outPatch || window.DEFAULT_OUT_PATCH;
-    const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8;
+    const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8 && op.wedge3 === 9 && op.wedge4 === 10;
     patchStatus = level.isPractice
       ? [{ label: 'Patched per the I/O list', pass: cablesOk && fanOutOk && outFanOk && outOk }]
       : [
           { label: 'Inputs on snake 1-4 per the list', pass: cablesOk },
           { label: 'Snake tails 1-4 on their channels', pass: fanOutOk },
-          { label: 'Console outputs into snake 5-8', pass: outFanOk },
-          { label: 'Speaker lines on snake 5-8', pass: outOk },
+          { label: 'Console outputs into snake 5-10', pass: outFanOk },
+          { label: 'Speaker lines on snake 5-10', pass: outOk },
         ];
   }
 
@@ -9432,7 +9419,7 @@ function App() {
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
               {pitchFor.isLesson
-                ? 'Run the show is the full course: set up a live system from a cold start and run a real show, step by step. Ten lessons, from patching and powering up in order to setting levels, building a monitor mix, and staying clean through feedback. It is part of the Audio University membership.'
+                ? 'Run the show is the full course: set up a live system with nothing powered on yet and run a real show, step by step. Ten lessons, from patching and powering up in order to setting levels, building a monitor mix, and staying clean through feedback. It is part of the Audio University membership.'
                 : pitchFor.isDigital
                 ? 'The digital console surface teaches the part of modern live sound the analog desk cannot: one shared channel section that follows whatever you SELECT, so the real skill is confirming what is selected before you touch a knob. Same signal flow and faults, a different surface. It is part of the membership.'
                 : pitchFor.isLibrary
@@ -9717,7 +9704,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   const COURSES = [];
   const mixerLessons = SCENARIOS.map((s, i) => ({ s, i })).filter((x) => x.s.isMixerLesson);
   if (mixerLessons.length) COURSES.push({ key: 'mixer', label: 'MIXER TUTORIAL', color: 'var(--cool)', tag: 'FREE', free: true, blurb: 'Learn the console one part at a time. Jump into any piece to refresh it, no need to run the whole thing.', rows: mixerLessons });
-  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a live system from a cold start and run a full show. Ten lessons, in order.', rows: lessons });
+  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a live system with nothing powered on yet and run a full show. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MONITOR WORLD', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build a separate mix for each performer: their own source, a bit of the vocals, a sensible level, rung out so it stays clean.', rows: monitors });
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
