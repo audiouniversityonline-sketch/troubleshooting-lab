@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=48"></script>
+<script src="content-staging.js?v=49"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -248,28 +248,29 @@ const DESTINATIONS = {
   wedge4: { label: 'Wedge 4',         short: 'WEDGE 4', stereo: false, description: 'Floor wedge for the keys player.' },
 };
 
-// Snake channel colors — the US 8-channel color-coding standard for
-// multichannel snakes follows the resistor color code: 1 brown, 2 red,
-// 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray. This rig's four
-// INPUTS ride snake channels 1-4 and its four OUTPUTS (returns) share the
-// same snake on channels 5-8. Stage-box ports, fan-out tails, and console
-// chips all carry these colors, because on a real multicore the color tells
-// you the CHANNEL NUMBER, not what's plugged in. Verified against
-// ProSoundWeb / industry practice.
-// Channels 9-10 carry the two extra monitor sends (Aux 3, Aux 4). The 8-channel
-// standard stops at gray, so 9-10 use neutral off-standard colors.
+// Snake channel colors — the US color-coding standard for multichannel snakes
+// follows the resistor color code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green,
+// 6 blue, 7 violet, 8 gray. The snake is BIDIRECTIONAL: the SEND side (stage ->
+// FOH) and the RETURN side (FOH -> stage) are their OWN bundles, each numbered
+// and colored from 1. So input 1 and return 1 are both brown, on separate
+// multicores. Stage-box ports, fan-out tails, and console chips all carry these
+// colors, because on a real snake the color tells you the CHANNEL NUMBER within
+// its bundle, not what's plugged in. Verified against ProSoundWeb / practice.
+// (Indexes past gray use neutral off-standard colors, for when a bundle grows
+// past 8.)
 const SNAKE_COLORS = ['#a8703a', '#ff4630', '#ff8e2a', '#ffd23a', '#4ade80', '#5a8cff', '#b88dff', '#9aa0a8', '#e0e0e6', '#46c7b8'];
 
-// The OUTPUT path has two patch points, mirroring the input path:
-//   outFan  — FOH end: which console output (mainL/mainR/aux1/aux2) is
-//             plugged into each snake return channel (5-8). null/0 = that
-//             tail hangs loose.
-//   outPatch — stage end: which stage-box out port (= snake channel 5-8)
+// The OUTPUT (return) path has two patch points, mirroring the input path. Its
+// snake channels are their OWN bundle numbered from 1 (a bidirectional snake),
+// so the six returns are channels 1-6, independent of the input channels 1-4:
+//   outFan  — FOH end: which console output (mainL/mainR/aux1-4) is plugged
+//             into each snake return channel (1-6). null/0 = tail hangs loose.
+//   outPatch — stage end: which stage-box out port (= return channel 1-6)
 //             each speaker's line is plugged into. null = unplugged.
 // Mis-patching either end is real and audible: a wedge whose line lands on
 // the channel carrying MAIN L plays the house mix.
-const DEFAULT_OUT_FAN = { 5: 'mainL', 6: 'mainR', 7: 'aux1', 8: 'aux2', 9: 'aux3', 10: 'aux4' };
-const DEFAULT_OUT_PATCH = { pa_l: 5, pa_r: 6, wedge: 7, wedge2: 8, wedge3: 9, wedge4: 10 };
+const DEFAULT_OUT_FAN = { 1: 'mainL', 2: 'mainR', 3: 'aux1', 4: 'aux2', 5: 'aux3', 6: 'aux4' };
+const DEFAULT_OUT_PATCH = { pa_l: 1, pa_r: 2, wedge: 3, wedge2: 4, wedge3: 5, wedge4: 6 };
 const OUT_PORT_LABELS = { mainL: 'MAIN L', mainR: 'MAIN R', aux1: 'AUX 1', aux2: 'AUX 2', aux3: 'AUX 3', aux4: 'AUX 4' };
 
 // Graphic EQ on the monitor sends — ISO mid-octave centre frequencies. A cut on
@@ -817,16 +818,16 @@ function computeAudio(s, envelope) {
   const w4 = o.wedge4 || { on: true, mute: false, volume: 0 };
 
   // OUTPUT PATH — two patch points, like the inputs. At FOH, each console
-  // output plugs into a snake return channel (outFan: channel 5-8 → output
+  // output plugs into a snake return channel (outFan: channel 1-6 → output
   // key). At the stage box, each speaker's line plugs into an out port,
-  // which IS that snake channel (outPatch: speaker → 5-8). A speaker hears
+  // which IS that snake channel (outPatch: speaker → 1-6). A speaker hears
   // whatever signal rides the channel its line is on — mis-patching either
   // end is real and audible, which is the point of the patching lessons.
   const outFan = s.outFan || DEFAULT_OUT_FAN;
   const outPatch = s.outPatch || DEFAULT_OUT_PATCH;
   const busSignal = { mainL: mainBusL, mainR: mainBusR, aux1: wedgeMix, aux2: wedge2Mix, aux3: wedge3Mix, aux4: wedge4Mix };
   const retSignal = {};
-  for (const ch of [5, 6, 7, 8, 9, 10]) {
+  for (const ch of [1, 2, 3, 4, 5, 6]) {
     const outKey = outFan[ch];
     retSignal[ch] = outKey ? (busSignal[outKey] || 0) : 0;
   }
@@ -890,7 +891,7 @@ function computeAudio(s, envelope) {
       aux4: cA4 * aux4MasterGain * mixerGateNum,
     };
     const srcRet = {};
-    for (const ch of [5, 6, 7, 8, 9, 10]) {
+    for (const ch of [1, 2, 3, 4, 5, 6]) {
       const outKey = outFan[ch];
       srcRet[ch] = outKey ? (srcBus[outKey] || 0) : 0;
     }
@@ -1315,8 +1316,9 @@ window.defaultState = defaultState;
 // board, then swaps in the 16 band inputs patched 1:1 through a 16-way snake
 // fan-out (source k -> port i+1 -> channel i+1). Each input's gain is its
 // healthy knob (from dbu); condensers + the active bass DI get phantom so they
-// pass. Outputs move to ports 17-22 so they don't collide with the 16 inputs,
-// and noPlayback frees channel 5 (the floor tom) from the hardwired FOH line.
+// pass. The snake is bidirectional, so the six outputs ride the return side's
+// own channels 1-6 (independent of the 16 input channels); noPlayback frees
+// channel 5 (the floor tom) from the hardwired FOH line.
 const BAND_KEYS = ['kick','snare','hat','rack','floor','ohl','ohr','bass','egtr','agtr','keysl','keysr','vx1','vx2','vx3','vx4'];
 function bandState() {
   const s = defaultState();
@@ -1329,9 +1331,10 @@ function bandState() {
   s.cables = {}; BAND_KEYS.forEach((k, i) => { s.cables[k] = i + 1; });
   s.fanOut = BAND_KEYS.map((_, i) => i + 1);
   s.sourceMute = {}; BAND_KEYS.forEach((k) => { s.sourceMute[k] = false; });
-  // Output snake ports live above the 16 inputs.
-  s.outFan = { 17: 'mainL', 18: 'mainR', 19: 'aux1', 20: 'aux2', 21: 'aux3', 22: 'aux4' };
-  s.outPatch = { pa_l: 17, pa_r: 18, wedge: 19, wedge2: 20, wedge3: 21, wedge4: 22 };
+  // Bidirectional snake: the return side is its own bundle numbered from 1, so
+  // the six outputs ride return channels 1-6 no matter how many inputs there are.
+  s.outFan = { ...DEFAULT_OUT_FAN };
+  s.outPatch = { ...DEFAULT_OUT_PATCH };
   s.testing = 'kick';
   s.inspect = 'pa';
   return s;
@@ -2810,7 +2813,7 @@ function DigitalIORow({ state, setState, channelRefs, masterLRef, masterRRef, au
   const playbackMode = state.playbackMode || 'music';
   const blue = (window.SOURCES && window.SOURCES.playback ? window.SOURCES.playback.color : '#6aa9ff');
   const chipColorFor = (outKey) => {
-    const ch = [5, 6, 7, 8, 9, 10].find(c2 => ofan[c2] === outKey);
+    const ch = [1, 2, 3, 4, 5, 6].find(c2 => ofan[c2] === outKey);
     return ch ? (snakeColors[ch - 1] || '#4a4a52') : '#4a4a52';
   };
   const jack = (attachRef, label, sub, color, key) => (
@@ -3866,16 +3869,15 @@ function StreamInterface({ on, volume, level, onToggleOn, onVolume, isInspected,
 
 function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive }) {
   const ports = [1, 2, 3, 4];
-  // Output ports are hardwired to their desk signal: out 1 = Main L, out 2 =
-  // Main R, out 3 = Aux 1 (wedge 1's mix), out 4 = Aux 2. Which SPEAKER hears
-  // which signal is decided by the patch (state.outPatch) — these are jacks,
-  // not destinations.
-  // Output ports ARE snake channels 5-8, wearing the 8-channel standard's
-  // colors (5 green, 6 blue, 7 violet, 8 gray). What signal rides each
-  // channel is decided at the FOH end (outFan); `active` lights when its
-  // channel is carrying signal.
-  // Six returns now: 5-6 carry Main L/R, 7-10 carry Aux 1-4 (one per wedge).
-  const outs = [5, 6, 7, 8, 9, 10].map(ch => ({
+  // The RETURN side of the snake is its own bundle, numbered from 1 (a
+  // bidirectional snake), so the six out ports are channels 1-6, independent of
+  // the input ports 1-4. Which SPEAKER hears which signal is decided by the
+  // patch (state.outPatch) — these are jacks, not destinations.
+  // Out ports wear the resistor-code colors of their return channel (1 brown,
+  // 2 red, 3 orange, 4 yellow, 5 green, 6 blue). What signal rides each channel
+  // is decided at the FOH end (outFan); `active` lights when it carries signal.
+  // Default fan-out: 1-2 carry Main L/R, 3-6 carry Aux 1-4 (one per wedge).
+  const outs = [1, 2, 3, 4, 5, 6].map(ch => ({
     key: ch,
     label: String(ch),
     color: (window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52',
@@ -4336,7 +4338,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 aux4: (audio.auxBus?.wedge4 || 0) > 0.05,
               };
               const ra = {};
-              for (const ch of [5, 6, 7, 8, 9, 10]) ra[ch] = ofan[ch] ? !!busAct[ofan[ch]] : false;
+              for (const ch of [1, 2, 3, 4, 5, 6]) ra[ch] = ofan[ch] ? !!busAct[ofan[ch]] : false;
               return ra;
             })()}
           />
@@ -4480,7 +4482,7 @@ function ChannelAnchors({ state, setState, channelRefs, masterLRef, masterRRef, 
   // connected to that output yet.
   const ofanChips = state.outFan || window.DEFAULT_OUT_FAN;
   const chipColorFor = (outKey) => {
-    const ch = [5, 6, 7, 8, 9, 10].find(c2 => ofanChips[c2] === outKey);
+    const ch = [1, 2, 3, 4, 5, 6].find(c2 => ofanChips[c2] === outKey);
     return ch ? ((window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52') : '#4a4a52';
   };
   // Six console outputs now: Main L/R plus an aux send per wedge. Spaced tight
@@ -4676,7 +4678,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         targets.push({ key: `ch-${ch}`, x, y, payload: ch });
       }
     } else if (drag.type === 'outpatch') {
-      for (const portId of [5, 6, 7, 8, 9, 10]) {
+      for (const portId of [1, 2, 3, 4, 5, 6]) {
         const el = outRefs.current[portId];
         if (!el) continue;
         const { x, y } = local(el);
@@ -4781,14 +4783,14 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         return next;
       });
     } else if (drag.type === 'outfan') {
-      // drag.id = the snake return channel (5-8) whose tail is in hand;
+      // drag.id = the snake return channel (1-6) whose tail is in hand;
       // target = a console output key. Swap semantics like everywhere else.
       const ch = parseInt(drag.id, 10);
       setState(s => {
         const of2 = { ...(s.outFan || window.DEFAULT_OUT_FAN) };
         if (of2[ch] === target) return s;
         const old = of2[ch] || null;
-        const bumpedCh = [5, 6, 7, 8, 9, 10].find(c2 => c2 !== ch && of2[c2] === target);
+        const bumpedCh = [1, 2, 3, 4, 5, 6].find(c2 => c2 !== ch && of2[c2] === target);
         of2[ch] = target;
         if (bumpedCh) of2[bumpedCh] = old;
         const next = { ...s, outFan: of2 };
@@ -5011,15 +5013,15 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         }
       }
 
-      // RETURN TAILS at FOH — snake channels 5-8, each connecting (or not)
-      // to one of the console's output chips. Same drag model as the input
+      // RETURN TAILS at FOH — snake return channels 1-6, each connecting (or
+      // not) to one of the console's output chips. Same drag model as the input
       // tails: the chip-end is the handle, loose tails dangle to the RIGHT
       // of the snake point wearing their channel number.
       const chipRefFor = { mainL: masterLRef, mainR: masterRRef, aux1: aux1Ref, aux2: aux2Ref, aux3: aux3Ref, aux4: aux4Ref };
       const ofanState = state.outFan || window.DEFAULT_OUT_FAN;
       const outFanCables = [];
       if (fanOutOrigin) {
-        for (const ch of [5, 6, 7, 8, 9, 10]) {
+        for (const ch of [1, 2, 3, 4, 5, 6]) {
           const outKey = ofanState[ch];
           const ref = outKey ? chipRefFor[outKey] : null;
           let to = (ref && ref.current) ? anchorPos(ref.current, 'top') : null;
@@ -5027,8 +5029,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           if (!to) {
             unplugged = true;
             to = {
-              x: fanOutOrigin.x + 56 + (ch - 5) * 38,
-              y: fanOutOrigin.y + 34 + ((ch - 5) % 2) * 16,
+              x: fanOutOrigin.x + 56 + (ch - 1) * 38,
+              y: fanOutOrigin.y + 34 + ((ch - 1) % 2) * 16,
             };
           }
           const color = (window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52';
@@ -5431,8 +5433,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           );
         })}
 
-        {/* RETURN TAILS — snake channels 5-8 from the fan-out down to the
-            console's output chips (MAIN L / MAIN R / AUX 1 / AUX 2). Same
+        {/* RETURN TAILS — snake return channels 1-6 from the fan-out down to
+            the console's output chips (MAIN L/R, AUX 1-4). Same
             drag model as the input tails: the chip-end is the handle, drop
             it on a different output chip to repatch (swap semantics). Loose
             tails dangle to the right of the snake wearing their number. */}
@@ -7083,9 +7085,12 @@ function IoListPanel({ open, onClose, state }) {
     const snakeIdx = (src && srcKey !== 'playback') ? planChannelFor(srcKey) : null;
     return { key: i, chNum, source: src ? src.label : 'Empty', type: typeLabel(src), snakeIdx, empty: !src };
   });
-  // Every console output bus and where it goes — all four wedges.
-  const outFan = s.outFan || window.DEFAULT_OUT_FAN || {};
-  const portFor = (busKey) => { const p = Object.keys(outFan).find((pp) => outFan[pp] === busKey); return p ? +p : null; };
+  // Every console output bus and the return channel it rides. Like the inputs,
+  // this is the PLAN (the paperwork): when the board is unpatched (Patch the
+  // System starts with every return null) fall back to the canonical default so
+  // each output still shows its home return channel — Main L on return 1, etc.
+  const liveOutFan = s.outFan && Object.values(s.outFan).some(Boolean) ? s.outFan : (window.DEFAULT_OUT_FAN || {});
+  const portFor = (busKey) => { const p = Object.keys(liveOutFan).find((pp) => liveOutFan[pp] === busKey); return p ? +p : null; };
   const outputDefs = [
     { bus: 'mainL', label: 'Main L', to: 'The left PA speaker (the room)' },
     { bus: 'mainR', label: 'Main R', to: 'The right PA speaker (the room)' },
@@ -7967,7 +7972,7 @@ function App() {
     })();
     // Patch gate (the patch lesson + every practice rep): sources on their
     // listed ports, snake tails on their numbered channels, console outputs
-    // into snake 5-10, speaker lines on their planned ports. A pro's patch
+    // into snake 1-6, speaker lines on their planned ports. A pro's patch
     // matches the paperwork (the Input List).
     const patchOk = !level.requirePatch || (() => {
       const c = state.cables || {};
@@ -7975,9 +7980,9 @@ function App() {
       const fo = state.fanOut || [1, 2, 3, 4];
       const fanOutOk = fo.length === 4 && fo[0] === 1 && fo[1] === 2 && fo[2] === 3 && fo[3] === 4;
       const ofn = state.outFan || window.DEFAULT_OUT_FAN;
-      const outFanOk = ofn[5] === 'mainL' && ofn[6] === 'mainR' && ofn[7] === 'aux1' && ofn[8] === 'aux2' && ofn[9] === 'aux3' && ofn[10] === 'aux4';
+      const outFanOk = ofn[1] === 'mainL' && ofn[2] === 'mainR' && ofn[3] === 'aux1' && ofn[4] === 'aux2' && ofn[5] === 'aux3' && ofn[6] === 'aux4';
       const op = state.outPatch || window.DEFAULT_OUT_PATCH;
-      const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8 && op.wedge3 === 9 && op.wedge4 === 10;
+      const outOk = op.pa_l === 1 && op.pa_r === 2 && op.wedge === 3 && op.wedge2 === 4 && op.wedge3 === 5 && op.wedge4 === 6;
       return cablesOk && fanOutOk && outFanOk && outOk;
     })();
     const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk;
@@ -9279,16 +9284,16 @@ function App() {
     const fo = state.fanOut || [];
     const fanOutOk = [1, 2, 3, 4].every((v, i) => fo[i] === v);
     const ofn = state.outFan || window.DEFAULT_OUT_FAN;
-    const outFanOk = ofn[5] === 'mainL' && ofn[6] === 'mainR' && ofn[7] === 'aux1' && ofn[8] === 'aux2' && ofn[9] === 'aux3' && ofn[10] === 'aux4';
+    const outFanOk = ofn[1] === 'mainL' && ofn[2] === 'mainR' && ofn[3] === 'aux1' && ofn[4] === 'aux2' && ofn[5] === 'aux3' && ofn[6] === 'aux4';
     const op = state.outPatch || window.DEFAULT_OUT_PATCH;
-    const outOk = op.pa_l === 5 && op.pa_r === 6 && op.wedge === 7 && op.wedge2 === 8 && op.wedge3 === 9 && op.wedge4 === 10;
+    const outOk = op.pa_l === 1 && op.pa_r === 2 && op.wedge === 3 && op.wedge2 === 4 && op.wedge3 === 5 && op.wedge4 === 6;
     patchStatus = level.isPractice
       ? [{ label: 'Patched per the I/O list', pass: cablesOk && fanOutOk && outFanOk && outOk }]
       : [
           { label: 'Inputs on snake 1-4 per the list', pass: cablesOk },
           { label: 'Snake tails 1-4 on their channels', pass: fanOutOk },
-          { label: 'Console outputs into snake 5-10', pass: outFanOk },
-          { label: 'Speaker lines on snake 5-10', pass: outOk },
+          { label: 'Console outputs into snake 1-6', pass: outFanOk },
+          { label: 'Speaker lines on snake 1-6', pass: outOk },
         ];
   }
 

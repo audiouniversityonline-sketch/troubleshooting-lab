@@ -100,7 +100,7 @@
 //   - requirePatch : win requires the physical patch to match the paperwork
 //                (the Input List): sources on snake inputs 1-4, input tails on
 //                their console channels, console outputs into snake returns
-//                5-8 (outFan), and speaker lines on their numbered out ports
+//                1-6 (outFan), and speaker lines on their numbered out ports
 //                (outPatch). Used by Patch the System and every practice rep.
 // Ids renumbered 2026-06-10 and again 2026-06-11 (Patch the System became
 // lesson 1), both pre-launch. After launch the append-only rule is absolute.
@@ -126,15 +126,15 @@ window.LEVELS = [
     title: 'Patch the System',
     // THE FIRST LESSON (Kyle, 2026-06-11): before anything gets powered on,
     // the system gets CONNECTED, per paperwork (the Input List in the top
-    // bar), the way a pro does it. One 8-channel snake: inputs ride
-    // channels 1-4, outputs (returns) ride 5-8, colors per the standard
-    // code (1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet,
-    // 8 gray). Four drag-and-drop jobs, all with the power off:
+    // bar), the way a pro does it. A BIDIRECTIONAL snake: the send side rides
+    // input channels 1-4, the return side its OWN channels 1-6, each numbered
+    // and colored from 1 (1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue).
+    // Four drag-and-drop jobs, all with the power off:
     //   1. INPUTS - each source's cable into its numbered stage-box port.
     //   2. INPUT TAILS - the FOH fan-out tails 1-4 onto their console
     //      channels, matched by color.
-    //   3. RETURN TAILS - the console outputs into snake 5-8 at FOH
-    //      (MAIN L -> 5, MAIN R -> 6, AUX 1 -> 7, AUX 2 -> 8).
+    //   3. RETURN TAILS - the console outputs into snake returns 1-6 at FOH
+    //      (MAIN L -> 1, MAIN R -> 2, AUX 1 -> 3, AUX 2 -> 4, AUX 3 -> 5, AUX 4 -> 6).
     //   4. SPEAKER LINES - each speaker's line into its numbered out port
     //      at the stage box (PA L <- 5, PA R <- 6, W1 <- 7, W2 <- 8).
     // EVERYTHING starts disconnected (a brand-new system is unconnected,
@@ -147,12 +147,12 @@ window.LEVELS = [
     conditions: [],
     topology: { paRig: 'powered' },
     symptom: 'Connect the whole system from the paperwork, with everything still powered off. Open the Input List in the top bar for the plan, then patch each cable to the port it calls for.',
-    hint: 'Drag a cable end and drop it on a port or an output chip. Dropping on a taken spot swaps the two cables. The colors follow the snake channel code: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 gray, 9 white, 10 teal. Patch with the power off so nothing can pop while the system is dead.',
+    hint: 'Drag a cable end and drop it on a port or an output chip. Dropping on a taken spot swaps the two cables. The colors follow the snake channel code, and each side of the snake counts from 1: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue. Patch with the power off so nothing can pop while the system is dead.',
     hints: [
       { title: 'Patch the inputs', target: null, teach: 'Patching is just following the paperwork. Open the Input List in the top bar and wire what it tells you, starting at the stage.', text: 'Inputs first: drag each source cable onto its numbered stage-box port. Drop on a taken spot to swap.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
       { title: 'Land the snake at the console', target: null, teach: 'The snake carries those inputs from the stage back to you at front of house. Each tail lands on its own channel.', text: 'Drop snake tails 1-4 onto their matching console channels.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[1] && ctx.patchStatus[1].pass },
-      { title: 'Send the outputs down the snake', target: null, teach: 'The same snake carries your mix back out. The console outputs ride channels 5-10.', text: 'Console outs into snake 5-10: L to 5, R to 6, AUX 1 to 7, AUX 2 to 8, AUX 3 to 9, AUX 4 to 10.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
-      { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'out-wedge3', 'out-wedge4'], teach: 'Last, the speakers pick up those same snake channels at the stage end. Match each speaker to the output feeding it.', text: 'Each speaker line to its out port: PA L to 5, PA R to 6, Wedge 1 to 7, Wedge 2 to 8, Wedge 3 to 9, Wedge 4 to 10.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
+      { title: 'Send the outputs down the snake', target: null, teach: 'The same snake carries your mix back out on its own return side, counted from 1: channels 1 to 6.', text: 'Console outs into snake 1-6: L to 1, R to 2, AUX 1 to 3, AUX 2 to 4, AUX 3 to 5, AUX 4 to 6.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
+      { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'out-wedge3', 'out-wedge4'], teach: 'Last, the speakers pick up those same return channels at the stage end. Match each speaker to the output feeding it.', text: 'Each speaker line to its out port: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4, Wedge 3 to 5, Wedge 4 to 6.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
     ],
     sabotage: (s) => {
       // Load-in state: nothing connected anywhere. Input cables loose above
@@ -162,7 +162,7 @@ window.LEVELS = [
       // (normalizeChannels covers the channels via involves []).
       s.cables = { vocal: 0, vocal2: 0, guitar: 0, laptop: 0 };
       s.fanOut = [0, 0, 0, 0];
-      s.outFan = { 5: null, 6: null, 7: null, 8: null, 9: null, 10: null };
+      s.outFan = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
       s.outPatch = { pa_l: null, pa_r: null, wedge: null, wedge2: null, wedge3: null, wedge4: null };
       s.master = { ...s.master, mute: true, fader: 0 };
       s.mixer = { on: false };
@@ -174,7 +174,7 @@ window.LEVELS = [
       s.outputs.wedge4 = { ...s.outputs.wedge4, on: false, volume: 0 };
       return s;
     },
-    solution: 'Everything connected per the I/O list: inputs on snake 1 to 4, outputs on 5 to 10, every color matched. The system is connected and still off. Next, power on.',
+    solution: 'Everything connected per the I/O list: inputs on snake 1 to 4, outputs on the return side 1 to 6, every color matched. The system is connected and still off. Next, power on.',
     defaultInspect: 'pa',
   },
   {
@@ -1141,7 +1141,7 @@ window.SCENARIO_LIBRARY = [
     hint: 'Everything upstream looks fine. Check the channel itself before you touch the gain.',
     solution: 'Channel 1 was muted, so the lead vocal never reached the mix. Unmuting it put it back in the PA. When one source is missing and the rest sound fine, check the channel mute first.',
     conditions: [],
-    start: {"channels":[{"label":"Vocal 1","gain":0.48,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":true,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.77,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.23,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.20,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.75,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.7},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
+    start: {"channels":[{"label":"Vocal 1","gain":0.48,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":true,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.77,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.23,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.20,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.75,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.7},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"1":"mainL","2":"mainR","3":"aux1","4":"aux2"},"outPatch":{"pa_l":1,"pa_r":2,"wedge":3,"wedge2":4},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
   },
   {
     id: 'pa-side-quiet',
@@ -1150,7 +1150,7 @@ window.SCENARIO_LIBRARY = [
     hint: 'This is a PA output level, not a channel. Check the two mains against each other.',
     solution: 'PA Right was turned down well below PA Left, so half the room got a thin mix. Matching the two main outputs evened out the coverage. Keep your main sides level so the whole room hears the same thing.',
     conditions: [],
-    start: {"channels":[{"label":"Vocal 1","gain":0.48,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.77,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.23,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.20,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.75,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.35},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
+    start: {"channels":[{"label":"Vocal 1","gain":0.48,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.77,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.23,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.6,"inputTrim":1,"id":4},{"label":"5/6","gain":0.20,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.75,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.35},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"1":"mainL","2":"mainR","3":"aux1","4":"aux2"},"outPatch":{"pa_l":1,"pa_r":2,"wedge":3,"wedge2":4},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
   },
   {
     id: 'keys-buried',
@@ -1159,7 +1159,7 @@ window.SCENARIO_LIBRARY = [
     hint: 'Look at the channel fader for the keys, not the gain.',
     solution: 'The keys fader was pulled almost all the way down, so almost nothing reached the mix. Bringing it back up to a normal level put them back in. The fader sets the level going to the mix; the gain sets it at the input.',
     conditions: [],
-    start: {"channels":[{"label":"Vocal 1","gain":0.48,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.77,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.23,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.02,"inputTrim":1,"id":4},{"label":"5/6","gain":0.20,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.75,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.7},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"5":"mainL","6":"mainR","7":"aux1","8":"aux2"},"outPatch":{"pa_l":5,"pa_r":6,"wedge":7,"wedge2":8},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
+    start: {"channels":[{"label":"Vocal 1","gain":0.48,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":1},{"label":"Vocal 2","gain":0.42,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.72,"inputTrim":1,"id":2},{"label":"Bass","gain":0.77,"phantom":true,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.65,"inputTrim":1,"id":3},{"label":"Keys","gain":0.23,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.02,"inputTrim":1,"id":4},{"label":"5/6","gain":0.20,"phantom":false,"highpass":false,"pan":0.5,"aux1":0,"aux2":0,"mute":false,"solo":false,"fader":0.7,"inputTrim":1,"id":5,"stereo":true}],"mixer":{"on":true},"master":{"fader":0.75,"mute":false,"aux1":0.75,"aux2":0.75},"outputs":{"pa_l":{"on":true,"mute":false,"volume":0.7},"pa_r":{"on":true,"mute":false,"volume":0.7},"wedge":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":15},"wedge2":{"on":true,"mute":false,"volume":0,"eq":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ringBand":12},"amp":{"on":true}},"cables":{"vocal":1,"vocal2":2,"guitar":3,"laptop":4},"outFan":{"1":"mainL","2":"mainR","3":"aux1","4":"aux2"},"outPatch":{"pa_l":1,"pa_r":2,"wedge":3,"wedge2":4},"fanOut":[1,2,3,4],"sourceMute":{"vocal":false,"guitar":false,"laptop":false,"vocal2":false,"playback":false},"playbackMode":"music","testing":"vocal","inspect":"pa","topology":{"mixerLocation":"side-stage","paRig":"powered","wedgeLocation":"stage"}},
   },
 ];
 
