@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=41"></script>
+<script src="content-staging.js?v=42"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -419,7 +419,13 @@ function defaultState() {
       makeChannel({ id: 2, label: 'Vocal 2', gain: HEALTHY_GAIN_BY_CH[1], phantom: true,  fader: 0.72, pan: 0.5, aux1: 0.0 }),
       makeChannel({ id: 3, label: 'Bass',    gain: HEALTHY_GAIN_BY_CH[2],                 fader: 0.65, pan: 0.5, aux1: 0.0 }),
       makeChannel({ id: 4, label: 'Keys',    gain: HEALTHY_GAIN_BY_CH[3],                 fader: 0.60, pan: 0.5, aux1: 0.0 }),
-      makeChannel({ id: 5, label: '5/6',     gain: HEALTHY_GAIN_BY_CH[4], stereo: true,   fader: 0.70, pan: 0.5, aux1: 0.0 }),
+      // Two spare mono inputs (5-6) on the MX-8, nothing patched — silent until
+      // used. They sit between the band and the FOH playback line on 7/8.
+      makeChannel({ id: 5, label: '—', gain: 0, fader: 0.60, pan: 0.5 }),
+      makeChannel({ id: 6, label: '—', gain: 0, fader: 0.60, pan: 0.5 }),
+      // FOH stereo playback line on the top pair. Its channel number (7/8) renders
+      // from the strip's position; the source label carries the name.
+      makeChannel({ id: 7, label: '',  gain: HEALTHY_GAIN_BY_CH[6], stereo: true, fader: 0.70, pan: 0.5, aux1: 0.0 }),
     ],
     // Mixer / console power state. Default ON for all existing levels.
     // The Power-On Sequence lesson sabotages this to false and teaches the
@@ -522,10 +528,13 @@ function effectiveChannel(s, srcKey) {
   // Playback is a FOH line input hardwired to the 5/6 channel — it plugs into
   // the desk, not the stage snake, so it skips the cable/fan-out path.
   if (srcKey === 'playback') {
-    // A board with no FOH playback line (the 16-input band) frees channel 5 for
-    // a real input instead of the hardwired media player.
+    // A board with no FOH playback line (e.g. the 16-input band as first built)
+    // has no playback channel at all.
     if (s.noPlayback) return 0;
-    return s.channels && s.channels.length >= 5 ? 5 : 0;
+    // Playback is the FOH stereo line on the desk's TOP pair — the stereo strip,
+    // wherever it sits (7/8 on an MX-8, 15/16 on an MX-16). Derived, not fixed.
+    const i = s.channels ? s.channels.findIndex((c) => c.stereo) : -1;
+    return i >= 0 ? i + 1 : 0;
   }
   const port = s.cables[srcKey];
   if (!port || port < 1) return 0;
@@ -581,7 +590,10 @@ const srcDbuFor = (srcKey) => (SRC_DBU_BY_SOURCE[srcKey] != null ? SRC_DBU_BY_SO
 // keys, ch5 playback). defaultState() and the content's "healthy" sabotages
 // read this so a hot source sits low on the knob and a passive bass sits high —
 // the whole point of per-source levels. Change a source's dBu and update here.
-const HEALTHY_GAIN_BY_CH = [0.48, 0.42, 0.77, 0.23, 0.20];
+// Per-CHANNEL healthy gain for the MX-8 base: band on 1-4, empty inputs on 5-6
+// (gain 0), playback on the 7/8 stereo pair (index 6). Playback used to be index
+// 4 (the MX-6 5/6); it moved to 6 when the base grew to 8 inputs.
+const HEALTHY_GAIN_BY_CH = [0.48, 0.42, 0.77, 0.23, 0, 0, 0.20];
 window.srcDbuFor = srcDbuFor;
 window.HEALTHY_GAIN_BY_CH = HEALTHY_GAIN_BY_CH;
 // The gain knob that lands a source at nominal (+4 dBu) from its connector level:
@@ -5801,7 +5813,7 @@ window.deriveInvolves = function deriveInvolves(level) {
   const defaultFanOut = [1, 2, 3, 4];
   for (const cond of (level.conditions || [])) {
     // Playback is the FOH line input on channel 5, outside the snake fan-out.
-    if (cond.source === 'playback') { involved.add(5); continue; }
+    if (cond.source === 'playback') { involved.add(7); continue; }
     if (cond.source && defaultCables[cond.source]) {
       const port = defaultCables[cond.source];
       const ch = defaultFanOut[port - 1];

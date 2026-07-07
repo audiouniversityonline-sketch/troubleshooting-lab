@@ -238,33 +238,33 @@ window.LEVELS = [
     // input sits healthy; unity checks require unmuted + at unity; the PA
     // corridor (0.30-0.65 ~= 86-92 dB SPL, a sane small-club show level) is the
     // room level set with the speaker volume, shown as a green target band on
-    // the loudness meter. involves: [5] keeps playback live and mutes the mics.
+    // the loudness meter. involves: [7] keeps the playback channel live, mutes the mics.
     task: true,
-    involves: [5],
+    involves: [7],
     requirePflCheck: true,
     // inputBand = the healthy AVERAGE window on the real-units meter: -21 to
     // -15 dBFS (about -18 average, the digital-console standard), in the
     // engine's nominal-anchored linear values.
-    gainStructure: { refChannel: 5, unity: 0.75, faderTol: 0.06, inputBand: [0.575, 1.148] },
+    gainStructure: { refChannel: 7, unity: 0.75, faderTol: 0.06, inputBand: [0.575, 1.148] },
     conditions: [
       { source: 'playback', dest: 'pa', min: 0.30, max: 0.65 },
     ],
     symptom: 'The system is on and the console is fully zeroed, with your playback connected. Set your gain structure start to finish: check it in PFL, set the gain, bring the faders to unity, then set the room level with the PA until the loudness meter sits in the green target band.',
     hint: 'Press PFL on the playback to hear it in your headphones. Set the GAIN so the meter sits in the healthy zone. Release PFL, unmute the playback and the master, and bring both faders up to unity. Then bring up the PA speaker volume until the loudness meter reaches the green target band. A live show is louder than the all-day-safe line, so that band sits in the amber part of the meter on purpose.',
     hints: [
-      { title: 'Check it in PFL', target: 'ch5-pfl', teach: 'PFL lets you hear and meter a channel in your headphones before the room does. Always set a level in PFL first.', text: 'PFL the playback so you can set it in your headphones first.', done: (ctx) => ctx.pflChecked || (ctx.state.channels[4] && ctx.state.channels[4].solo) },
-      { title: 'Set the gain', target: 'ch5-gain', teach: 'Gain sets how hard the source hits the console. You want it strong on the meter with a little room to spare, set by the meter, not by ear.', text: 'Set the GAIN so the input meter sits in the healthy zone.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.input },
-      { title: 'Faders to unity', target: ['ch5-fader', 'master-fader'], teach: 'With the gain set, the channel and master faders live at unity, the U mark. That is where they are built to run.', text: 'Release PFL, unmute the playback and the master, and bring both faders up to unity.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.fader && ctx.gainStatus.master },
+      { title: 'Check it in PFL', target: 'ch7-pfl', teach: 'PFL lets you hear and meter a channel in your headphones before the room does. Always set a level in PFL first.', text: 'PFL the playback so you can set it in your headphones first.', done: (ctx) => ctx.pflChecked || (ctx.state.channels[6] && ctx.state.channels[6].solo) },
+      { title: 'Set the gain', target: 'ch7-gain', teach: 'Gain sets how hard the source hits the console. You want it strong on the meter with a little room to spare, set by the meter, not by ear.', text: 'Set the GAIN so the input meter sits in the healthy zone.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.input },
+      { title: 'Faders to unity', target: ['ch7-fader', 'master-fader'], teach: 'With the gain set, the channel and master faders live at unity, the U mark. That is where they are built to run.', text: 'Release PFL, unmute the playback and the master, and bring both faders up to unity.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.fader && ctx.gainStatus.master },
       { title: 'Set the room level', target: ['out-pa-l', 'out-pa-r'], teach: 'Gain and faders are set, so set the room volume with the PA, not by pushing a fader. A show sits above the all-day-safe line by nature, so aim for the green target band on the loudness meter, not the quietest reading.', text: 'Bring the PA volume up until the loudness meter sits in the green target band.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.65; } },
     ],
     sabotage: (s) => {
       // Continuous with Power-On: rig on, console fully zeroed. Channel muted,
       // fader 0, GAIN all the way down. Master muted, fader 0. PA speaker volume
       // all the way down too, since the student sets the room level here.
-      s.channels[4].mute = true;
-      s.channels[4].fader = 0;
-      s.channels[4].gain = 0;
-      s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
+      s.channels[6].mute = true;
+      s.channels[6].fader = 0;
+      s.channels[6].gain = 0;
+      s.channels[6].aux1 = 0; s.channels[6].aux2 = 0;
       s.master.mute = true; s.master.fader = 0;
       s.outputs.pa_l.volume = 0; s.outputs.pa_r.volume = 0;
       return s;
@@ -283,7 +283,7 @@ window.LEVELS = [
     // stay as set in Level 2. The wedge volumes the student sets here are kept
     // for the rest of the build (Levels 4-7 start with them up).
     task: true,
-    involves: [5],
+    involves: [7],
     verifyEach: [
       { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 plays' },
       { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 plays' },
@@ -292,17 +292,17 @@ window.LEVELS = [
     symptom: 'The PA is set. Now bring up your monitor wedges. AUX 1 feeds Wedge 1, AUX 2 feeds Wedge 2. Each wedge checks off once it plays and stays checked.',
     hint: 'Turn up AUX 1 on the playback channel and bring up the Wedge 1 volume on stage until it plays. Do the same with AUX 2 for Wedge 2. Each wedge gets checked off once it is playing.',
     hints: [
-      { title: 'Wedge 1', target: 'ch5-aux', teach: 'A wedge only plays what you send it. AUX 1 is the feed to Wedge 1, and the wedge has its own volume on stage.', text: 'Wedge 1: turn up AUX 1 on the playback, then raise the Wedge 1 volume until it plays.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
-      { title: 'Wedge 2', target: 'ch5-aux', teach: 'Same idea on the next monitor: AUX 2 feeds Wedge 2. Proving each speaker now means no surprises once the band is on.', text: 'Wedge 2: same again with AUX 2 and the Wedge 2 volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
+      { title: 'Wedge 1', target: 'ch7-aux', teach: 'A wedge only plays what you send it. AUX 1 is the feed to Wedge 1, and the wedge has its own volume on stage.', text: 'Wedge 1: turn up AUX 1 on the playback, then raise the Wedge 1 volume until it plays.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
+      { title: 'Wedge 2', target: 'ch7-aux', teach: 'Same idea on the next monitor: AUX 2 feeds Wedge 2. Proving each speaker now means no surprises once the band is on.', text: 'Wedge 2: same again with AUX 2 and the Wedge 2 volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
     ],
     sabotage: (s) => {
       // Carried from Set the Input Level: good input, faders at unity, PA set.
       // The wedges are not up yet: sends closed, wedge volumes down. Playback is
       // a hot line source, so its healthy gain sits low on the knob (~0.20).
-      s.channels[4].mute = false;
-      s.channels[4].gain = window.HEALTHY_GAIN_BY_CH[4];
-      s.channels[4].fader = 0.75;
-      s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
+      s.channels[6].mute = false;
+      s.channels[6].gain = window.HEALTHY_GAIN_BY_CH[6];
+      s.channels[6].fader = 0.75;
+      s.channels[6].aux1 = 0; s.channels[6].aux2 = 0;
       s.master.fader = 0.75; s.master.mute = false;
       s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
       s.outputs.wedge.on = true; s.outputs.wedge.volume = 0; s.outputs.wedge.mute = false;
@@ -491,9 +491,9 @@ window.LEVELS = [
     // unity with healthy gain sit well under the clip threshold.
     task: true,
     requirePowerOn: true,
-    requirePflEach: [1, 2, 3, 4, 5],
+    requirePflEach: [1, 2, 3, 4, 7],
     gainStructure: { unity: 0.75, faderTol: 0.06 },
-    involves: [1, 2, 3, 4, 5],
+    involves: [1, 2, 3, 4, 7],
     verifyEach: [
       { source: 'playback', dest: 'pa',     min: 0.30, label: 'PA tested with playback' },
       { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 tested with playback' },
@@ -513,7 +513,7 @@ window.LEVELS = [
       { title: 'Power up in order', target: 'mixer-power', teach: 'Same as you practiced: source outward. Console first so its thump has nowhere to go, then the speakers.', text: 'Power on in order: console first, then both PA speakers and all four wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
       { title: 'Prove every speaker', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'Before a single mic matters, send playback to each speaker and confirm it plays. Catch a dead box now, not during the first song.', text: 'Test every speaker with playback: send it to the PA and both wedges.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.pa && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2 },
       { title: 'Power what needs it', target: ['ch2-phantom', 'ch3-phantom'], teach: 'The condenser and the active DI both need +48V. Switch them on while their channels are muted.', text: 'Turn +48V on (while muted) for the condenser (ch 2) and active DI (ch 3).', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom && ctx.state.channels[2] && ctx.state.channels[2].phantom },
-      { title: 'Check every input', target: null, teach: 'Walk the band one channel at a time. PFL each input and meter it before you ever bring it into the room.', text: 'Check every input in PFL before you bring it up: channels 1 through 5.', done: (ctx) => ctx.pflChannels && [1, 2, 3, 4, 5].every((ch) => ctx.pflChannels[ch]) },
+      { title: 'Check every input', target: null, teach: 'Walk the band one channel at a time. PFL each input and meter it before you ever bring it into the room.', text: 'Check every input in PFL before you bring it up: the four band channels and the playback.', done: (ctx) => ctx.pflChannels && [1, 2, 3, 4, 7].every((ch) => ctx.pflChannels[ch]) },
       { title: 'Bring the band up', target: null, teach: 'Now open them into the room, faders at unity, levels already set with the gain. The whole band, clean in the PA.', text: 'Bring the band up clean, faders at unity: vocals, bass, and keys in the PA.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.25) && hintReaches(ctx, 'vocal2', 'pa', 0.25) && hintReaches(ctx, 'guitar', 'pa', 0.25) && hintReaches(ctx, 'laptop', 'pa', 0.25) },
       { title: 'Give the singer her wedge', target: 'ch1-aux', teach: 'Last touch: the lead singer needs herself on stage. Open AUX 1 on her vocal and the show is ready.', text: 'Give the singer her wedge: open AUX 1 on her vocal.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
     ],
@@ -530,10 +530,10 @@ window.LEVELS = [
       for (let i = 0; i < s.channels.length; i++) {
         s.channels[i].mute = true;
         s.channels[i].fader = 0;
-        // Playback out (channel 5 is unused in the gig); every input starts at
-        // half its per-source healthy gain, so the student sets each by the
-        // meter from a weak-but-present start (no channel reads hot to begin).
-        s.channels[i].gain = i === 4 ? 0 : window.HEALTHY_GAIN_BY_CH[i] * 0.5;
+        // Playback out (the FOH stereo line is unused in the gig); every input
+        // starts at half its per-source healthy gain, so the student sets each by
+        // the meter from a weak-but-present start (no channel reads hot to begin).
+        s.channels[i].gain = s.channels[i].stereo ? 0 : window.HEALTHY_GAIN_BY_CH[i] * 0.5;
         s.channels[i].phantom = false;
         s.channels[i].aux1 = 0;
         s.channels[i].aux2 = 0;
@@ -581,7 +581,7 @@ window.LEVELS = [
       s.channels[1].mute = false; s.channels[1].fader = 0.55; s.channels[1].gain = window.HEALTHY_GAIN_BY_CH[1]; s.channels[1].phantom = true;  s.channels[1].aux1 = 0;    s.channels[1].aux2 = 0;
       s.channels[2].mute = false; s.channels[2].fader = 0.4;  s.channels[2].gain = window.HEALTHY_GAIN_BY_CH[2]; s.channels[2].phantom = true;  s.channels[2].aux1 = 0;    s.channels[2].aux2 = 0; s.channels[2].pan = 0.3;
       s.channels[3].mute = false; s.channels[3].fader = 0.4;  s.channels[3].gain = window.HEALTHY_GAIN_BY_CH[3]; s.channels[3].phantom = false; s.channels[3].aux1 = 0;    s.channels[3].aux2 = 0; s.channels[3].pan = 0.7;
-      s.channels[4].mute = true;  s.channels[4].fader = 0;    s.channels[4].gain = 0;   s.channels[4].aux1 = 0;        s.channels[4].aux2 = 0;
+      s.channels[6].mute = true;  s.channels[6].fader = 0;    s.channels[6].gain = 0;   s.channels[6].aux1 = 0;        s.channels[6].aux2 = 0;
       s.master = { ...s.master, mute: false, fader: 0.75 };
       s.mixer = { on: true };
       s.outputs.pa_l = { ...s.outputs.pa_l, on: true, volume: 0.6, mute: false };
@@ -639,7 +639,7 @@ function bandUp(s) {
     // Condenser (ch2) and active DI (ch3) need +48V to pass signal.
     s.channels[i].phantom = (i === 1 || i === 2);
   }
-  s.channels[4].mute = true; s.channels[4].fader = 0; s.channels[4].gain = 0;
+  s.channels[6].mute = true; s.channels[6].fader = 0; s.channels[6].gain = 0;
   s.master.mute = false; s.master.fader = 0.75;
   s.outputs.pa_l.on = true; s.outputs.pa_l.mute = false; s.outputs.pa_l.volume = 0.6;
   s.outputs.pa_r.on = true; s.outputs.pa_r.mute = false; s.outputs.pa_r.volume = 0.6;
@@ -745,7 +745,7 @@ window.PRACTICE_FAULTS = [
       if (s.dcas && s.dcas[di]) s.dcas[di].fader = 0;
     } },
   { key: 'soft-patch',   label: 'Input not patched', blurb: 'A channel is dead because its input is unassigned in the soft patch, even though the cable is fine.', par: 2, digital: true, apply: (s, rng) => {
-      if (!s.inputPatch) s.inputPatch = [1, 2, 3, 4, 5];
+      if (!s.inputPatch) s.inputPatch = [1, 2, 3, 4, 5, 6, 7];
       const ci = Math.floor((rng ? rng() : 0) * 4); // a band channel (0-3)
       s.inputPatch[ci] = 0;
     } },
@@ -896,7 +896,7 @@ window.PRACTICE_GOALS = [
       // passing signal, the PA and both wedges, one at a time. This checks the
       // OUTPUTS — it is NOT a line check (a line check verifies the inputs).
       for (let i = 0; i < 4; i++) { s.channels[i].mute = true; }
-      s.channels[4].mute = false; s.channels[4].gain = window.HEALTHY_GAIN_BY_CH[4]; s.channels[4].fader = 0.75; s.channels[4].aux1 = 0; s.channels[4].aux2 = 0;
+      s.channels[6].mute = false; s.channels[6].gain = window.HEALTHY_GAIN_BY_CH[6]; s.channels[6].fader = 0.75; s.channels[6].aux1 = 0; s.channels[6].aux2 = 0;
       s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.6 };
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, mute: false, volume: 0.6 };
       return {
