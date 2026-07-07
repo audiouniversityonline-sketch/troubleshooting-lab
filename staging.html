@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=36"></script>
+<script src="content-staging.js?v=37"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4496,7 +4496,7 @@ function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRe
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, stageHidden }) {
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, stageHidden, briefBelow = false }) {
   const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
   const [hoverCable, setHoverCable] = useS2(null);
   const isMobile = useViewport();
@@ -5044,6 +5044,14 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   const retLive = (ch) => (ch && ofanLive[ch]) ? busActiveFor(ofanLive[ch]) : false;
   const topo = state.topology || {};
 
+  const consoleEl = (
+    <ConsolePanel state={state} setState={setState} audio={audio}
+      channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef}
+      aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref}
+      fanOutRef={fanOutRef} sourceKeys={sourceKeys}
+      surface={surface} onSetSurface={onSetSurface} canDigital={canDigital} surfaceLocked={surfaceLocked}/>
+  );
+
   return (
     <div ref={containerRef} style={{
       position: 'relative', width: '100%',
@@ -5057,38 +5065,43 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           Stage and brief share the wide LEFT column; the stage uses the
           horizontal width, the brief uses minimal vertical height in a
           horizontal banner layout below the stage. */}
-      <div style={{
-        display: 'flex', flexDirection: isMobile ? 'column' : 'row',
-        gap: isMobile ? 8 : 12, zIndex: 2, alignItems: 'stretch',
-      }}>
-        {/* LEFT column: the stage (hidden when stageHidden) with the brief below
-            it. When the stage is hidden the brief stays in this column beside the
-            console — centered vertically — so the canvas height is the console's
-            height, not console + brief (which would scale the console down). */}
+      {briefBelow ? (
+        /* Stage hidden + big desk: the console is width-limited with spare
+           vertical room, so the brief drops BELOW it (a banner) and the console
+           takes the full width. */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', zIndex: 2 }}>
+          <div style={{ flexShrink: 0, display: 'flex' }}>{consoleEl}</div>
+          <div style={{ width: '100%', maxWidth: 1100 }}>{sidebarContent}</div>
+        </div>
+      ) : (
         <div style={{
-          flex: 1, minWidth: 0,
-          display: 'flex', flexDirection: 'column', gap: 12,
-          justifyContent: stageHidden ? 'center' : 'flex-start',
+          display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 8 : 12, zIndex: 2, alignItems: 'stretch',
         }}>
-          {!stageHidden && (
-            <div ref={stageZoneRef}>
-              <StageRow state={state} setState={setState} audio={audio}
-                sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
-                snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
-                wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
-                paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
-            </div>
-          )}
-          {sidebarContent}
+          {/* LEFT column: the stage (hidden when stageHidden) with the brief below
+              it. When the stage is hidden at native size the brief stays in this
+              column BESIDE the console — centered vertically — so the canvas height
+              is the console's height, not console + brief (which would scale the
+              console down on a height-limited screen). */}
+          <div style={{
+            flex: 1, minWidth: 0,
+            display: 'flex', flexDirection: 'column', gap: 12,
+            justifyContent: stageHidden ? 'center' : 'flex-start',
+          }}>
+            {!stageHidden && (
+              <div ref={stageZoneRef}>
+                <StageRow state={state} setState={setState} audio={audio}
+                  sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
+                  snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
+                  wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
+                  paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef} wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
+              </div>
+            )}
+            {sidebarContent}
+          </div>
+          <div style={{ flexShrink: 0, display: 'flex' }}>{consoleEl}</div>
         </div>
-        <div style={{ flexShrink: 0, display: 'flex' }}>
-          <ConsolePanel state={state} setState={setState} audio={audio}
-            channelRefs={channelRefs} masterLRef={masterLRef} masterRRef={masterRRef}
-            aux1Ref={aux1Ref} aux2Ref={aux2Ref} aux3Ref={aux3Ref} aux4Ref={aux4Ref}
-            fanOutRef={fanOutRef} sourceKeys={sourceKeys}
-            surface={surface} onSetSurface={onSetSurface} canDigital={canDigital} surfaceLocked={surfaceLocked}/>
-        </div>
-      </div>
+      )}
 
       {!stageHidden && (
       <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', zIndex: 5 }}>
@@ -5487,6 +5500,11 @@ const DESIGN_W_STAGE_HIDDEN = 1300;
 // whole board to fit instead of letting a wide console overflow. Native boards
 // (no padding) keep DESIGN_W exactly, so nothing changes for existing content.
 const STRIP_UNIT = 108;
+// Stage hidden AND a big desk selected: the brief drops BELOW the console (a
+// banner) so the console takes the full width. The canvas is then just the
+// console's width (no beside-brief column), growing per added strip. Native at
+// 755; this base leaves a little margin so the console never clips.
+const DESIGN_W_CONSOLE_ONLY = 800;
 
 // Member progress persistence. Completed levels are saved to the browser keyed
 // by stable level id, so a monthly content drop never wipes what a student
@@ -8950,10 +8968,17 @@ function App() {
   const effConsoleSize = sizeSelectable ? consoleSize : 0;
   const nRealCh = state && Array.isArray(state.channels) ? state.channels.filter((c) => !c.unused).length : 5;
   const nCh = state && Array.isArray(state.channels) ? state.channels.length : nRealCh;
-  const baseW = effStageHidden ? DESIGN_W_STAGE_HIDDEN : DESIGN_W;
+  const stripsExtra = Math.max(0, nCh - nRealCh);
+  // Brief placement when the stage is hidden. A big desk is WIDTH-limited with
+  // spare vertical room, so the brief drops BELOW the console to reclaim the
+  // horizontal space the beside-column ate. Native is HEIGHT-limited (the
+  // console is tall), so the brief stays BESIDE it — below would make the taller
+  // canvas scale the console down (the v35 fix). So: below only for a big desk.
+  const briefBelow = effStageHidden && effConsoleSize > 0;
   // Added (unused) strips widen the canvas by their footprint so scale-to-fit
   // shrinks the whole board to fit; a native board keeps DESIGN_W exactly.
-  const designW = baseW + Math.max(0, nCh - nRealCh) * STRIP_UNIT;
+  const baseW = briefBelow ? DESIGN_W_CONSOLE_ONLY : (effStageHidden ? DESIGN_W_STAGE_HIDDEN : DESIGN_W);
+  const designW = baseW + stripsExtra * STRIP_UNIT;
   const fitScale = useFitScale(fitViewportRef, designW, designH, !isMobile);
 
   // Keep the rendered channel count in step with the selected desk size. Padding
@@ -9287,7 +9312,7 @@ function App() {
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
                 surface={(level.isWalkthrough || level.isLesson) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital}
-                surfaceLocked={level.isWalkthrough || level.isLesson} stageHidden={effStageHidden}
+                surfaceLocked={level.isWalkthrough || level.isLesson} stageHidden={effStageHidden} briefBelow={briefBelow}
                 sidebarContent={
                   <StableSlot levelKey={levelIdx}>
                   {solved
