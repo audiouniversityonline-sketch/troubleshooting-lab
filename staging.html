@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=68"></script>
+<script src="content-staging.js?v=69"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6319,6 +6319,11 @@ SCENARIOS.push({
   sabotage: () => {
     const s = bandState();
     ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => { if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.7; } });
+    // Mute the FOH playback line (the 15/16 stereo strip) by default: the 14
+    // inputs already ARE the performance, so the playback music bed would clash
+    // with them. The user can unmute it if they want to hear the reference mix.
+    const pb = s.channels.find((c) => c.stereo);
+    if (pb) pb.mute = true;
     return s;
   },
 });
