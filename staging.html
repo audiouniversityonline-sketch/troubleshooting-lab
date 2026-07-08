@@ -1337,6 +1337,7 @@ window.defaultState = defaultState;
 // mics/DIs + playback stereo = 16 inputs. (hi-hat + the stereo keys L/R stay in
 // the SOURCES catalog, just unpatched.)
 const BAND_KEYS = ['kick','snare','rack','floor','ohl','ohr','bass','egtr','agtr','keys','vx1','vx2','vx3','vx4'];
+window.BAND_KEYS = BAND_KEYS;
 // Every band input meters + plays its recorded stem, so it needs the analyser
 // tap the meter loop reads. (playback + the four MX-8 sources are already listed.)
 BAND_KEYS.forEach((k) => { if (!METER_SOURCES.includes(k)) METER_SOURCES.push(k); });
@@ -3407,7 +3408,11 @@ function LaptopIcon({ size = 60, glow = false }) {
   );
 }
 
-function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, onMute, onPatch, patchTarget, patchColor, signalFlowing, onOpenPlacement }) {
+function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, onMute, onPatch, patchTarget, patchColor, signalFlowing, onOpenPlacement, compact }) {
+  // Compact = the clustered drum mics on the 16-channel stage: a small tile
+  // (icon + short label + patch chip), no type sub-label or placement button, so
+  // six of them pack into the kit cluster without crowding the stage.
+  const iconSz = compact ? 20 : 28;
   return (
     <div
       onClick={onTest}
@@ -3416,28 +3421,30 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
         background: isTesting ? 'linear-gradient(180deg,#2c2c30 0%, #1f1f23 100%)' : 'linear-gradient(180deg,#1c1c1f 0%, #141417 100%)',
         border: isTesting ? '1px solid var(--accent)' : '1px solid #2a2a2e',
         borderRadius: 6,
-        padding: '6px 8px',
-        display: 'flex', gap: 8, alignItems: 'center',
+        padding: compact ? '4px 5px' : '6px 8px',
+        display: 'flex', gap: compact ? 5 : 8, alignItems: 'center',
         cursor: 'pointer',
         boxShadow: isTesting ? '0 0 0 2px rgba(255,201,58,0.2)' : 'none',
         transition: 'all 0.15s',
       }}
     >
-      <div style={{ width: 42, display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0 }}>
-        {kind === 'dynamic' && <MicSm58Icon size={28} glow={signalFlowing}/>}
-        {kind === 'condenser' && <MicCondenserIcon size={28} glow={signalFlowing}/>}
-        {kind === 'di' && <DIBoxIcon size={34} glow={signalFlowing}/>}
-        {kind === 'line' && <LaptopIcon size={42} glow={signalFlowing}/>}
+      <div style={{ width: compact ? 24 : 42, display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0 }}>
+        {kind === 'dynamic' && <MicSm58Icon size={iconSz} glow={signalFlowing}/>}
+        {kind === 'condenser' && <MicCondenserIcon size={iconSz} glow={signalFlowing}/>}
+        {kind === 'di' && <DIBoxIcon size={compact ? 24 : 34} glow={signalFlowing}/>}
+        {kind === 'line' && <LaptopIcon size={compact ? 28 : 42} glow={signalFlowing}/>}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <div className="display" style={{ fontSize: 12, fontWeight: 700, color: isTesting ? 'var(--accent)' : 'var(--ink)', lineHeight: 1.1 }}>{label}</div>
-          {isTesting && <div className="mono" style={{ fontSize: 7.5, color: 'var(--accent)', letterSpacing: 0.5, fontWeight: 700 }}>◉ TEST</div>}
+          <div className="display" style={{ fontSize: compact ? 10 : 12, fontWeight: 700, color: isTesting ? 'var(--accent)' : 'var(--ink)', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+          {isTesting && !compact && <div className="mono" style={{ fontSize: 7.5, color: 'var(--accent)', letterSpacing: 0.5, fontWeight: 700 }}>◉ TEST</div>}
         </div>
+        {!compact && (
         <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 1 }}>
           {kind === 'condenser' ? 'Condenser · +48V' : kind === 'dynamic' ? 'Dynamic' : kind === 'di' ? (diActive ? 'Active DI · +48V' : 'Passive DI') : 'Line level'}
         </div>
-        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+        )}
+        <div style={{ display: 'flex', gap: 4, marginTop: compact ? 2 : 4 }}>
           <div
             onClick={(e) => { e.stopPropagation(); onPatch(); }}
             className="mono ui-no-select"
@@ -4017,8 +4024,9 @@ function StreamInterface({ on, volume, level, onToggleOn, onVolume, isInspected,
   );
 }
 
-function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive }) {
-  const ports = [1, 2, 3, 4];
+function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive, nPorts = 4 }) {
+  const ports = Array.from({ length: nPorts }, (_, i) => i + 1);
+  const wide = nPorts > 6;
   // The RETURN side of the snake is its own bundle, numbered from 1 (a
   // bidirectional snake), so the six out ports are channels 1-6, independent of
   // the input ports 1-4. Which SPEAKER hears which signal is decided by the
@@ -4040,15 +4048,15 @@ function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive }) {
       padding: '5px 8px 8px',
       display: 'flex', flexDirection: 'column', gap: 3,
       position: 'relative',
-      width: 176,
+      width: wide ? 320 : 176,
       boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
     }}>
       <div className="mono" style={{ fontSize: 6.5, color: 'var(--cool)', letterSpacing: 1, fontWeight: 700, textAlign: 'center' }}>STAGE BOX</div>
 
-      {/* INPUTS — sources plug in here */}
+      {/* INPUTS — sources plug in here. Wrap to a second row on the big band box. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, fontWeight: 700, width: 14 }}>IN</div>
-        <div style={{ display: 'flex', gap: 3, justifyContent: 'space-around', flex: 1 }}>
+        <div style={{ display: 'flex', gap: 3, rowGap: 5, flexWrap: 'wrap', justifyContent: 'space-around', flex: 1 }}>
           {ports.map(p => {
             const active = activePorts.find(a => a.port === p);
             const flowing = active && active.flowing;
@@ -4269,7 +4277,9 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // speaker reads as "on" when the amp is on, not via any switch of its own.
   const ampPowered = !!(state.outputs.amp && state.outputs.amp.on);
   const paShowsOn = isPassive ? ampPowered : null;
-  const activePorts = [1, 2, 3, 4].map(p => {
+  const big16 = !!state.big16;
+  const nPorts = big16 ? sourceKeys.length : 4;
+  const activePorts = Array.from({ length: nPorts }, (_, i) => i + 1).map(p => {
     const srcKey = sourceKeys.find(k => state.cables[k] === p);
     if (!srcKey) return null;
     const ch = state.fanOut ? state.fanOut[p - 1] : p;
@@ -4296,15 +4306,33 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // PA R — evenly spaced. Their cables exit each component's bottom edge
   // and run along the front rail to the stage box at the upstage-right
   // corner. Source cables route along the back rail.
-  const SRC_W = 154;
-  // Stage-plot layout (audience perspective):
-  //   downstage (mid-stage in our coords): Vocal Mic 1 + Wedge 1 at 31%,
-  //     Vocal Mic 2 + Wedge 2 at 55% — evenly spaced between PA L (8%) and
-  //     PA R (78%) so PA L → V1 → V2 → PA R sit on equal thirds.
-  //   upstage:  Bass DI at 14% (mirrors Keys DI at 72%, symmetric around
-  //     43%) and Keyboard DI at 72%. Both stay clear of the stage-box port
-  //     X range on the right so input cables don't pass through them.
-  const positions = {
+  const SRC_W = big16 ? 96 : 154;
+  // The six drum mics render as a compact cluster upstage-centre (the "DRUMS"
+  // box), the way a real stage plot groups the kit; every other instrument sits
+  // as its own card around the stage. Each drum still has its own cable to the
+  // stage box, so the kit is 6 real inputs, not one.
+  const DRUMS = ['kick', 'snare', 'rack', 'floor', 'ohl', 'ohr'];
+  const isDrum = (k) => big16 && DRUMS.indexOf(k) !== -1;
+  // Stage-plot layout (audience perspective, downstage = bottom):
+  //   MX-8: Vocal 1/2 mid-stage over their wedges, Bass + Keys DI upstage.
+  //   Band: drum cluster + drummer vocal upstage-centre; bass and keys upstage
+  //     corners; the two guitars mid; the three front vocals downstage.
+  const positions = big16 ? {
+    kick:  { top: 2,   left: '42%', marginLeft: -(SRC_W / 2) },
+    snare: { top: 2,   left: '50%', marginLeft: -(SRC_W / 2) },
+    rack:  { top: 2,   left: '58%', marginLeft: -(SRC_W / 2) },
+    floor: { top: 54,  left: '42%', marginLeft: -(SRC_W / 2) },
+    ohl:   { top: 54,  left: '50%', marginLeft: -(SRC_W / 2) },
+    ohr:   { top: 54,  left: '58%', marginLeft: -(SRC_W / 2) },
+    vx4:   { top: 30,  left: '68%', marginLeft: -(SRC_W / 2) },              // drummer's vocal, beside the kit
+    bass:  { top: 40,  left: '9%',  marginLeft: -(SRC_W / 2) },              // upstage left
+    keys:  { top: 40,  left: '91%', marginLeft: -(SRC_W / 2) },             // upstage right
+    egtr:  { top: 150, left: '19%', marginLeft: -(SRC_W / 2) },
+    agtr:  { top: 150, left: '81%', marginLeft: -(SRC_W / 2) },
+    vx1:   { top: 288, left: '31%', marginLeft: -(SRC_W / 2) },             // front line, over the wedges
+    vx2:   { top: 288, left: '50%', marginLeft: -(SRC_W / 2) },
+    vx3:   { top: 288, left: '69%', marginLeft: -(SRC_W / 2) },
+  } : {
     vocal:  { top: 180, left: '31%', marginLeft: -(SRC_W / 2) },            // vocal 1 — directly above Wedge 1, on the first third
     vocal2: { top: 180, left: '55%', marginLeft: -(SRC_W / 2) },            // vocal 2 — directly above Wedge 2, on the second third
     guitar: { top: 50,  left: '14%', marginLeft: -(SRC_W / 2) },            // bass DI — upstage left (mirror of Keys)
@@ -4320,7 +4348,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     }}>
       <ZoneHeader label="Stage" sublabel="band, sources, PA + wedges · downstage ↓ audience" badge="LIVE AREA" badgeColor="var(--green)"/>
 
-      <div style={{ position: 'relative', minHeight: 480 }}>
+      <div style={{ position: 'relative', minHeight: big16 ? 560 : 480 }}>
         {/* Downstage row — PA L, Wedge 1, Wedge 2, PA R, evenly spaced along
             the front of the stage. Each one's cable comes out of its bottom
             edge and runs along the front rail back to the stage box. */}
@@ -4428,18 +4456,19 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               label={window.SOURCES[k].label}
               kind={window.SOURCES[k].kind}
               diActive={window.SOURCES[k].diActive}
+              compact={isDrum(k)}
               onOpenPlacement={onOpenPlacement}
               muted={state.sourceMute[k]}
               isTesting={state.testing === k}
               onTest={() => setState({ ...state, testing: k })}
               onMute={() => setState({ ...state, sourceMute: { ...state.sourceMute, [k]: !state.sourceMute[k] } })}
               onPatch={() => {
-                // Cycle this source through 0 (unplugged) → 1 → 2 → 3 → 4 → 0.
+                // Cycle this source through 0 (unplugged) → 1 → … → nPorts → 0.
                 // Functional setState so a rapid double-click sees the latest
                 // state, and the pop checks use the same `prev` we mutate.
                 setState(prev => {
                   const cur = prev.cables[k];
-                  const next = (cur + 1) % 5;
+                  const next = (cur + 1) % (nPorts + 1);
                   const result = { ...prev, cables: { ...prev.cables, [k]: next } };
                   const fanOut = prev.fanOut || [1, 2, 3, 4];
                   // DISCONNECT side: pulling the cable out of its current
@@ -4473,6 +4502,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             portRefs={portRefs}
             outRefs={outRefs}
             activePorts={activePorts}
+            nPorts={nPorts}
             snakeOutRef={snakeOutRef}
             /* Out-port LEDs reflect what's riding each snake return channel
                (pre-speaker): the desk output patched to that channel at FOH
@@ -4850,7 +4880,10 @@ function Stage16({ state, setState, audio }) {
 }
 
 function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, stageHidden, stage16Open, briefBelow = false }) {
-  const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
+  // The stage's source list follows the board: the four MX-8 inputs, or the full
+  // 14-input band on the big desk. This is what makes the cable system, the
+  // stage box, and the fan-out draw every band input.
+  const sourceKeys = state.big16 ? (window.BAND_KEYS || []) : ['vocal', 'guitar', 'laptop', 'vocal2'];
   const [hoverCable, setHoverCable] = useS2(null);
   const isMobile = useViewport();
   const containerRef = useR2(null);
@@ -5407,22 +5440,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       surface={surface} onSetSurface={onSetSurface} canDigital={canDigital} surfaceLocked={surfaceLocked}/>
   );
 
-  // 16-channel STAGE view — full panel, mutually exclusive with the mixer: show
-  // the stage (sub-snakes + inputs + end-to-end path) OR the console, not both.
-  if (state.big16 && stage16Open) {
-    return (
-      <div ref={containerRef} style={{
-        position: 'relative', width: '100%',
-        padding: isMobile ? '6px 8px 12px' : '8px 14px 12px',
-        display: 'flex', flexDirection: 'column', gap: 14,
-      }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', zIndex: 2 }}>
-          <div style={{ width: '100%', maxWidth: 1200 }}><Stage16 state={state} setState={setState} audio={audio}/></div>
-          <div style={{ width: '100%', maxWidth: 1100 }}>{sidebarContent}</div>
-        </div>
-      </div>
-    );
-  }
+  // 16-channel STAGE view: the full stage-plot (StageRow + cables) takes the
+  // whole panel and the console is hidden — you view the stage OR the mixer, not
+  // both. stageOnly forces the stage visible and drops the console; everywhere
+  // else the existing stageHidden behaviour is untouched.
+  const stageOnly = state.big16 && stage16Open;
+  const showStage = stageOnly || !stageHidden;
+  const effBriefBelow = briefBelow && !stageOnly;
 
   return (
     <div ref={containerRef} style={{
@@ -5437,7 +5461,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           Stage and brief share the wide LEFT column; the stage uses the
           horizontal width, the brief uses minimal vertical height in a
           horizontal banner layout below the stage. */}
-      {briefBelow ? (
+      {effBriefBelow ? (
         /* Stage hidden + big desk: the console is width-limited with spare
            vertical room, so the brief drops BELOW it (a banner) and the console
            takes the full width. */
@@ -5451,16 +5475,14 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           gap: isMobile ? 8 : 12, zIndex: 2, alignItems: 'stretch',
         }}>
           {/* LEFT column: the stage (hidden when stageHidden) with the brief below
-              it. When the stage is hidden at native size the brief stays in this
-              column BESIDE the console — centered vertically — so the canvas height
-              is the console's height, not console + brief (which would scale the
-              console down on a height-limited screen). */}
+              it. On the 16-channel stage view the stage fills the whole panel and
+              the console (right column) is dropped entirely. */}
           <div style={{
             flex: 1, minWidth: 0,
             display: 'flex', flexDirection: 'column', gap: 12,
-            justifyContent: stageHidden ? 'center' : 'flex-start',
+            justifyContent: showStage ? 'flex-start' : 'center',
           }}>
-            {!stageHidden && (
+            {showStage && (
               <div ref={stageZoneRef}>
                 <StageRow state={state} setState={setState} audio={audio}
                   sourceKeys={sourceKeys} sourceRefs={sourceRefs} portRefs={portRefs} outRefs={outRefs}
@@ -5471,11 +5493,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             )}
             {sidebarContent}
           </div>
-          <div style={{ flexShrink: 0, display: 'flex' }}>{consoleEl}</div>
+          {!stageOnly && <div style={{ flexShrink: 0, display: 'flex' }}>{consoleEl}</div>}
         </div>
       )}
 
-      {!stageHidden && (
+      {showStage && (
       <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', zIndex: 5 }}>
         {/* Cable path helpers. Two shapes:
               _cableCurve  — direct bezier from source to stage box. Used for
