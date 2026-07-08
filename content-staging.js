@@ -968,20 +968,27 @@ window.PRACTICE_GOALS = [
 // 16-channel board picks any live mic into any wedge. Rolled on its own chance in
 // PRACTICE.sabotage so it stays frequent on both boards and never stacks.
 //
-// Calibration (real-dB engine): the wedge's tallest resonance rings once the
-// mic's contribution to it crosses ~0.68 (FEED_0DB / 1.22). Start send 0.18 sits
-// far below that (silent). Win min 0.70 is just ABOVE the ring onset, so the only
-// way to satisfy it is to push through the ring and cut it out — pulling the send
-// back down to kill the ring would drop below the required level and fail. A
-// strong push lands ~0.75, where ONE band rings (the second onset is ~0.79), and
-// a surgical few-dB cut clears it while the level stays above 0.70.
+// Calibration (verified live against the engine, staging v72): the wedge's
+// tallest resonance rings once the singer's contribution to it crosses ~0.68
+// (FEED_0DB / 1.22), which a vocal reaches at an aux send of ~0.60. Start send
+// 0.18 sits far below that (contribution ~0.09, dead silent). Win min 0.69 is
+// just ABOVE the ring onset, so the ONLY way to satisfy it is to push through the
+// ring and cut it out: pulling the send back down to kill the ring drops below
+// 0.69 and fails, and at the lightest valid push a surgical one-band cut leaves
+// the level at ~0.70, still over the line. Push harder and a second band joins
+// (~0.79) — the real "back it off and cut" lesson, never an opening wall.
+// Restricted to VOCAL mics: a kick or tom can't reach 0.69 into a wedge, and a
+// singer's wedge is the real feedback-and-monitor scenario.
 window.MONITOR_RING = {
   key: 'monitor-ring', label: 'Ring out the monitor', par: 2,
   apply: (s, rng) => {
     const r = rng || (() => 0.5);
     let ci, auxKey, wedgeKey, wedgeLabel;
     if (s.big16) {
-      ci = pbPick(pbMics(s), r);
+      // Vocal mics only: a drum/tom mic can't reach the required level into a
+      // wedge, and the ring-out-a-wedge lesson is a singer's monitor.
+      const vocs = pbMics(s).filter((i) => /^(vx\d|vocal)/.test(window.sourceFor(s, i) || ''));
+      ci = pbPick(vocs.length ? vocs : pbMics(s), r);
       if (ci < 0) ci = 0;
       const opts = [['aux1', 'wedge', 'Wedge 1'], ['aux2', 'wedge2', 'Wedge 2'], ['aux3', 'wedge3', 'Wedge 3'], ['aux4', 'wedge4', 'Wedge 4']];
       const o = opts[Math.floor(r() * opts.length)];
@@ -998,11 +1005,11 @@ window.MONITOR_RING = {
     s.channels[ci][auxKey] = 0.18;
     if (s.outputs[wedgeKey]) { s.outputs[wedgeKey].on = true; s.outputs[wedgeKey].mute = false; s.outputs[wedgeKey].volume = 0.78; }
     return {
-      conditions: [{ source: src, dest: wedgeKey, min: 0.70 }],
-      symptom: chLabel + ' wants more in ' + wedgeLabel + '. Bring her monitor up to a strong level. As you push it, the wedge starts to ring. Find the glowing band on that wedge\'s Monitor EQ, cut it a touch to stop the ring, and leave the level up.',
+      conditions: [{ source: src, dest: wedgeKey, min: 0.69 }],
+      symptom: 'The singer on ' + chLabel + ' wants more in ' + wedgeLabel + '. Bring that monitor up to a strong level. As you push the send, the wedge starts to ring. Find the glowing band on ' + wedgeLabel + '\'s Monitor EQ, cut it a touch to stop the ring, and leave the level up.',
       title: 'Give the Monitor More',
-      hint: 'Raise the ' + auxKey.toUpperCase() + ' send on ' + chLabel + '\'s channel toward a strong level. When it rings, open that wedge\'s Monitor EQ, find the glowing band, and pull it down a few dB, just enough to stop the ring. Keep the level up, do not pull the send back down.',
-      solution: chLabel + '\'s monitor brought up to a strong level with the ring cut out on the wedge EQ. Pulling the send back down would lose her the monitor; ringing out the one glowing band keeps her level and kills the feedback.',
+      hint: 'Raise the ' + auxKey.toUpperCase() + ' send on ' + chLabel + ' toward a strong level. When it rings, open ' + wedgeLabel + '\'s Monitor EQ, find the glowing band, and pull it down a few dB, just enough to stop the ring. Keep the level up, do not pull the send back down.',
+      solution: 'The monitor on ' + chLabel + ' brought up to a strong level with the ring cut out on the wedge EQ. Pulling the send back down would lose the singer the monitor; ringing out the one glowing band keeps the level and kills the feedback.',
     };
   },
 };
