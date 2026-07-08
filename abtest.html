@@ -9,18 +9,24 @@
   :root { color-scheme: dark; }
   body { margin: 0; background: #0d0f12; color: #e6e8eb; font: 14px/1.5 -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px; }
   h1 { font-size: 20px; margin: 0 0 4px; }
-  .sub { color: #9aa2ad; margin: 0 0 20px; max-width: 760px; }
+  h2 { font-size: 15px; margin: 28px 0 6px; }
+  .sub { color: #9aa2ad; margin: 0 0 16px; max-width: 820px; }
   .sub b { color: #e6e8eb; }
-  table { border-collapse: collapse; width: 100%; max-width: 760px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #222831; }
+  .env { color:#7f8894; font-size:12px; margin:0 0 20px; font-variant-numeric:tabular-nums; }
+  .steps { display:flex; flex-direction:column; gap:8px; max-width:820px; }
+  .step { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid #222831; border-radius:8px; }
+  .step .lbl { flex:1; }
+  .step .lbl b { color:#e6e8eb; }
+  .step .lbl span { color:#7f8894; font-size:12px; }
+  table { border-collapse: collapse; width: 100%; max-width: 820px; margin-top:8px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #222831; }
   th { color: #9aa2ad; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   td.name { font-weight: 700; }
   td.info { color: #7f8894; font-variant-numeric: tabular-nums; font-size: 12px; }
-  button { background: #1b2027; color: #e6e8eb; border: 1px solid #313a45; border-radius: 6px; padding: 6px 12px; cursor: pointer; font: inherit; }
+  button { background: #1b2027; color: #e6e8eb; border: 1px solid #313a45; border-radius: 6px; padding: 7px 13px; cursor: pointer; font: inherit; white-space:nowrap; }
   button:hover { background: #232a33; }
   button.on { background: #2e7d5b; border-color: #2e7d5b; color: #fff; }
-  button.mix.on { background: #2f6ba3; border-color: #2f6ba3; }
-  .now { margin: 16px 0 0; color: #9aa2ad; min-height: 20px; }
+  .now { margin: 18px 0 0; color: #9aa2ad; min-height: 20px; max-width:820px; }
   .now b { color: #e6e8eb; }
   code { background: #1b2027; padding: 1px 5px; border-radius: 4px; }
 </style>
@@ -28,21 +34,18 @@
 <body>
 <h1>Stem A/B Test</h1>
 <p class="sub">
-  This page plays the raw <code>.wav</code> stems <b>completely outside the Troubleshooting Lab app</b> — no console,
-  no EQ, no metering, no React. It exists to answer one question: does the file itself sound right on your machine?
+  This page plays your raw <code>.wav</code> stems <b>outside the Troubleshooting Lab app</b>, then rebuilds the app's
+  signal path one layer at a time so we can hear exactly which layer changes the sound. Only one thing plays at a time.
 </p>
-<p class="sub">
-  <b>Raw</b> plays the buffer straight to your speakers at unity gain (nothing touches it).
-  <b>Mixer path</b> plays the same buffer through the exact chain the app uses for a band stem in v57 — a 20&nbsp;Hz
-  high-pass (off, transparent) and a unity gain, and nothing else. If <b>Raw</b> and <b>Mixer path</b> sound identical,
-  the app's signal path is transparent. If <b>Raw</b> already sounds wrong, it is your output or monitoring, not the app.
-  Only one clip plays at a time so you can A/B cleanly.
-</p>
+<p class="env" id="env">Audio engine: not started yet.</p>
 
-<table>
-  <thead><tr><th>Stem</th><th>Decoded</th><th></th><th></th></tr></thead>
-  <tbody id="rows"></tbody>
-</table>
+<h2>Snare, layer by layer</h2>
+<p class="sub">Play these top to bottom. Tell me the first one that stops sounding like the raw snare.</p>
+<div class="steps" id="snareSteps"></div>
+
+<h2>Every stem, raw</h2>
+<p class="sub">Each stem played straight to your speakers, nothing added.</p>
+<table><thead><tr><th>Stem</th><th>Decoded</th><th></th></tr></thead><tbody id="rows"></tbody></table>
 
 <p class="now" id="now">Nothing playing.</p>
 
@@ -53,70 +56,117 @@ const STEMS = [
   ['Acoustic Gtr','agtr'],['Keys','keys'],['Vocal 1','vocal1'],['Vocal 2','vocal2'],
   ['Vocal 3','vocal3'],['Vocal 4','vocal4'],
 ];
-const V = 6; // matches CLIP_SOURCES ?v= in the app
+const V = 6;
+const FULL_EQ_HZ = [63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000];
 let ctx = null;
-const buffers = {};        // key -> AudioBuffer
-let current = null;        // { src, key, mode }
+const buffers = {};
+let current = null;      // { nodes:[...stoppables], key, mode }
 const nowEl = document.getElementById('now');
+const envEl = document.getElementById('env');
 
-function ensureCtx() {
-  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-  if (ctx.state === 'suspended') ctx.resume();
+function ensureCtx(){
+  if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
+  if(ctx.state==='suspended') ctx.resume();
+  envEl.textContent = 'Audio engine: sample rate ' + ctx.sampleRate + ' Hz'
+    + (ctx.baseLatency? (' · output latency ~' + Math.round((ctx.baseLatency+(ctx.outputLatency||0))*1000) + ' ms'):'')
+    + '. (Your files are 48000 Hz; if this says 44100, the browser is resampling.)';
   return ctx;
 }
-
-async function loadBuffer(key, infoCell) {
-  if (buffers[key]) return buffers[key];
+async function loadBuffer(key, infoCell){
+  if(buffers[key]) return buffers[key];
   const c = ensureCtx();
-  const ab = await fetch('audio/' + key + '.wav?v=' + V).then(r => r.arrayBuffer());
+  const ab = await fetch('audio/'+key+'.wav?v='+V).then(r=>r.arrayBuffer());
   const buf = await c.decodeAudioData(ab);
   buffers[key] = buf;
-  infoCell.textContent = buf.length.toLocaleString() + ' smp · ' + buf.sampleRate/1000 + 'k · ' + buf.duration.toFixed(2) + 's';
+  if(infoCell) infoCell.textContent = buf.length.toLocaleString()+' smp · '+buf.sampleRate/1000+'k · '+buf.duration.toFixed(2)+'s';
   return buf;
 }
+function stopCurrent(){
+  if(current){ current.nodes.forEach(n=>{try{n.stop();}catch(e){}}); current=null; }
+  document.querySelectorAll('button.on').forEach(b=>b.classList.remove('on'));
+  nowEl.innerHTML='Nothing playing.';
+}
+function src(buf){ const c=ensureCtx(); const s=c.createBufferSource(); s.buffer=buf; s.loop=true; return s; }
 
-function stopCurrent() {
-  if (current) { try { current.src.stop(); } catch(e){} current = null; }
-  document.querySelectorAll('button.on').forEach(b => b.classList.remove('on'));
-  nowEl.innerHTML = 'Nothing playing.';
+// build the app's monitor-EQ bank (25 peaking biquads, Q 4.3, all flat = 0 dB, exactly like PFL)
+function eqBank(c){
+  const nodes = FULL_EQ_HZ.map(hz=>{ const b=c.createBiquadFilter(); b.type='peaking'; b.frequency.value=hz; b.Q.value=4.3; b.gain.value=0; return b; });
+  for(let i=0;i<nodes.length-1;i++) nodes[i].connect(nodes[i+1]);
+  return { first: nodes[0], last: nodes[nodes.length-1] };
 }
 
-async function play(key, label, mode, btn, infoCell) {
-  const wasThis = current && current.key === key && current.mode === mode;
+async function playSnare(mode, btn){
+  const wasThis = current && current.mode===mode;
   stopCurrent();
-  if (wasThis) return;              // toggle off
+  if(wasThis) return;
   const c = ensureCtx();
-  const buf = await loadBuffer(key, infoCell);
-  const src = c.createBufferSource();
-  src.buffer = buf; src.loop = true;
-  if (mode === 'raw') {
-    src.connect(c.destination);
-  } else {
-    const hpf = c.createBiquadFilter();
-    hpf.type = 'highpass'; hpf.frequency.value = 20; hpf.Q.value = 0.707;
-    const g = c.createGain(); g.gain.value = 1;
-    src.connect(hpf); hpf.connect(g); g.connect(c.destination);
+  const buf = await loadBuffer('snare', null);
+  const nodes = [];
+  if(mode==='raw'){
+    const s=src(buf); s.connect(c.destination); s.start(); nodes.push(s);
+  } else if(mode==='mix'){
+    const s=src(buf), hpf=c.createBiquadFilter(); hpf.type='highpass'; hpf.frequency.value=20; hpf.Q.value=0.707;
+    const g=c.createGain(); g.gain.value=1;
+    s.connect(hpf); hpf.connect(g); g.connect(c.destination); s.start(); nodes.push(s);
+  } else if(mode==='full'){
+    // exact app PFL path: clip -> hpf -> gainL/gainR -> merger -> 25-band flat EQ -> master(0.35) -> dest
+    const s=src(buf), hpf=c.createBiquadFilter(); hpf.type='highpass'; hpf.frequency.value=20; hpf.Q.value=0.707;
+    const gL=c.createGain(), gR=c.createGain(); gL.gain.value=0.9; gR.gain.value=0.9;
+    const merger=c.createChannelMerger(2);
+    const bank=eqBank(c); const master=c.createGain(); master.gain.value=0.35;
+    s.connect(hpf); hpf.connect(gL); hpf.connect(gR);
+    gL.connect(merger,0,0); gR.connect(merger,0,1);
+    merger.connect(bank.first); bank.last.connect(master); master.connect(c.destination);
+    s.start(); nodes.push(s);
+  } else if(mode==='load'){
+    // realtime load test: play ALL 14 stems at once (like the app), snare audible, rest muted
+    const master=c.createGain(); master.gain.value=0.35; master.connect(c.destination);
+    const bank=eqBank(c); bank.last.connect(master);
+    const merger=c.createChannelMerger(2); merger.connect(bank.first);
+    const t0 = c.currentTime + 0.15;
+    for(const [,key] of STEMS){
+      const b = await loadBuffer(key, null);
+      const s = src(b);
+      const hpf=c.createBiquadFilter(); hpf.type='highpass'; hpf.frequency.value=20; hpf.Q.value=0.707;
+      const gL=c.createGain(), gR=c.createGain();
+      const lvl = (key==='snare') ? 0.9 : 0.0001; // snare audible, others essentially muted but still rendering
+      gL.gain.value=lvl; gR.gain.value=lvl;
+      s.connect(hpf); hpf.connect(gL); hpf.connect(gR); gL.connect(merger,0,0); gR.connect(merger,0,1);
+      s.start(t0); nodes.push(s);
+    }
   }
-  src.start();
-  current = { src, key, mode };
-  btn.classList.add('on');
-  nowEl.innerHTML = 'Playing <b>' + label + '</b> — ' + (mode === 'raw' ? 'Raw (bypasses everything)' : 'Mixer path (20 Hz HPF + unity gain)') + '. Click again to stop.';
+  current={nodes, mode};
+  if(btn) btn.classList.add('on');
+  const names={raw:'Raw (nothing added)',mix:'High-pass + gain',full:'Full app chain (stereo + 25-band flat EQ + master)',load:'Load test: all 14 stems at once, snare audible'};
+  nowEl.innerHTML='Playing snare: <b>'+names[mode]+'</b>. Click again to stop.';
 }
 
-const rows = document.getElementById('rows');
-for (const [label, key] of STEMS) {
-  const tr = document.createElement('tr');
-  const nameTd = document.createElement('td'); nameTd.className = 'name'; nameTd.textContent = label;
-  const infoTd = document.createElement('td'); infoTd.className = 'info'; infoTd.textContent = '—';
-  const rawTd = document.createElement('td');
-  const mixTd = document.createElement('td');
-  const rawBtn = document.createElement('button'); rawBtn.textContent = '▶ Raw';
-  const mixBtn = document.createElement('button'); mixBtn.textContent = '▶ Mixer path'; mixBtn.className = 'mix';
-  rawBtn.onclick = () => play(key, label, 'raw', rawBtn, infoTd);
-  mixBtn.onclick = () => play(key, label, 'mix', mixBtn, infoTd);
-  rawTd.appendChild(rawBtn); mixTd.appendChild(mixBtn);
-  tr.append(nameTd, infoTd, rawTd, mixTd);
-  rows.appendChild(tr);
+const SNARE_STEPS = [
+  ['raw','Raw','snare straight to your speakers'],
+  ['mix','+ High-pass and gain','the basic mixer chain'],
+  ['full','+ Stereo split, 25-band EQ (flat), master','the exact app PFL path'],
+  ['load','Load test: all 14 stems at once','same realtime load as the full app'],
+];
+const stepsEl = document.getElementById('snareSteps');
+for(const [mode,title,desc] of SNARE_STEPS){
+  const d=document.createElement('div'); d.className='step';
+  const l=document.createElement('div'); l.className='lbl'; l.innerHTML='<b>'+title+'</b><br><span>'+desc+'</span>';
+  const b=document.createElement('button'); b.textContent='▶ Play';
+  b.onclick=()=>playSnare(mode,b);
+  d.append(l,b); stepsEl.appendChild(d);
+}
+
+const rows=document.getElementById('rows');
+for(const [label,key] of STEMS){
+  const tr=document.createElement('tr');
+  const n=document.createElement('td'); n.className='name'; n.textContent=label;
+  const info=document.createElement('td'); info.className='info'; info.textContent='—';
+  const td=document.createElement('td');
+  const btn=document.createElement('button'); btn.textContent='▶ Raw';
+  btn.onclick=async()=>{ const was=current&&current.mode==='row-'+key; stopCurrent(); if(was)return;
+    const c=ensureCtx(); const buf=await loadBuffer(key,info); const s=src(buf); s.connect(c.destination); s.start();
+    current={nodes:[s],mode:'row-'+key}; btn.classList.add('on'); nowEl.innerHTML='Playing <b>'+label+'</b> raw.'; };
+  td.appendChild(btn); tr.append(n,info,td); rows.appendChild(tr);
 }
 </script>
 </body>
