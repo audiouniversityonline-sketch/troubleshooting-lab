@@ -4428,8 +4428,9 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // the stage. Each drum still has its own cable to the stage box, so the kit is 6
   // real inputs, not one. Drum tiles are narrow; band instrument cards are a
   // touch narrower than the MX-8's so all fourteen fit without crowding.
-  const DRUMS = ['kick', 'snare', 'rack', 'floor', 'ohl', 'ohr'];
-  const isDrum = (k) => big16 && DRUMS.indexOf(k) !== -1;
+  // The drum cluster = every source on the drum (upstage) sub-snake, INCLUDING the
+  // drummer's vocal, so they all render as compact tiles packed around the kit.
+  const isDrum = (k) => big16 && window.SOURCES[k] && window.SOURCES[k].snake === 'up';
   const wOf = (k) => big16 ? (isDrum(k) ? 84 : 132) : SRC_W;
   // Stage-plot layout (audience perspective, downstage = bottom):
   //   MX-8: Vocal 1/2 mid-stage over their wedges, Bass + Keys DI upstage.
@@ -4443,13 +4444,13 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     // rack tom over it, snare front-left, floor tom to the drummer's right,
     // overheads up and out. The sub-snake box sits above the whole cluster; the
     // drummer's wedge sits in front, facing back at the drummer.
-    ohl:   { top: 90,  left: '44%' },              // overhead, up-left
-    ohr:   { top: 90,  left: '56%' },              // overhead, up-right
-    vx4:   { top: 128, left: '50%' },              // the drummer (vocal mic), centre
-    floor: { top: 126, left: '63%' },              // floor tom, drummer's right
-    snare: { top: 162, left: '38%' },              // snare, front-left
-    rack:  { top: 162, left: '50%' },              // rack tom, over the kick
-    kick:  { top: 198, left: '50%' },              // kick, out front (downstage)
+    ohl:   { top: 86,  left: '40%' },              // overhead, up-left
+    ohr:   { top: 86,  left: '60%' },              // overhead, up-right
+    snare: { top: 142, left: '34%' },              // snare, drummer's left
+    vx4:   { top: 142, left: '50%' },              // the drummer (vocal mic), centre
+    floor: { top: 142, left: '66%' },              // floor tom, drummer's right
+    kick:  { top: 198, left: '43%' },              // kick, out front
+    rack:  { top: 198, left: '57%' },              // rack tom, out front beside the kick
     // Downstage-snake performers, all in the lower half so they physically sit on
     // the downstage sub-snake: bass + keys + guitars mid, the three lead vocals
     // across the front over their wedges.
