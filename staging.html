@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=77"></script>
+<script src="content-staging.js?v=78"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4459,7 +4459,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     // the three lead vocals across the front over their wedges. The whole band is
     // kept left of ~82% so the stage-right edge stays clear as a cable corridor
     // for the sub-snake trunks and the return runs.
-    bass:  { top: 240, left: '9%'  },              // bass rig, upstage-left
+    bass:  { top: 240, left: '11%' },              // bass rig, upstage-left
     keys:  { top: 240, left: '72%' },              // keys, upstage-right (clear of the box corridor)
     egtr:  { top: 320, left: '16%' },              // electric gtr, mid-left
     agtr:  { top: 320, left: '60%' },              // acoustic gtr, mid-right
@@ -4526,7 +4526,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         {/* Wedge 3 + 4 sit upstage at the bass and keys players' feet, in front
             of each instrument (bass upstage-left, keys upstage-right). */}
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', top: big16 ? 312 : 132, left: big16 ? '9%' : '14%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', top: big16 ? 380 : 132, left: big16 ? '4%' : '14%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 3" accent="var(--green)" on={state.outputs.wedge3.on} mute={state.outputs.wedge3.mute} volume={state.outputs.wedge3.volume} level={audio.outputs.wedge3}
               onTogglePower={() => setOut('wedge3', { on: !state.outputs.wedge3.on })}
               onToggleMute={() => setOut('wedge3', { mute: !state.outputs.wedge3.mute })}
