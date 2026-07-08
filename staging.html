@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=54"></script>
+<script src="content-staging.js?v=55"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8510,15 +8510,30 @@ function App() {
         for (let i = 0; i < d0.length; i++) { const a = d0[i] < 0 ? -d0[i] : d0[i]; if (a > peak) peak = a; }
         const clipGain = ctx.createGain();
         const isMixStem = typeof BAND_KEYS !== 'undefined' && BAND_KEYS.indexOf(k) !== -1;
-        clipGain.gain.value = isMixStem ? 1.0 : (peak > 0.0001 ? Math.min(8, 0.6 / peak) : 1);
+        // Band stems play at their recorded level (preserves Kyle's mix balance),
+        // lifted by a single common trim so the whole mix sits at a healthy console
+        // level instead of the ~-28 dBFS the raw recorded levels land at through
+        // the downstream gain. One factor for all stems keeps the balance intact.
+        const BAND_TRIM = 10;
+        clipGain.gain.value = isMixStem ? BAND_TRIM : (peak > 0.0001 ? Math.min(8, 0.6 / peak) : 1);
         const src = ctx.createBufferSource();
         src.buffer = buf; src.loop = true;
-        src.connect(clipGain); clipGain.connect(chain.drive);
+        src.connect(clipGain);
+        if (isMixStem) {
+          // Band stems are a finished MIX: ZERO processing by default. Bypass the
+          // synth drive, saturation shaper, makeup, and envelope ENTIRELY — the
+          // recording runs straight into the channel's HPF (transparent / off by
+          // default, and it feeds the meter tap) and its level/pan (gainL/R). The
+          // only thing that touches the audio is the console's own controls.
+          clipGain.connect(chain.hpf);
+        } else {
+          // MX-8 gain-staging sources keep drive -> shaper (with the clean clip
+          // curve, transparent until actually driven past the knee) so that
+          // overdriving a channel audibly distorts, which the lessons teach.
+          clipGain.connect(chain.drive);
+          if (chain.shaper) chain.shaper.curve = clipCurve;
+        }
         chain.clipGain = clipGain;
-        // Swap this chain's saturation to the clean clip curve: the recording
-        // now passes through transparent at rest (no transient squashing) and
-        // still soft-clips only when the channel is genuinely overdriven.
-        if (chain.shaper) chain.shaper.curve = clipCurve;
         src.start(startTime);
         // Hand off from the synth: stop its oscillators at the same instant.
         try {
