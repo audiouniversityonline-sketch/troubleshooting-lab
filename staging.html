@@ -560,6 +560,7 @@ function sourceFor(s, chIdxZero) {
   }
   return null;
 }
+window.effectiveChannel = effectiveChannel;
 
 // ── Real-units signal model ──────────────────────────────────────────────
 // The whole chain computes in REAL dB, anchored to pro line level:
@@ -4729,7 +4730,126 @@ function DigitalConsoleWithRefs({ state, setState, audio, channelRefs, masterLRe
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, stageHidden, briefBelow = false }) {
+// ── 16-channel STAGE (full panel) ────────────────────────────────────────
+// The big desk's end-to-end input path, simplified into the two sub-snakes a
+// real band splits across: UPSTAGE (drum kit + the drummer's vocal) and
+// DOWNSTAGE (vocals, guitars, bass, keys). Each section is a card you click to
+// expand and work its inputs; collapsed it reports how many are live. Signal
+// reaches the console ONLY where a cable is plugged, so unplugging an input here
+// kills it at the desk — the drawn path IS the model (Kyle 2026-07-08). Full
+// panel, mutually exclusive with the mixer view (stage OR console, not both).
+function StageMiniBtn({ label, on, hot, onClick }) {
+  return (
+    <div onClick={(e) => { e.stopPropagation(); onClick(); }} className="mono ui-no-select"
+      style={{
+        fontSize: 7.5, padding: '3px 0', borderRadius: 3, cursor: 'pointer', fontWeight: 700,
+        letterSpacing: 0.4, textAlign: 'center', flex: 1,
+        background: on ? (hot ? 'rgba(255,70,48,0.16)' : 'rgba(90,140,255,0.16)') : '#0a0a0c',
+        color: on ? (hot ? 'var(--hot)' : 'var(--cool)') : 'var(--ink-2)',
+        border: '1px solid ' + (on ? (hot ? 'var(--hot)' : 'var(--cool)') : '#38383e'),
+      }}>{label}</div>
+  );
+}
+function StagePathStrip({ audio }) {
+  const anyFlow = (audio.chanIn || []).some((v, i) => v > 0.05 && audio.chanInSource[i] && audio.chanInSource[i] !== 'playback');
+  const paLive = ((audio.outputs && audio.outputs.pa_l || 0) + (audio.outputs && audio.outputs.pa_r || 0)) > 0.05;
+  const steps = [
+    { label: 'STAGE INPUTS', lit: anyFlow }, { label: 'SUB-SNAKE', lit: anyFlow },
+    { label: 'MAIN SNAKE', lit: anyFlow }, { label: 'FOH FAN-OUT', lit: anyFlow },
+    { label: 'CONSOLE', lit: anyFlow }, { label: 'PA', lit: paLive },
+  ];
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {steps.map((s, i) => (
+        <React.Fragment key={s.label}>
+          <div className="mono" style={{ fontSize: 8, fontWeight: 700, letterSpacing: 0.5, padding: '4px 8px', borderRadius: 4, whiteSpace: 'nowrap', color: s.lit ? 'var(--green)' : 'var(--ink-3)', border: '1px solid ' + (s.lit ? 'rgba(74,222,128,0.4)' : '#2a2a2e'), background: s.lit ? 'rgba(74,222,128,0.08)' : '#0a0a0c' }}>{s.label}</div>
+          {i < steps.length - 1 && <div style={{ flex: 1, height: 2, background: s.lit ? 'var(--green)' : '#2a2a2e', margin: '0 5px', opacity: s.lit ? 0.7 : 1 }}/>}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+function Stage16({ state, setState, audio }) {
+  const [open, setOpen] = useS2('down');
+  const homePorts = useR2({});
+  const inputKeys = Object.keys(state.cables || {});
+  const SNAKE = {
+    up:   { label: 'Upstage sub-snake',   sub: 'drum kit · drummer vocal' },
+    down: { label: 'Downstage sub-snake', sub: 'vocals · guitars · bass · keys' },
+  };
+  const groups = { up: [], down: [] };
+  for (const k of inputKeys) { const d = window.SOURCES[k]; if (!d) continue; (groups[d.snake] || groups.down).push(k); }
+  for (const k of inputKeys) { const p = state.cables[k]; if (p > 0) homePorts.current[k] = p; }
+
+  const infoFor = (k) => {
+    const ch = window.effectiveChannel(state, k);
+    const connected = (state.cables[k] || 0) > 0;
+    const flowing = ch >= 1 && audio.chanInSource[ch - 1] === k && audio.chanIn[ch - 1] > 0.05;
+    return { ch, connected, flowing, muted: !!state.sourceMute[k], testing: state.testing === k, d: window.SOURCES[k] };
+  };
+  const setSourceMute = (k) => setState(s => ({ ...s, sourceMute: { ...s.sourceMute, [k]: !s.sourceMute[k] } }));
+  const setTest = (k) => setState(s => ({ ...s, testing: k }));
+  const togglePlug = (k) => setState(s => {
+    const cur = s.cables[k] || 0;
+    const next = cur > 0 ? 0 : (homePorts.current[k] || 1);
+    return { ...s, cables: { ...s.cables, [k]: next } };
+  });
+  const summary = (keys) => ({
+    live: keys.filter(k => infoFor(k).flowing).length,
+    total: keys.length,
+    unpatched: keys.filter(k => !infoFor(k).connected).length,
+  });
+
+  const Section = ({ id }) => {
+    const keys = groups[id]; const meta = SNAKE[id]; const sum = summary(keys); const isOpen = open === id;
+    return (
+      <div style={{ flex: 1, minWidth: 0, alignSelf: 'flex-start', background: 'linear-gradient(180deg, rgba(28,28,32,0.6), rgba(14,14,16,0.5))', border: '1px solid ' + (isOpen ? 'var(--cool)' : '#2a2a2e'), borderRadius: 8, overflow: 'hidden' }}>
+        <div onClick={() => setOpen(isOpen ? null : id)} className="ui-no-select" style={{ cursor: 'pointer', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 12, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s', color: 'var(--ink-3)' }}>▸</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="display" style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', color: isOpen ? 'var(--cool)' : 'var(--ink)' }}>{meta.label}</div>
+            <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, marginTop: 1 }}>{meta.sub}</div>
+          </div>
+          <div className="mono" style={{ fontSize: 8, textAlign: 'right', letterSpacing: 0.5 }}>
+            <div style={{ color: 'var(--green)', fontWeight: 700 }}>{sum.live}/{sum.total} LIVE</div>
+            {sum.unpatched > 0 && <div style={{ color: 'var(--hot)', fontWeight: 700, marginTop: 1 }}>{sum.unpatched} UNPATCHED</div>}
+          </div>
+        </div>
+        {isOpen && (
+          <div style={{ padding: '0 10px 10px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(176px, 1fr))', gap: 6 }}>
+            {keys.map(k => { const i = infoFor(k); return (
+              <div key={k} style={{ background: '#141417', border: '1px solid ' + (i.connected ? '#2a2a2e' : 'var(--hot)'), borderRadius: 6, padding: '6px 8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: i.flowing ? i.d.color : '#333', boxShadow: i.flowing ? '0 0 5px ' + i.d.color : 'none', flexShrink: 0 }}/>
+                  <div className="display" style={{ fontSize: 11, fontWeight: 700, flex: 1, minWidth: 0, color: i.muted ? 'var(--ink-3)' : 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.d.label}</div>
+                  <div className="mono" style={{ fontSize: 7.5, fontWeight: 700, color: i.connected ? 'var(--ink-3)' : 'var(--hot)' }}>{i.connected ? ('CH ' + i.ch) : 'NO PATH'}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 4, marginTop: 5 }}>
+                  <StageMiniBtn label={i.testing ? '◉ TEST' : 'TEST'} on={i.testing} onClick={() => setTest(k)}/>
+                  <StageMiniBtn label="MUTE" on={i.muted} hot onClick={() => setSourceMute(k)}/>
+                  <StageMiniBtn label={i.connected ? 'UNPLUG' : 'PLUG'} on={!i.connected} hot={!i.connected} onClick={() => togglePlug(k)}/>
+                </div>
+              </div>
+            ); })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="ui-no-select" style={{ width: '100%', background: 'linear-gradient(180deg, rgba(20,20,24,0.5), rgba(12,12,14,0.4))', border: '1px solid #2a2a2e', borderRadius: 10, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <ZoneHeader label="Stage" sublabel="the band's inputs · click a sub-snake to work it · signal reaches the desk only where a cable is plugged" badge="16-CH" badgeColor="var(--cool)"/>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <Section id="up"/>
+        <Section id="down"/>
+      </div>
+      <StagePathStrip audio={audio}/>
+    </div>
+  );
+}
+
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, stageHidden, stage16Open, briefBelow = false }) {
   const sourceKeys = ['vocal', 'guitar', 'laptop', 'vocal2'];
   const [hoverCable, setHoverCable] = useS2(null);
   const isMobile = useViewport();
@@ -5286,6 +5406,23 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       fanOutRef={fanOutRef} sourceKeys={sourceKeys}
       surface={surface} onSetSurface={onSetSurface} canDigital={canDigital} surfaceLocked={surfaceLocked}/>
   );
+
+  // 16-channel STAGE view — full panel, mutually exclusive with the mixer: show
+  // the stage (sub-snakes + inputs + end-to-end path) OR the console, not both.
+  if (state.big16 && stage16Open) {
+    return (
+      <div ref={containerRef} style={{
+        position: 'relative', width: '100%',
+        padding: isMobile ? '6px 8px 12px' : '8px 14px 12px',
+        display: 'flex', flexDirection: 'column', gap: 14,
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', zIndex: 2 }}>
+          <div style={{ width: '100%', maxWidth: 1200 }}><Stage16 state={state} setState={setState} audio={audio}/></div>
+          <div style={{ width: '100%', maxWidth: 1100 }}>{sidebarContent}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} style={{
@@ -7656,6 +7793,9 @@ function App() {
   // canvas (bigger on the narrow embed; horizontal room for more channels later).
   // Persisted like surface, via the profile-save effect below.
   const [stageHidden, setStageHidden] = uS(() => !!profileRef.current.stageHidden);
+  // 16-channel STAGE view toggle (full-panel, mutually exclusive with the mixer).
+  // Only meaningful on the big desk; the mixer is the default.
+  const [stage16Open, setStage16Open] = uS(false);
   const [consoleSize, setConsoleSize] = uS(() => (CONSOLE_SIZES.indexOf(profileRef.current.consoleSize) !== -1 ? profileRef.current.consoleSize : 0));
   const consoleSizeRef = uR(consoleSize);
   uE(() => { consoleSizeRef.current = consoleSize; }, [consoleSize]);
@@ -9512,7 +9652,10 @@ function App() {
   // The 16-input band has no stage graphic yet (step 2 rebuilds the stage +
   // sub-snakes for it), so it stays on the front-of-house view: stage forced
   // hidden, and the SHOW STAGE toggle is withheld until that stage exists.
-  const effStageHidden = stageHideable && (stageHidden || !!level.isBand);
+  // The old 4-input StageRow never renders on the big desk — the 16-channel
+  // board gets its own full-panel Stage16 (toggled via stage16Open). So the
+  // console-layout path always treats the stage as hidden when big16.
+  const effStageHidden = stageHideable && (stageHidden || !!level.isBand || !!state.big16);
   // Big-desk view is offered in the same places the stage toggle is: not in
   // guided lessons or the walkthrough (authored against the 5-strip band) and
   // not on mobile. Elsewhere the console can present as an 8/16-channel desk.
@@ -9727,7 +9870,9 @@ function App() {
         completed={completed}
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
-        stageHidden={effStageHidden} onToggleStage={(stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null}
+        stageHidden={effStageHidden}
+        onToggleStage={state.big16 ? (() => setStage16Open(v => !v)) : ((stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null)}
+        stage16Open={!!(state.big16 && stage16Open)}
         consoleSize={consoleSize} onSetConsoleSize={onFreePlaySize} sizeSelectable={sizeSelectable} big16={!!state.big16}
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
@@ -9871,7 +10016,7 @@ function App() {
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
                 surface={(level.isWalkthrough || level.isLesson || state.big16) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital && !state.big16}
-                surfaceLocked={level.isWalkthrough || level.isLesson || !!state.big16} stageHidden={effStageHidden} briefBelow={briefBelow}
+                surfaceLocked={level.isWalkthrough || level.isLesson || !!state.big16} stageHidden={effStageHidden} stage16Open={stage16Open} briefBelow={briefBelow}
                 sidebarContent={
                   <StableSlot levelKey={levelIdx}>
                   {solved
@@ -10226,7 +10371,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, consoleSize, onSetConsoleSize, sizeSelectable, big16 }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, stage16Open, consoleSize, onSetConsoleSize, sizeSelectable, big16 }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -10369,7 +10514,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           <button onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>INPUT LIST</button>
         )}
         {onToggleStage && (
-          <button onClick={onToggleStage} className="mono ui-no-select" title={stageHidden ? 'Show the stage: sources, cables, and speakers' : 'Hide the stage to give the console the whole screen'} style={{ ...navBtn, padding: '6px 12px' }}>{stageHidden ? 'SHOW STAGE' : 'HIDE STAGE'}</button>
+          <button onClick={onToggleStage} className="mono ui-no-select" title={big16 ? (stage16Open ? 'Back to the mixer' : 'Open the stage: sub-snakes, inputs, and the signal path') : (stageHidden ? 'Show the stage: sources, cables, and speakers' : 'Hide the stage to give the console the whole screen')} style={{ ...navBtn, padding: '6px 12px' }}>{big16 ? (stage16Open ? 'MIXER' : 'STAGE') : (stageHidden ? 'SHOW STAGE' : 'HIDE STAGE')}</button>
         )}
         {sizeSelectable && onSetConsoleSize && (
           <div className="mono ui-no-select" title="Mixer size: 8 or 16 channels. 16 opens every input from the same performance." style={{ ...navBtn, padding: 0, display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden' }}>
