@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=66"></script>
+<script src="content-staging.js?v=67"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -9772,18 +9772,18 @@ function App() {
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
               {pitchFor.isLesson
-                ? 'Run the show is the full course: set up a live system with nothing powered on yet and run a real show, step by step. Ten lessons, from patching and powering up in order to setting levels, building a monitor mix, and staying clean through feedback. It is part of the Audio University membership.'
+                ? 'Set up and run a full live show, step by step, across ten guided lessons.'
                 : pitchFor.big16
-                ? 'The 16-channel mixer opens every input from the same performance, so you mix a full board instead of the four channels you learn on. Start small on the 8-channel desk to build the fundamentals, then step up to the bigger console when you are ready. It is part of the Audio University membership.'
+                ? 'Mix on a full 16-channel board with all the inputs, not just 8.'
                 : pitchFor.isDigital
-                ? 'The digital console surface teaches the part of modern live sound the analog desk cannot: one shared channel section that follows whatever you SELECT, so the real skill is confirming what is selected before you touch a knob. Same signal flow and faults, a different surface. It is part of the membership.'
+                ? 'Mix on a digital surface, where one channel section follows whatever you select.'
                 : pitchFor.isLibrary
-                ? 'The Scenario Library is a growing shelf of real-world situations, each one a specific show that went sideways and the exact board behind it. Members can browse and play the whole library, and it keeps growing. Some land as free links in the videos; the full shelf is part of the membership.'
+                ? 'A growing library of real-world shows to troubleshoot, each a different board.'
                 : pitchFor.isFeedbackMode
-                ? 'Mic Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Each one is a new wedge with a new ring profile.'
+                ? 'Ring-out training: find the frequency that is feeding back and cut it on a graphic EQ.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
-                ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free tries. Members keep going with no limit: a new fault each time, two or three at once when you turn the difficulty up, for as long as you want to practice.'
-                : 'The free lessons teach you to set up and run the system. Practice Mode trains you to troubleshoot it: a new fault each time, two or three at once when you turn the difficulty up, for as long as you want to practice.'}
+                ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free tries. Members practice with no limit.'
+                : 'Endless troubleshooting reps: a new fault each time, more at once as you turn it up.'}
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
               {pitchFor.title} is part of the Audio University membership.
