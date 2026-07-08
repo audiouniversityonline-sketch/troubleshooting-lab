@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=75"></script>
+<script src="content-staging.js?v=76"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4460,9 +4460,9 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     // kept left of ~82% so the stage-right edge stays clear as a cable corridor
     // for the sub-snake trunks and the return runs.
     bass:  { top: 240, left: '9%'  },              // bass rig, upstage-left
-    keys:  { top: 240, left: '80%' },              // keys, upstage-right
+    keys:  { top: 240, left: '72%' },              // keys, upstage-right (clear of the box corridor)
     egtr:  { top: 320, left: '16%' },              // electric gtr, mid-left
-    agtr:  { top: 320, left: '64%' },              // acoustic gtr, mid-right
+    agtr:  { top: 320, left: '60%' },              // acoustic gtr, mid-right
     vx2:   { top: 404, left: '28%' },              // backing vocal, front-left
     vx1:   { top: 404, left: '44%' },              // lead vocal, front-centre
     vx3:   { top: 404, left: '58%' },              // backing vocal, front-right
@@ -4511,7 +4511,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 128 : 96, left: big16 ? '58%' : '55%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 128 : 96, left: big16 ? '30%' : '55%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 2" accent="var(--cool)" on={state.outputs.wedge2.on} mute={state.outputs.wedge2.mute} volume={state.outputs.wedge2.volume} level={audio.outputs.wedge2}
               onTogglePower={() => setOut('wedge2', { on: !state.outputs.wedge2.on })}
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
@@ -4539,7 +4539,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', top: big16 ? 312 : 132, left: big16 ? '80%' : '72%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', ...(big16 ? { bottom: 128, left: '58%' } : { top: 132, left: '72%' }), transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 4" accent="var(--amber)" on={state.outputs.wedge4.on} mute={state.outputs.wedge4.mute} volume={state.outputs.wedge4.volume} level={audio.outputs.wedge4}
               onTogglePower={() => setOut('wedge4', { on: !state.outputs.wedge4.on })}
               onToggleMute={() => setOut('wedge4', { mute: !state.outputs.wedge4.mute })}
@@ -4642,14 +4642,14 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 line; vocals, guitars, bass and keys XLR into its channels 1-7.
                 Placed right-of-centre so its trunk rises into the stage-right
                 corridor without cutting back through the band. */}
-            <div style={{ position: 'absolute', top: 500, left: '62%', transform: 'translateX(-50%)' }}>
+            <div style={{ position: 'absolute', top: 524, left: '60%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DOWNSTAGE SUB-SNAKE" items={downItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — both sub-snakes patch in here (drum vocal lands on
                 14); the main snake runs its channels 1:1 to the FOH fan-out. Sits
                 stage-right, above the vocal line, so both trunks reach it and the
                 returns drop cleanly to the front. */}
-            <div ref={stageBoxRef} style={{ position: 'absolute', top: 272, right: 8 }}>
+            <div ref={stageBoxRef} style={{ position: 'absolute', top: 300, right: 8 }}>
               <SideStageBox inChannels={inChannels} stageChRefs={stageBoxChRefs} outRefs={outRefs} snakeOutRef={snakeOutRef} retActive={retActive} inUpRef={sideInUpRef} inDownRef={sideInDownRef}/>
             </div>
           </>
