@@ -3456,7 +3456,7 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
               borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5,
             }}
           >{patchTarget ? `→ PORT ${patchTarget}` : 'PATCH'}</div>
-          {onOpenPlacement && (kind === 'dynamic' || kind === 'condenser') && (
+          {!compact && onOpenPlacement && (kind === 'dynamic' || kind === 'condenser') && (
             <div onClick={(e) => { e.stopPropagation(); onOpenPlacement(srcKey); }} className="mono ui-no-select"
               style={{ fontSize: 8, padding: '2px 6px', background: '#0a0a0c', color: 'var(--accent)', border: '1px solid #38383e', borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>PLACEMENT</div>
           )}
@@ -4306,32 +4306,36 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // PA R — evenly spaced. Their cables exit each component's bottom edge
   // and run along the front rail to the stage box at the upstage-right
   // corner. Source cables route along the back rail.
-  const SRC_W = big16 ? 96 : 154;
-  // The six drum mics render as a compact cluster upstage-centre (the "DRUMS"
-  // box), the way a real stage plot groups the kit; every other instrument sits
-  // as its own card around the stage. Each drum still has its own cable to the
-  // stage box, so the kit is 6 real inputs, not one.
+  const SRC_W = 154;
+  // The six drum mics render as a compact cluster upstage-centre, the way a real
+  // stage plot groups the kit; every other instrument sits as its own card around
+  // the stage. Each drum still has its own cable to the stage box, so the kit is 6
+  // real inputs, not one. Drum tiles are narrow; band instrument cards are a
+  // touch narrower than the MX-8's so all fourteen fit without crowding.
   const DRUMS = ['kick', 'snare', 'rack', 'floor', 'ohl', 'ohr'];
   const isDrum = (k) => big16 && DRUMS.indexOf(k) !== -1;
+  const wOf = (k) => big16 ? (isDrum(k) ? 84 : 132) : SRC_W;
   // Stage-plot layout (audience perspective, downstage = bottom):
   //   MX-8: Vocal 1/2 mid-stage over their wedges, Bass + Keys DI upstage.
   //   Band: drum cluster + drummer vocal upstage-centre; bass and keys upstage
   //     corners; the two guitars mid; the three front vocals downstage.
+  // top + left only; the per-source marginLeft (to centre on `left`) is applied
+  // in the map from wOf(k) so each card centres on its own width.
   const positions = big16 ? {
-    kick:  { top: 2,   left: '42%', marginLeft: -(SRC_W / 2) },
-    snare: { top: 2,   left: '50%', marginLeft: -(SRC_W / 2) },
-    rack:  { top: 2,   left: '58%', marginLeft: -(SRC_W / 2) },
-    floor: { top: 54,  left: '42%', marginLeft: -(SRC_W / 2) },
-    ohl:   { top: 54,  left: '50%', marginLeft: -(SRC_W / 2) },
-    ohr:   { top: 54,  left: '58%', marginLeft: -(SRC_W / 2) },
-    vx4:   { top: 30,  left: '68%', marginLeft: -(SRC_W / 2) },              // drummer's vocal, beside the kit
-    bass:  { top: 40,  left: '9%',  marginLeft: -(SRC_W / 2) },              // upstage left
-    keys:  { top: 40,  left: '91%', marginLeft: -(SRC_W / 2) },             // upstage right
-    egtr:  { top: 150, left: '19%', marginLeft: -(SRC_W / 2) },
-    agtr:  { top: 150, left: '81%', marginLeft: -(SRC_W / 2) },
-    vx1:   { top: 288, left: '31%', marginLeft: -(SRC_W / 2) },             // front line, over the wedges
-    vx2:   { top: 288, left: '50%', marginLeft: -(SRC_W / 2) },
-    vx3:   { top: 288, left: '69%', marginLeft: -(SRC_W / 2) },
+    kick:  { top: 4,   left: '43%' },
+    snare: { top: 4,   left: '50%' },
+    rack:  { top: 4,   left: '57%' },
+    floor: { top: 62,  left: '43%' },
+    ohl:   { top: 62,  left: '50%' },
+    ohr:   { top: 62,  left: '57%' },
+    vx4:   { top: 34,  left: '67%' },              // drummer's vocal, beside the kit
+    bass:  { top: 40,  left: '8%'  },              // upstage left
+    keys:  { top: 40,  left: '92%' },              // upstage right
+    egtr:  { top: 160, left: '18%' },
+    agtr:  { top: 160, left: '82%' },
+    vx1:   { top: 296, left: '31%' },              // front line, over the wedges
+    vx2:   { top: 296, left: '50%' },
+    vx3:   { top: 296, left: '69%' },
   } : {
     vocal:  { top: 180, left: '31%', marginLeft: -(SRC_W / 2) },            // vocal 1 — directly above Wedge 1, on the first third
     vocal2: { top: 180, left: '55%', marginLeft: -(SRC_W / 2) },            // vocal 2 — directly above Wedge 2, on the second third
@@ -4450,10 +4454,10 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         {/* Sources — bass DI + keys DI upstage; vocal mics mid-stage */}
         {sourceKeys.map(k => (
           <div key={k} ref={el => sourceRefs.current[k] = el}
-               style={{ position: 'absolute', width: SRC_W, ...positions[k] }}>
+               style={{ position: 'absolute', width: wOf(k), marginLeft: -(wOf(k) / 2), ...positions[k] }}>
             <SourceCard
               srcKey={k}
-              label={window.SOURCES[k].label}
+              label={isDrum(k) ? window.SOURCES[k].short : window.SOURCES[k].label}
               kind={window.SOURCES[k].kind}
               diActive={window.SOURCES[k].diActive}
               compact={isDrum(k)}
