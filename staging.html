@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=86"></script>
+<script src="content-staging.js?v=87"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4467,13 +4467,13 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     // Drum kit below the backline, bird's-eye tight cluster: VOX 4 (drummer) on
     // top, snare below, kick below that; toms hugging the stack, overheads just
     // outside. The drum sub-snake sits in FRONT of the kick (below the kit).
-    vx4:   { top: 196, left: '50%' },              // the drummer (vocal mic), top of the stack
-    snare: { top: 250, left: '50%' },              // snare, right below the drummer
-    kick:  { top: 312, left: '50%' },              // kick, right below the snare
-    rack:  { top: 266, left: '58%' },              // rack tom, right of the stack
-    floor: { top: 266, left: '42%' },              // floor tom, left of the stack
-    ohr:   { top: 266, left: '67%' },              // overhead R, right of the rack tom
-    ohl:   { top: 266, left: '33%' },              // overhead L, left of the floor tom
+    vx4:   { top: 190, left: '50%' },              // the drummer (vocal mic), top of the stack
+    snare: { top: 258, left: '50%' },              // snare, right below the drummer
+    kick:  { top: 326, left: '50%' },              // kick, right below the snare
+    rack:  { top: 292, left: '58%' },              // rack tom, right of the stack
+    floor: { top: 292, left: '42%' },              // floor tom, left of the stack
+    ohr:   { top: 292, left: '67%' },              // overhead R, right of the rack tom
+    ohl:   { top: 292, left: '33%' },              // overhead L, left of the floor tom
     // The three singers across the downstage line, over the vocal sub-snake, each
     // downstage of their instrument: Vocal 2 screen-left, Vocal 1 centre, Vocal 3
     // screen-right.
@@ -4649,7 +4649,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
           <>
             {/* Drum sub-snake box — sits ABOVE the kit, so the six drum mics and
                 the drummer's vocal XLR straight up into its channels 1-7. */}
-            <div style={{ position: 'absolute', top: 366, left: '50%', transform: 'translateX(-50%)' }}>
+            <div style={{ position: 'absolute', top: 410, left: '50%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DRUM SUB-SNAKE" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
             </div>
             {/* Backline sub-snake — top-centre, above the backline instruments;
