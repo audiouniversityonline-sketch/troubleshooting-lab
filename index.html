@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=61"></script>
+<script src="content.js?v=62"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8132,8 +8132,10 @@ function App() {
           // meters can dance the way real meters do.
           f = Math.max(0, Math.min(4.5, f));
           const cur = envelopeRef.current[k] != null ? envelopeRef.current[k] : synthF;
-          // Meter ballistics: fast attack, slower release, like a real meter.
-          envelopeRef.current[k] = f > cur ? cur + (f - cur) * 0.6 : cur + (f - cur) * 0.25;
+          // Meter ballistics: near-instant attack so the meter cracks WITH a
+          // transient (the old 0.6 took ~4 frames / 66ms to catch a snare hit and
+          // read visibly behind the audio), slower release so the peak is legible.
+          envelopeRef.current[k] = f > cur ? cur + (f - cur) * 0.85 : cur + (f - cur) * 0.25;
         } else {
           envelopeRef.current[k] = synthF;
         }
@@ -8264,6 +8266,22 @@ function App() {
     for (let i = 0; i < SHAPER_N; i++) {
       const x = (i / (SHAPER_N - 1)) * 2 - 1;
       shaperCurve[i] = Math.tanh(x * 1.5);
+    }
+    // Recorded clips get a CLEANER shaper: dead linear until a high knee, then a
+    // C1-continuous soft clip (slope 1 at the knee). The synth tanh curve above
+    // compresses even at rest — it squashes transients and boosts low-level body,
+    // which robs a snare of its crack. A real stem (peak-normalized to ~0.6) sits
+    // entirely under the knee, so it passes through untouched; it only saturates
+    // when the channel is actually overdriven and the drive pushes it past the
+    // knee, so the "you hear it when you clip" behavior still holds.
+    const CLIP_KNEE = 0.72;
+    const clipCurve = new Float32Array(SHAPER_N);
+    for (let i = 0; i < SHAPER_N; i++) {
+      const x = (i / (SHAPER_N - 1)) * 2 - 1;
+      const ax = Math.abs(x);
+      clipCurve[i] = ax <= CLIP_KNEE
+        ? x
+        : Math.sign(x) * (CLIP_KNEE + (1 - CLIP_KNEE) * Math.tanh((ax - CLIP_KNEE) / (1 - CLIP_KNEE)));
     }
 
     // Build a chain only for the sources on THIS board (its snake inputs = the
@@ -8493,6 +8511,10 @@ function App() {
         src.buffer = buf; src.loop = true;
         src.connect(clipGain); clipGain.connect(chain.drive);
         chain.clipGain = clipGain;
+        // Swap this chain's saturation to the clean clip curve: the recording
+        // now passes through transparent at rest (no transient squashing) and
+        // still soft-clips only when the channel is genuinely overdriven.
+        if (chain.shaper) chain.shaper.curve = clipCurve;
         src.start(startTime);
         // Hand off from the synth: stop its oscillators at the same instant.
         try {
