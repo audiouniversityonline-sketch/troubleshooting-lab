@@ -5388,8 +5388,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       // and console sit side-by-side, the snake is a short horizontal bundle
       // between the two zones.
       const snakeFrom = snakeOutRef.current ? anchorPos(snakeOutRef.current, 'center') : null;
-      const snakeTo = fanOutRef.current ? anchorPos(fanOutRef.current, 'left') : null;
-      const snake = (snakeFrom && snakeTo) ? { from: snakeFrom, to: snakeTo } : null;
+      let snakeTo = fanOutRef.current ? anchorPos(fanOutRef.current, 'left') : null;
+      // 16-channel stage-only view: the FOH fan-out is off-panel (the console is
+      // hidden), so run the main snake off the side box's right edge toward front
+      // of house.
+      let snakeToFOH = false;
+      if (!snakeTo && snakeFrom && state.big16) { snakeTo = { x: snakeFrom.x + 64, y: snakeFrom.y }; snakeToFOH = true; }
+      const snake = (snakeFrom && snakeTo) ? { from: snakeFrom, to: snakeTo, toFOH: snakeToFOH } : null;
 
       // 16-channel sub-snake bundles: each head's out anchor → the side-stage
       // box's matching in anchor. Empty on the MX-8 (those refs are null).
@@ -5525,7 +5530,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
     // per-frame audio. Dropping `audio` here stops the cable layout from being
     // recomputed (and setPaths'd) on every animation frame, which is what made
     // this effect storm at mount.
-  }, [state, fitScale]);
+  }, [state, fitScale, stage16Open, stageHidden]);
 
   // BUS-level activity (pre-speaker) — used for cables that carry the desk's
   // output AT THE DESK or in the snake return. These don't depend on whether
@@ -5791,12 +5796,18 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             in the gap between the stage and console columns, then enters the
             fan-out going RIGHT. Stays out of the console panel itself. */}
         {paths.snake && (() => {
-          const d = window._cornerHV(paths.snake.from, paths.snake.to, paths.snakeMidX);
+          const s = paths.snake;
+          const d = s.toFOH
+            ? `M ${s.from.x} ${s.from.y} L ${s.to.x} ${s.to.y}`
+            : window._cornerHV(s.from, s.to, paths.snakeMidX);
           return (
             <g>
               <path d={d} stroke="#1a1a1d" strokeWidth="12" fill="none" opacity="0.95" strokeLinecap="round" strokeLinejoin="round"/>
               <path d={d} stroke="#3a3a40" strokeWidth="9" fill="none" opacity="1" strokeLinecap="round" strokeLinejoin="round"/>
               <path d={d} stroke="#6c6a64" strokeWidth="1.2" fill="none" opacity="0.6" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 8"/>
+              {s.toFOH && (
+                <text x={s.to.x + 4} y={s.to.y + 3} fill="var(--cool)" fontFamily="Geist Mono" fontSize="7" fontWeight="700" letterSpacing="0.5">→ FOH</text>
+              )}
             </g>
           );
         })()}
