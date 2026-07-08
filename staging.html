@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=87"></script>
+<script src="content-staging.js?v=88"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4456,30 +4456,28 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // top + left only; the per-source marginLeft (to centre on `left`) is applied
   // in the map from wOf(k) so each card centres on its own width.
   const positions = big16 ? {
-    // Top-to-bottom stage flow. Backline instruments run across the top, each
-    // roughly UPSTAGE of the singer who plays it: bass stage-right (screen-left,
-    // above Vocal 2), the two guitars centre (above Vocal 1), keys stage-left
-    // (screen-right, above Vocal 3). They feed the backline sub-snake (top).
-    bass:  { top: 96,  left: '12%' },              // bass rig, upstage screen-left
-    egtr:  { top: 96,  left: '38%' },              // electric gtr, upstage centre
-    agtr:  { top: 96,  left: '60%' },              // acoustic gtr, upstage centre
-    keys:  { top: 96,  left: '88%' },              // keys rig, upstage screen-right
-    // Drum kit below the backline, bird's-eye tight cluster: VOX 4 (drummer) on
-    // top, snare below, kick below that; toms hugging the stack, overheads just
-    // outside. The drum sub-snake sits in FRONT of the kick (below the kit).
-    vx4:   { top: 190, left: '50%' },              // the drummer (vocal mic), top of the stack
-    snare: { top: 258, left: '50%' },              // snare, right below the drummer
-    kick:  { top: 326, left: '50%' },              // kick, right below the snare
-    rack:  { top: 292, left: '58%' },              // rack tom, right of the stack
-    floor: { top: 292, left: '42%' },              // floor tom, left of the stack
-    ohr:   { top: 292, left: '67%' },              // overhead R, right of the rack tom
-    ohl:   { top: 292, left: '33%' },              // overhead L, left of the floor tom
-    // The three singers across the downstage line, over the vocal sub-snake, each
-    // downstage of their instrument: Vocal 2 screen-left, Vocal 1 centre, Vocal 3
-    // screen-right.
-    vx2:   { top: 540, left: '26%' },              // Vocal 2 (bassist)
-    vx1:   { top: 540, left: '46%' },              // Vocal 1 (guitarist, lead)
-    vx3:   { top: 540, left: '66%' },              // Vocal 3 (keys player)
+    // Drum kit tucked hard against the UPSTAGE edge, bird's-eye tight cluster:
+    // VOX 4 (drummer) on top, snare below, kick below that; toms hugging the
+    // stack, overheads just outside. Their cables come out the SIDES and run down
+    // to the drum sub-snake (in front of the kit).
+    vx4:   { top: 40,  left: '50%' },              // the drummer (vocal mic), top of the stack
+    snare: { top: 96,  left: '50%' },              // snare, right below the drummer
+    kick:  { top: 152, left: '50%' },              // kick, right below the snare
+    rack:  { top: 116, left: '57%' },              // rack tom, right of the stack
+    floor: { top: 116, left: '43%' },              // floor tom, left of the stack
+    ohr:   { top: 116, left: '66%' },              // overhead R, right of the rack tom
+    ohl:   { top: 116, left: '34%' },              // overhead L, left of the floor tom
+    // Backline instruments in front of the drums, each UPSTAGE of the singer who
+    // plays it: bass above Vocal 2 (screen-left), the two guitars above Vocal 1
+    // (centre), keys above Vocal 3 (screen-right). They feed the backline snake.
+    bass:  { top: 336, left: '26%' },              // bass rig
+    egtr:  { top: 336, left: '40%' },              // electric gtr
+    agtr:  { top: 336, left: '54%' },              // acoustic gtr
+    keys:  { top: 336, left: '66%' },              // keys rig
+    // The three singers across the downstage line, over the vocal sub-snake.
+    vx2:   { top: 448, left: '26%' },              // Vocal 2 (bassist)
+    vx1:   { top: 448, left: '46%' },              // Vocal 1 (guitarist, lead)
+    vx3:   { top: 448, left: '66%' },              // Vocal 3 (keys player)
   } : {
     vocal:  { top: 180, left: '31%', marginLeft: -(SRC_W / 2) },            // vocal 1 — directly above Wedge 1, on the first third
     vocal2: { top: 180, left: '55%', marginLeft: -(SRC_W / 2) },            // vocal 2 — directly above Wedge 2, on the second third
@@ -4496,11 +4494,11 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     }}>
       <ZoneHeader label="Stage" sublabel="band, sources, PA + wedges · downstage ↓ audience" badge="LIVE AREA" badgeColor="var(--green)"/>
 
-      <div style={{ position: 'relative', minHeight: big16 ? 920 : 480 }}>
+      <div style={{ position: 'relative', minHeight: big16 ? 820 : 480 }}>
         {/* Downstage row — PA L, Wedge 1, Wedge 2, PA R, evenly spaced along
             the front of the stage. Each one's cable comes out of its bottom
             edge and runs along the front rail back to the stage box. */}
-        <div ref={paLRef} data-walk="out-pa-l" style={{ position: 'absolute', bottom: big16 ? 48 : 80, left: big16 ? '5%' : '8%', transform: 'translateX(-50%)' }}>
+        <div ref={paLRef} data-walk="out-pa-l" style={{ position: 'absolute', bottom: big16 ? 48 : 80, left: big16 ? '11%' : '8%', transform: 'translateX(-50%)' }}>
           <PASpeaker side="L" showPower={!isPassive}
             on={isPassive ? paShowsOn : state.outputs.pa_l.on} mute={state.outputs.pa_l.mute} volume={state.outputs.pa_l.volume} level={audio.outputs.pa_l}
             signalArriving={(audio.speakerInput?.pa_l || 0) > 0.04}
@@ -4553,7 +4551,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', ...(big16 ? { top: 268, left: '72%' } : { top: 132, left: '72%' }), transform: 'translateX(-50%)' }}>
+          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', ...(big16 ? { top: 62, left: '72%' } : { top: 132, left: '72%' }), transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 4" accent="var(--amber)" on={state.outputs.wedge4.on} mute={state.outputs.wedge4.mute} volume={state.outputs.wedge4.volume} level={audio.outputs.wedge4}
               onTogglePower={() => setOut('wedge4', { on: !state.outputs.wedge4.on })}
               onToggleMute={() => setOut('wedge4', { mute: !state.outputs.wedge4.mute })}
@@ -4565,7 +4563,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
           </div>
         )}
 
-        <div ref={paRRef} data-walk="out-pa-r" style={{ position: 'absolute', bottom: big16 ? 48 : 80, left: big16 ? '95%' : '78%', transform: 'translateX(-50%)' }}>
+        <div ref={paRRef} data-walk="out-pa-r" style={{ position: 'absolute', bottom: big16 ? 48 : 80, left: big16 ? '89%' : '78%', transform: 'translateX(-50%)' }}>
           <PASpeaker side="R" showPower={!isPassive}
             on={isPassive ? paShowsOn : state.outputs.pa_r.on} mute={state.outputs.pa_r.mute} volume={state.outputs.pa_r.volume} level={audio.outputs.pa_r}
             signalArriving={(audio.speakerInput?.pa_r || 0) > 0.04}
@@ -4647,27 +4645,26 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             the console panel's header label instead of cutting through it). */}
         {big16 ? (
           <>
-            {/* Drum sub-snake box — sits ABOVE the kit, so the six drum mics and
-                the drummer's vocal XLR straight up into its channels 1-7. */}
-            <div style={{ position: 'absolute', top: 410, left: '50%', transform: 'translateX(-50%)' }}>
+            {/* Drum sub-snake box — sits in FRONT of the kick (just below the
+                kit); the drum mics' side cables run down into its channels. */}
+            <div style={{ position: 'absolute', top: 202, left: '50%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DRUM SUB-SNAKE" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
             </div>
-            {/* Backline sub-snake — top-centre, above the backline instruments;
-                bass, both guitars and keys DI up into its channels 1-4. Its
-                multicore runs the top edge across to the stage box. */}
-            <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)' }}>
+            {/* Backline sub-snake — in FRONT of the drums (just below the drum
+                sub-snake); the bass, both guitars and keys DI up into it. */}
+            <div style={{ position: 'absolute', top: 266, left: '46%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="BACKLINE SUB-SNAKE" items={instItems} subJackRefs={subJackRefs} outRef={instHeadOutRef}/>
             </div>
             {/* Vocal sub-snake box — below the three singers; only Vocal 1/2/3
                 plug in here (channel 4 spare). Its multicore runs over to the box. */}
-            <div style={{ position: 'absolute', top: 648, left: '46%', transform: 'translateX(-50%)' }}>
+            <div style={{ position: 'absolute', top: 556, left: '46%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="VOCAL SUB-SNAKE" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
                 edge. The drum snake fans into IN 1-6 (+ the drummer's vocal
                 cross-patched to 14), the downstage snake into 7-13; the main
                 snake leaves the right edge for FOH. */}
-            <div ref={stageBoxRef} style={{ position: 'absolute', top: 250, right: 6 }}>
+            <div ref={stageBoxRef} style={{ position: 'absolute', top: 196, right: 6 }}>
               <SideStageBox inChannels={inChannels} stageChRefs={stageBoxChRefs} outRefs={outRefs} snakeOutRef={snakeOutRef} retActive={retActive}/>
             </div>
           </>
@@ -5443,17 +5440,26 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         if (state.big16) {
           const d = window.SOURCES[k];
           const sk = d && d.snake;
+          const jack = subJackRefs.current[k];
+          const jc = jack ? anchorPos(jack, 'center') : null;
+          if (!jc) return null;
+          // Drum mics: the cable comes out the SIDE of the mic toward its channel,
+          // then runs down into the drum sub-snake — so the vocal/snare/kick stack
+          // no longer has cables piling straight down on top of each other.
+          if (sk === 'up') {
+            const micC = anchorPos(src, 'center');
+            const side = jc.x < micC.x ? 'left' : 'right';
+            return { src: k, from: anchorPos(src, side), to: jc, port, unplugged: !(port >= 1), xlr: true, drumSide: true };
+          }
           // Backline box sits ABOVE its instruments (cable leaves the card top);
-          // the drum + vocal boxes sit BELOW their sources (cable leaves bottom).
+          // the vocal box sits BELOW the singers (cable leaves the bottom). Each
+          // cable gets its own lane so a group's XLRs run parallel, never stacked.
           const fromSide = (sk === 'inst') ? 'top' : 'bottom';
           const from = anchorPos(src, fromSide);
-          const jack = subJackRefs.current[k];
-          const to = jack ? anchorPos(jack, 'center') : null;
-          if (!from || !to) return null;
           const grpList = sourceKeys.filter(x => window.SOURCES[x] && window.SOURCES[x].snake === sk);
           const li = grpList.indexOf(k);
-          const midY = (from.y + to.y) / 2 + (li - (grpList.length - 1) / 2) * 6;
-          return { src: k, from, to, port, unplugged: !(port >= 1), xlr: true, midY };
+          const midY = (from.y + jc.y) / 2 + (li - (grpList.length - 1) / 2) * 6;
+          return { src: k, from, to: jc, port, unplugged: !(port >= 1), xlr: true, midY };
         }
         const from = anchorPos(src, 'top');
         const portEl = port >= 1 ? portRefs.current[port] : null;
@@ -5879,7 +5885,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             // snaps to a clean right-angle run (a shared rail), like the outputs.
             const d = isDragged
               ? window._cableCurve(c.from, portEnd)
-              : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY);
+              : (c.drumSide
+                  ? window._cornerHV(c.from, c.to, c.to.x)   // out the side, across, down into the jack
+                  : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY));
             const opacity = someOtherDragged ? 0.18 : (hovered ? 1 : 0.95);
             // No "unplugged" badge: the loose cable dangling from the source
             // is enough to read that it needs patching.
@@ -5990,12 +5998,17 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             color — a real fan-tail. The drummer's vocal tail (→ 14) fans further
             down the face than the rest: the one deliberate cross-patch. */}
         {(paths.patchTails || []).map((t) => {
-          const d = `M ${t.fromX} ${t.fromY} L ${t.x} ${t.y}`;
+          // A gentle S-curve from the fan-out point to the jack, like a real cable
+          // relaxing into place, so the whole fan splays instead of reading as
+          // hard straight lines. Dangling (unpatched) tails curve loose to an
+          // unconnected end.
+          const dx = t.x - t.fromX, dy = t.y - t.fromY;
+          const d = `M ${t.fromX} ${t.fromY} C ${t.fromX + dx * 0.55} ${t.fromY + dy * 0.08}, ${t.fromX + dx * 0.45} ${t.y - dy * 0.08}, ${t.x} ${t.y}`;
           return (
             <g key={'patch-' + t.srcKey} style={{ pointerEvents: 'none' }}>
-              <path d={d} stroke="#000" strokeWidth="3.5" fill="none" opacity="0.35" strokeLinecap="round"/>
-              <path d={d} stroke={t.color} strokeWidth={t.cross ? 2.4 : 1.8} fill="none" opacity={t.cross ? 0.98 : 0.8} strokeLinecap="round"/>
-              <circle cx={t.x} cy={t.y} r="2" fill={t.color} stroke="#0a0a0c" strokeWidth="0.6"/>
+              <path d={d} stroke="#000" strokeWidth="3.5" fill="none" opacity={t.dangling ? 0.18 : 0.35} strokeLinecap="round"/>
+              <path d={d} stroke={t.color} strokeWidth={t.cross ? 2.4 : 1.8} fill="none" opacity={t.dangling ? 0.55 : (t.cross ? 0.98 : 0.8)} strokeLinecap="round" strokeDasharray={t.dangling ? '5 3' : 'none'}/>
+              <circle cx={t.x} cy={t.y} r="2" fill={t.dangling ? '#0a0a0c' : t.color} stroke={t.dangling ? t.color : '#0a0a0c'} strokeWidth="0.8"/>
             </g>
           );
         })}
@@ -6147,7 +6160,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             ? window._cableCurve(portEnd, c.to)
             : (c.to.y > 480
                 ? `M ${c.from.x} ${c.from.y} L ${leadX} ${c.from.y} L ${leadX} ${railY} L ${c.to.x} ${railY} L ${c.to.x} ${c.to.y}`
-                : window._cornerHV(c.from, c.to, leadX));
+                // upstage wedge (W4): drop the cable just below the wedge, then run
+                // across to the box — so it comes "straight down, then over."
+                : window._routedCable(c.from, c.to, c.to.y + 24));
           const live = !c.unplugged && !isDragged && retLive(c.portId);
           const hovered = hoverCable === 'out:' + c.spk;
           const color = hovered ? '#eae7e0' : '#7d7a72';
