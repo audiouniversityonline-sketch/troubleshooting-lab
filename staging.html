@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=58"></script>
+<script src="content-staging.js?v=59"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8100,6 +8100,7 @@ function App() {
 
   uE(() => {
     let raf = 0;
+    let lastRenderMs = 0;
     const loop = () => {
       const t = performance.now() / 1000 - envStartRef.current;
       const ctxRunning = ctxRef.current && ctxRef.current.state === 'running';
@@ -8201,7 +8202,16 @@ function App() {
         fbChain.voices.forEach(v => { if (v.gain.gain.value !== 0) v.gain.gain.value = 0; });
         if (lastSevRef.current && lastSevRef.current.level !== 0) { lastSevRef.current = { level: 0, count: 0 }; setFbSeverity({ level: 0, count: 0 }); }
       }
-      if (!LITE_METERS) setEnvTick(n => (n + 1) & 0xff);
+      // Throttle the meter re-render to ~30fps. The envelope refs above still
+      // update every animation frame (smooth ballistics), but re-rendering the
+      // whole mixer + recomputing computeAudio 60x/sec was starving the audio
+      // thread on lower-powered machines (audible as compression / lost
+      // transients while the audio graph itself measured clean). ?lite=1 drops
+      // the re-render further (~8fps) as an extreme fallback.
+      if (!LITE_METERS) {
+        const nowMs = performance.now();
+        if (nowMs - lastRenderMs >= 32) { lastRenderMs = nowMs; setEnvTick(n => (n + 1) & 0xff); }
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
