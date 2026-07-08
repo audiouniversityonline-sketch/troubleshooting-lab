@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=79"></script>
+<script src="content-staging.js?v=80"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4481,7 +4481,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     }}>
       <ZoneHeader label="Stage" sublabel="band, sources, PA + wedges · downstage ↓ audience" badge="LIVE AREA" badgeColor="var(--green)"/>
 
-      <div style={{ position: 'relative', minHeight: big16 ? 700 : 480 }}>
+      <div style={{ position: 'relative', minHeight: big16 ? 740 : 480 }}>
         {/* Downstage row — PA L, Wedge 1, Wedge 2, PA R, evenly spaced along
             the front of the stage. Each one's cable comes out of its bottom
             edge and runs along the front rail back to the stage box. */}
@@ -4640,7 +4640,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             {/* Downstage sub-snake box — sits at the front of the stage below the
                 three singers; their mics + the guitar/bass/keys DIs XLR into its
                 channels 1-7. Its multicore runs the front edge to the stage box. */}
-            <div style={{ position: 'absolute', top: 636, left: '47%', transform: 'translateX(-50%)' }}>
+            <div style={{ position: 'absolute', top: 648, left: '62%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DOWNSTAGE SUB-SNAKE" items={downItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
