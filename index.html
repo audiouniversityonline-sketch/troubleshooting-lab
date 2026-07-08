@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=64"></script>
+<script src="content.js?v=65"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -294,6 +294,13 @@ const EQ_BAND_HZ = [250, 500, 1000, 2000, 4000];
 const FULL_EQ_BANDS = ['63', '80', '100', '125', '160', '200', '250', '315', '400', '500', '630', '800', '1k', '1.25k', '1.6k', '2k', '2.5k', '3.15k', '4k', '5k', '6.3k', '8k', '10k', '12.5k', '16k'];
 const FULL_EQ_HZ = [63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
 const EQ_CUT_DB = 12;
+// Diagnostic flags (URL): ?lite=1 stops the throttled meter re-render; ?lite=2
+// additionally freezes the whole per-frame meter loop + the slow interval, so
+// the main thread is nearly idle while audio keeps playing. Used to confirm
+// whether the per-frame redraw is starving the audio thread on slower machines.
+const LITE_LEVEL = (typeof location !== 'undefined' && parseInt(((location.search.match(/[?&]lite=(\d)/) || [])[1]) || '0', 10)) || 0;
+const LITE_METERS = LITE_LEVEL >= 1;
+const LITE_FREEZE = LITE_LEVEL >= 2;
 // A wedge's inherent feedback fingerprint: the frequencies where the mic +
 // wedge + room loop peaks, so those ring first. This is what makes feedback
 // behave like real life instead of one fixed tone. Per band, a "sensitivity"
@@ -1357,6 +1364,11 @@ function bandState() {
   s.outPatch = { ...DEFAULT_OUT_PATCH };
   s.testing = 'kick';
   s.inspect = 'pa';
+  // The desk is running the big (16-channel) source set. This flag — not the
+  // ?band=1 URL — is what drives the direct-to-DOM meters, the steady audible
+  // gains, and skipping the per-frame re-render, so those apply whenever the
+  // 16-channel desk is active (via the size selector, on any environment).
+  s.big16 = true;
   return s;
 }
 window.bandState = bandState;
@@ -2046,12 +2058,126 @@ const peakHoldIdx = (holdDb, segments) => (holdDb > DBFS_FLOOR + 1
   ? Math.max(0, Math.min(segments - 1, Math.round(dbfsFrac(holdDb) * segments) - 1)) : -1);
 window.peakHoldIdx = peakHoldIdx;
 
-function LedMeter({ level, height = 180, segments = 18, scale = false }) {
+// ---- Imperative meter system --------------------------------------------
+// The audio math (computeAudio) is cheap (~0.08ms), but re-rendering the whole
+// mixer to move the meters every frame reconciles ~3700 nodes and stalls the
+// audio thread on slower machines (proven: freezing the redraw makes playback
+// clean). So meters render their STRUCTURE once via React, then the animation
+// loop pushes live levels straight to their segment DOM through this registry.
+// No per-frame React render. Each meter registers by a stable mkey; the loop
+// calls window.__applyMeters(getLevel) with a level lookup.
+const METER_REG = new Map(); // mkey -> Set of entry objects
+function meterRegister(mkey, entry) {
+  if (!mkey) return () => {};
+  let set = METER_REG.get(mkey);
+  if (!set) { set = new Set(); METER_REG.set(mkey, set); }
+  set.add(entry);
+  return () => { const s = METER_REG.get(mkey); if (s) { s.delete(entry); if (!s.size) METER_REG.delete(mkey); } };
+}
+// Vertical LED bar (LedMeter): cells in DOM order i=0..N-1, i=0 is the TOP.
+// Each function skips all DOM writes when nothing visible changed (lit + hold
+// segment identical to last frame), so per-frame work stays near zero.
+function applyLedCells(entry, level) {
+  const { cells, segments, hold } = entry;
+  const db = window.levelToDbfs(level);
+  const lit = Math.round(dbfsFrac(db) * segments);
+  const holdDb = advancePeakHold({ current: hold }, db);
+  const holdIdx = peakHoldIdx(holdDb, segments);
+  const zone = holdDb >= -3 ? 2 : holdDb >= -12 ? 1 : 0;
+  if (entry._lit === lit && entry._hi === holdIdx && entry._z === zone) return;
+  entry._lit = lit; entry._hi = holdIdx; entry._z = zone;
+  for (let i = 0; i < segments; i++) {
+    const idx = segments - 1 - i;
+    const segDb = DBFS_FLOOR + ((idx + 1) / segments) * (0 - DBFS_FLOOR);
+    const isHold = idx === holdIdx;
+    const col = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+    const on = idx < lit || isHold;
+    const el = cells[i];
+    if (!el) continue;
+    el.style.background = on ? col : '#1a1a1c';
+    el.style.boxShadow = on ? ('0 0 ' + (isHold ? 6 : 4) + 'px ' + col) : 'inset 0 0 2px #000';
+    el.style.opacity = on ? '1' : '0.5';
+  }
+}
+// Horizontal mini bar (MiniMeter): cells in DOM order i=0..N-1, i=0 is LEFT/low.
+function applyMiniCells(entry, level) {
+  const { cells, segments, hold } = entry;
+  const db = window.levelToDbfs(level);
+  const lit = Math.min(segments, Math.round(dbfsFrac(db) * segments));
+  const holdDb = advancePeakHold({ current: hold }, db);
+  const holdIdx = peakHoldIdx(holdDb, segments);
+  const zone = holdDb >= -3 ? 2 : holdDb >= -12 ? 1 : 0;
+  if (entry._lit === lit && entry._hi === holdIdx && entry._z === zone) return;
+  entry._lit = lit; entry._hi = holdIdx; entry._z = zone;
+  for (let i = 0; i < segments; i++) {
+    const segDb = -48 + ((i + 1) / segments) * 48;
+    const isHold = i === holdIdx;
+    const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+    const on = i < lit || isHold;
+    const el = cells[i];
+    if (!el) continue;
+    el.style.background = on ? c : '#1a1a1c';
+    el.style.boxShadow = on ? ('0 0 ' + (isHold ? 4 : 2) + 'px ' + c) : 'none';
+    el.style.opacity = on ? '1' : '0.45';
+  }
+}
+// Horizontal PFL bar: same zone map as mini, PFLBar's own off-opacity/glow.
+function applyPflCells(entry, level) {
+  const { cells, segments, hold } = entry;
+  const db = window.levelToDbfs(level);
+  const lit = Math.min(segments, Math.round(dbfsFrac(db) * segments));
+  const holdDb = advancePeakHold({ current: hold }, db);
+  const holdIdx = peakHoldIdx(holdDb, segments);
+  const zone = holdDb >= -3 ? 2 : holdDb >= -12 ? 1 : 0;
+  if (entry._lit === lit && entry._hi === holdIdx && entry._z === zone) return;
+  entry._lit = lit; entry._hi = holdIdx; entry._z = zone;
+  for (let i = 0; i < segments; i++) {
+    const segDb = -48 + ((i + 1) / segments) * 48;
+    const isHold = i === holdIdx;
+    const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+    const on = i < lit || isHold;
+    const el = cells[i];
+    if (!el) continue;
+    el.style.background = on ? c : '#1a1a1c';
+    el.style.boxShadow = on ? ('0 0 ' + (isHold ? 5 : 3) + 'px ' + c) : 'none';
+    el.style.opacity = on ? '1' : '0.5';
+  }
+}
+const METER_APPLY = { led: applyLedCells, mini: applyMiniCells, pfl: applyPflCells };
+// Called by the animation loop. getLevel(mkey) returns the live level (or undef).
+window.__applyMeters = function (getLevel) {
+  METER_REG.forEach((set, mkey) => {
+    const lvl = getLevel(mkey);
+    if (lvl == null) return;
+    set.forEach(entry => {
+      if (!entry.cells || !entry.cells.length) return;
+      (METER_APPLY[entry.kind] || applyLedCells)(entry, lvl);
+    });
+  });
+};
+// Hook: registers a meter's cells under mkey and keeps them live imperatively.
+function useMeterCells(mkey, kind, segments) {
+  const rootRef = useRef(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !mkey) return;
+    const cells = Array.from(root.querySelectorAll('.led-cell'));
+    const entry = { kind, segments, cells, hold: { db: -60, t: null, holdUntil: 0 } };
+    return meterRegister(mkey, entry);
+  }, [mkey, kind, segments]);
+  return rootRef;
+}
+window.__meterKeys = null; // set by App each state change: fn(mkey)->level base
+
+function LedMeter({ level, height = 180, segments = 18, scale = false, mkey = null }) {
   const db = window.levelToDbfs(level);
   const lit = Math.round(dbfsFrac(db) * segments);
   const holdRef = useRef({ db: -60, t: null, holdUntil: 0 });
   const holdDb = advancePeakHold(holdRef, db);
   const holdIdx = peakHoldIdx(holdDb, segments);
+  // With mkey, this meter renders its structure once and the animation loop
+  // pushes live levels straight to the .led-cell DOM (no per-frame React).
+  const rootRef = useMeterCells(mkey, 'led', segments);
   const cells = [];
   for (let i = 0; i < segments; i++) {
     const idx = segments - 1 - i; // segDb rises with idx; idx 0 = bottom, high idx = top
@@ -2061,7 +2187,7 @@ function LedMeter({ level, height = 180, segments = 18, scale = false }) {
     const col = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
     const on = idx < lit || isHold;
     cells.push(
-      <div key={i} style={{
+      <div key={i} className="led-cell" style={{
         flex: 1, margin: '1px 0', borderRadius: 1,
         background: on ? col : '#1a1a1c',
         boxShadow: on ? `0 0 ${isHold ? 6 : 4}px ${col}` : 'inset 0 0 2px #000',
@@ -2074,7 +2200,7 @@ function LedMeter({ level, height = 180, segments = 18, scale = false }) {
   // clip line is brighter and wider — that's the one that means distortion.
   const hotFrac = dbfsFrac(-12), clipFrac = dbfsFrac(-3);
   const bar = (
-    <div className="ui-no-select" style={{ position: 'relative', display: 'flex', flexDirection: 'column', height, width: 10, padding: 1, background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 2 }}>
+    <div ref={rootRef} className="ui-no-select" style={{ position: 'relative', display: 'flex', flexDirection: 'column', height, width: 10, padding: 1, background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 2 }}>
       {cells}
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 'calc(' + (hotFrac * 100) + '% - 0.5px)', height: 1, background: 'rgba(233,231,224,0.28)', pointerEvents: 'none' }}/>
       <div style={{ position: 'absolute', left: -1.5, right: -1.5, bottom: 'calc(' + (clipFrac * 100) + '% - 0.5px)', height: 1.5, background: 'rgba(233,231,224,0.6)', pointerEvents: 'none' }}/>
@@ -2098,14 +2224,15 @@ function LedMeter({ level, height = 180, segments = 18, scale = false }) {
 // Small horizontal LED meter — used on destination devices (PA speakers, wedge,
 // stream gear) so engineers can see signal arriving at each output without
 // needing the full signal-flow diagnostic.
-function MiniMeter({ level, width = 44, segments = 10 }) {
+function MiniMeter({ level, width = 44, segments = 10, mkey = null }) {
   const db = window.levelToDbfs(level);
   const lit = Math.min(segments, Math.round((window.dbfsFrac ? window.dbfsFrac(db) : 0) * segments));
   const holdRef = useRef({ db: -60, t: null, holdUntil: 0 });
   const holdDb = advancePeakHold(holdRef, db);
   const holdIdx = peakHoldIdx(holdDb, segments);
+  const rootRef = useMeterCells(mkey, 'mini', segments);
   return (
-    <div className="ui-no-select" style={{
+    <div ref={rootRef} className="ui-no-select" style={{
       display: 'flex', gap: 1,
       width, height: 6,
       padding: 1,
@@ -2118,7 +2245,7 @@ function MiniMeter({ level, width = 44, segments = 10 }) {
         const isHold = i === holdIdx;
         const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
         const on = i < lit || isHold;
-        return <div key={i} style={{
+        return <div key={i} className="led-cell" style={{
           flex: 1,
           background: on ? c : '#1a1a1c',
           borderRadius: 0.5,
@@ -2188,6 +2315,7 @@ window.Knob = Knob;
 window.Fader = Fader;
 window.LedMeter = LedMeter;
 window.MiniMeter = MiniMeter;
+window.useMeterCells = useMeterCells;
 window.ButtonPad = ButtonPad;
 window.Led = Led;
 </script>
@@ -2198,7 +2326,7 @@ window.Led = Led;
 <script type="text/babel">
 const { Knob: K, Fader: F, LedMeter: M, ButtonPad: BP, Led: L } = window;
 
-function PFLBar({ level, hot }) {
+function PFLBar({ level, hot, mkey = null }) {
   const segs = 14;
   // dBFS bar: full scale = the console's clip point (0 dBFS = +22 dBu). Read the
   // meter's own zones like a real digital desk: keep the average up in the
@@ -2208,9 +2336,10 @@ function PFLBar({ level, hot }) {
   const holdRef = React.useRef({ db: -60, t: null, holdUntil: 0 });
   const holdDb = window.advancePeakHold ? window.advancePeakHold(holdRef, db) : db;
   const holdIdx = window.peakHoldIdx ? window.peakHoldIdx(holdDb, segs) : -1;
+  const rootRef = window.useMeterCells(mkey, 'pfl', segs);
   return (
     <div className="ui-no-select" style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
-      <div style={{
+      <div ref={rootRef} style={{
         display: 'flex', gap: 1,
         width: '100%',
         padding: 2,
@@ -2228,7 +2357,7 @@ function PFLBar({ level, hot }) {
           const isHold = i === holdIdx;
           const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
           const on = i < lit || isHold;
-          return <div key={i} style={{ flex: 1, height: 4, background: on ? c : '#1a1a1c', borderRadius: 0.5, boxShadow: on ? `0 0 ${isHold ? 5 : 3}px ${c}` : 'none', opacity: on ? 1 : 0.5 }}/>;
+          return <div key={i} className="led-cell" style={{ flex: 1, height: 4, background: on ? c : '#1a1a1c', borderRadius: 0.5, boxShadow: on ? `0 0 ${isHold ? 5 : 3}px ${c}` : 'none', opacity: on ? 1 : 0.5 }}/>;
         })}
       </div>
     </div>
@@ -2286,7 +2415,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
         tip="Input gain. Sets how strong the source hits the preamp. Set it first, checking in PFL." />)}
 
       <div style={{ width: '94%' }}>
-        <PFLBar level={pflLevel} hot={ch.solo}/>
+        <PFLBar level={pflLevel} hot={ch.solo} mkey={'pfl:' + idx}/>
         <div className="mono" style={{ fontSize: 6.5, color: ch.solo ? 'var(--amber)' : 'var(--ink-3)', textAlign: 'center', marginTop: 1, letterSpacing: 0.5, fontWeight: 700 }}>
           {ch.solo ? 'PFL' : 'INPUT'}
         </div>
@@ -2328,7 +2457,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
           centered, including the meter the lesson is talking about. */}
       <div data-walk={'ch' + (idx + 1) + '-fader'} style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
         <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>
-        <M level={channelLevel} height={172} segments={22}/>
+        <M level={channelLevel} height={172} segments={22} mkey={'chlvl:' + idx}/>
       </div>
 
       <div style={{
@@ -2398,8 +2527,8 @@ function MasterSection({ master, onChange, paLevel, paRLevel, powered = true, on
       <div data-walk="master-fader" style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: 1 }}>
         <F value={master.fader} onChange={(v) => { onChange({ ...master, fader: v }); if (onInspect) onInspect('pa'); }} height={208}/>
         <div style={{ display: 'flex', gap: 3 }}>
-          <M level={paLevel} height={208} segments={26}/>
-          <M level={paRLevel} height={208} segments={26} scale/>
+          <M level={paLevel} height={208} segments={26} mkey="out:pa_l"/>
+          <M level={paRLevel} height={208} segments={26} scale mkey="out:pa_r"/>
         </div>
       </div>
 
@@ -6176,26 +6305,31 @@ const IS_STAGING = (() => {
 })();
 window.IS_STAGING = IS_STAGING;
 
-// The 16-input full band (?band=1). A sandbox-style board (no fault, no win, no
-// lock) that swaps the console over to the 16-input band via bandState(). Kept
-// off the normal menu for now — appended only when the ?band link is used —
-// while the stage/snake views are still being built. Staging-only for now.
-// Lock is bypassed at load.
+// The 16-channel Free Play board: the same recorded performance as the MX-8
+// sandbox, with all of its inputs up on a bigger desk (bandState). Always
+// present so the Free Play size selector can switch to it (member-gated). It
+// maps to the 'PLAY' band, which the picker never lists, so it stays out of the
+// menu — reached only through the selector, or the ?band=1 test link.
+const BAND_INDEX = SCENARIOS.length;
+SCENARIOS.push({
+  id: 'band', isSandbox: true, isBand: true,
+  title: 'Free Play',
+  symptom: 'A 16-channel mixer with every input up and the system healthy. Nothing is broken and there is no goal here. Move faders, set gains, and build a mix on the bigger desk. Switch back to 8 channels any time from the size selector above.',
+  conditions: [], involves: [], defaultInspect: 'pa',
+  sabotage: () => {
+    const s = bandState();
+    ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => { if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.7; } });
+    // Mute the FOH playback line (the 15/16 stereo strip) by default: the 14
+    // inputs already ARE the performance, so the playback music bed would clash
+    // with them. The user can unmute it if they want to hear the reference mix.
+    const pb = s.channels.find((c) => c.stereo);
+    if (pb) pb.mute = true;
+    return s;
+  },
+});
+// ?band=1 still auto-loads the 16-channel board on load (staging-only, for our
+// own testing). Everyone else reaches it through the member-gated size selector.
 const BAND_PARAM = IS_STAGING && (() => { try { return new URLSearchParams(window.location.search).get('band') === '1'; } catch (e) { return false; } })();
-const BAND_INDEX = BAND_PARAM ? SCENARIOS.length : -1;
-if (BAND_PARAM) {
-  SCENARIOS.push({
-    id: 'band', isSandbox: true, isBand: true,
-    title: 'Full Band',
-    symptom: 'The full band is patched and up on an MX-16: fourteen inputs fanned out to the desk plus the FOH playback line on the top pair (15/16). Nothing is broken and there is no goal here yet — poke around the bigger console. Hide the stage to see it as front of house.',
-    conditions: [], involves: [], defaultInspect: 'pa',
-    sabotage: () => {
-      const s = bandState();
-      ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => { if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.7; } });
-      return s;
-    },
-  });
-}
 
 // Lessons ("Run the show") are members-only now, alongside the challenge modes.
 const isLocked = (sc) => !!(sc && (sc.isChallenge || sc.isLesson) && TIER !== 'member');
@@ -7799,7 +7933,17 @@ function App() {
   // so the warning can escalate (ring -> howl -> "too many, pull it down").
   const [fbSeverity, setFbSeverity] = uS({ level: 0, count: 0 });
 
-  const audio = uM(() => window.computeAudio(state, envelopeRef.current), [state, envTick]);
+  // Band: use STEADY (envelope-free) levels for `audio`, which drives the
+  // audible per-channel gains. The recorded clips carry their own dynamics, so
+  // folding the per-frame envelope into the gain is wrong — and because the
+  // band recomputes `audio` only on state changes (no per-frame re-render),
+  // every fader move would otherwise re-snapshot every channel's instantaneous
+  // envelope and jolt the whole mix balance. Meters still bounce: they read the
+  // live envelope directly in the animation loop, not from `audio`.
+  const audio = uM(() => window.computeAudio(state, state.big16 ? {} : envelopeRef.current), [state, envTick]);
+  // Current state for the animation loop (which has stale closures) — used to
+  // drive the band's meters straight to the DOM without a per-frame re-render.
+  const stateRef = uR(state); stateRef.current = state;
 
   // Clipping warnings read the SETTLED signal only (clipsStable, below).
   // With real crest factors, live peaks cross thresholds on every hot
@@ -8096,7 +8240,12 @@ function App() {
 
   uE(() => {
     let raf = 0;
+    let lastRenderMs = 0;
     const loop = () => {
+      // Diagnostic: freeze the entire per-frame meter loop (no analyser reads,
+      // no ballistics, no feedback, no re-render) so the main thread is nearly
+      // idle while the audio graph keeps playing on its own thread.
+      if (LITE_FREEZE) { raf = requestAnimationFrame(loop); return; }
       const t = performance.now() / 1000 - envStartRef.current;
       const ctxRunning = ctxRef.current && ctxRef.current.state === 'running';
       for (const k of METER_SOURCES) {
@@ -8197,7 +8346,40 @@ function App() {
         fbChain.voices.forEach(v => { if (v.gain.gain.value !== 0) v.gain.gain.value = 0; });
         if (lastSevRef.current && lastSevRef.current.level !== 0) { lastSevRef.current = { level: 0, count: 0 }; setFbSeverity({ level: 0, count: 0 }); }
       }
-      setEnvTick(n => (n + 1) & 0xff);
+      // Throttle the meter re-render to ~30fps. The envelope refs above still
+      // update every animation frame (smooth ballistics), but re-rendering the
+      // whole mixer + recomputing computeAudio 60x/sec was starving the audio
+      // thread on lower-powered machines (audible as compression / lost
+      // transients while the audio graph itself measured clean). ?lite=1 drops
+      // the re-render further (~8fps) as an extreme fallback.
+      // BAND scenario: drive the meters straight to the DOM every frame (no
+      // per-frame React render). Re-rendering 15 strips 60x/sec starved the
+      // audio thread on slower machines and glitched playback; computeAudio
+      // itself is ~0.08ms, so recomputing it here and pushing levels to the
+      // meter segments is cheap and leaves the audio thread alone. Every other
+      // scenario keeps the throttled re-render below (unchanged behavior).
+      if (stateRef.current.big16 && !LITE_METERS) {
+        const st = stateRef.current;
+        const on = st.mixer ? st.mixer.on !== false : true;
+        const a = window.computeAudio(st, envelopeRef.current);
+        const mb = a.mainBus || { L: 0, R: 0 };
+        window.__applyMeters((mkey) => {
+          if (mkey === 'out:pa_l') return mb.L || 0;
+          if (mkey === 'out:pa_r') return mb.R || 0;
+          const c = mkey.indexOf(':');
+          if (c > 0) {
+            const kind = mkey.slice(0, c), i = +mkey.slice(c + 1);
+            if (kind === 'chlvl') return on ? (a.post[i] || 0) * 1.2 : 0;
+            if (kind === 'pfl') return on ? (a.chanIn[i] || 0) : 0;
+          }
+          return null;
+        });
+      } else if (!LITE_METERS) {
+        // 8-channel modes are light (8 strips) and never glitched at full rate,
+        // so they keep the original 60fps meters. Only the 16-channel desk needs
+        // the direct-to-DOM path above.
+        setEnvTick(n => (n + 1) & 0xff);
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -8209,8 +8391,16 @@ function App() {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     let ctx;
-    try { ctx = new AC(); }
-    catch (e) { console.warn('AudioContext failed', e); return; }
+    // latencyHint:'playback' asks for a LARGER audio buffer, so the audio thread
+    // renders bigger chunks less often and can ride through a busy main thread
+    // (the meter re-render / GC) without underrunning. The default 'interactive'
+    // buffer is tiny and was underrunning on lower-powered machines, which
+    // glitched playback (heard as compression / lost transients on the band).
+    try { ctx = new AC({ latencyHint: 'playback' }); }
+    catch (e1) {
+      try { ctx = new AC(); }
+      catch (e2) { console.warn('AudioContext failed', e2); return; }
+    }
     const master = ctx.createGain();
     master.gain.value = 0;
     master.connect(ctx.destination);
@@ -8469,13 +8659,13 @@ function App() {
     // the bare filename); bump it whenever the .wav bytes change.
     const CLIP_SOURCES = {
       // MX-8 band (Golden V2 stems, shared with the full band's same instruments).
-      guitar: 'audio/bass.wav?v=5', laptop: 'audio/keys.wav?v=5', vocal: 'audio/vocal1.wav?v=5', vocal2: 'audio/vocal2.wav?v=5',
+      guitar: 'audio/bass.wav?v=6', laptop: 'audio/keys.wav?v=6', vocal: 'audio/vocal1.wav?v=6', vocal2: 'audio/vocal2.wav?v=6',
       // Full 16-input band (?band=1). vx1/vx2 reuse the shared vocal1/vocal2 stems;
       // bass/keys reuse the shared bass/keys stems, so those files load once.
-      kick: 'audio/kick.wav?v=5', snare: 'audio/snare.wav?v=5', rack: 'audio/rack.wav?v=5', floor: 'audio/floor.wav?v=5',
-      ohl: 'audio/ohl.wav?v=5', ohr: 'audio/ohr.wav?v=5', bass: 'audio/bass.wav?v=5', egtr: 'audio/egtr.wav?v=5',
-      agtr: 'audio/agtr.wav?v=5', keys: 'audio/keys.wav?v=5', vx1: 'audio/vocal1.wav?v=5', vx2: 'audio/vocal2.wav?v=5',
-      vx3: 'audio/vocal3.wav?v=5', vx4: 'audio/vocal4.wav?v=5',
+      kick: 'audio/kick.wav?v=6', snare: 'audio/snare.wav?v=6', rack: 'audio/rack.wav?v=6', floor: 'audio/floor.wav?v=6',
+      ohl: 'audio/ohl.wav?v=6', ohr: 'audio/ohr.wav?v=6', bass: 'audio/bass.wav?v=6', egtr: 'audio/egtr.wav?v=6',
+      agtr: 'audio/agtr.wav?v=6', keys: 'audio/keys.wav?v=6', vx1: 'audio/vocal1.wav?v=6', vx2: 'audio/vocal2.wav?v=6',
+      vx3: 'audio/vocal3.wav?v=6', vx4: 'audio/vocal4.wav?v=6',
     };
     // Only fetch the stems for sources actually on THIS board (its snake inputs =
     // the keys of state.cables, patch-independent), so the MX-8 loads its 4 stems
@@ -8510,15 +8700,38 @@ function App() {
         for (let i = 0; i < d0.length; i++) { const a = d0[i] < 0 ? -d0[i] : d0[i]; if (a > peak) peak = a; }
         const clipGain = ctx.createGain();
         const isMixStem = typeof BAND_KEYS !== 'undefined' && BAND_KEYS.indexOf(k) !== -1;
-        clipGain.gain.value = isMixStem ? 1.0 : (peak > 0.0001 ? Math.min(8, 0.6 / peak) : 1);
+        // Band stems play at EXACT unity gain: no normalization, no trim, no makeup.
+        // The buffer is what Kyle uploaded, byte for byte. The only things that touch
+        // its level are the console's own fader, pan, and master. If the overall mix
+        // needs to be louder or quieter, that is a fader move, not signal treatment.
+        clipGain.gain.value = isMixStem ? 1 : (peak > 0.0001 ? Math.min(8, 0.6 / peak) : 1);
         const src = ctx.createBufferSource();
         src.buffer = buf; src.loop = true;
-        src.connect(clipGain); clipGain.connect(chain.drive);
+        src.connect(clipGain);
+        if (isMixStem) {
+          // Band stems are a finished MIX: ZERO processing by default. Bypass the
+          // synth drive, saturation shaper, makeup, and envelope ENTIRELY — the
+          // recording runs straight into the channel's HPF (transparent / off by
+          // default, and it feeds the meter tap) and its level/pan (gainL/R). The
+          // only thing that touches the audio is the console's own controls.
+          clipGain.connect(chain.hpf);
+          // PERF: also PRUNE the synth front-end from the graph. Bypassing it for
+          // audio isn't enough — mix -> filter -> drive -> shaper(4x oversampled)
+          // -> makeup -> envelope still had a live path to the output, so Web Audio
+          // kept running all of that DSP (14 oversampled waveshapers!) on silence
+          // every audio block. Disconnecting envelope from the HPF orphans the whole
+          // subgraph so the engine stops processing it. That idle DSP, x14 channels,
+          // is what made the full band crackle and lag where 4 tracks ran clean.
+          try { chain.envelope.disconnect(); } catch (_) {}
+          try { chain.filter && chain.filter.disconnect(); } catch (_) {}
+        } else {
+          // MX-8 gain-staging sources keep drive -> shaper (with the clean clip
+          // curve, transparent until actually driven past the knee) so that
+          // overdriving a channel audibly distorts, which the lessons teach.
+          clipGain.connect(chain.drive);
+          if (chain.shaper) chain.shaper.curve = clipCurve;
+        }
         chain.clipGain = clipGain;
-        // Swap this chain's saturation to the clean clip curve: the recording
-        // now passes through transparent at rest (no transient squashing) and
-        // still soft-clips only when the channel is genuinely overdriven.
-        if (chain.shaper) chain.shaper.curve = clipCurve;
         src.start(startTime);
         // Hand off from the synth: stop its oscillators at the same instant.
         try {
@@ -8745,10 +8958,10 @@ function App() {
   const anyOutputActive = (audio.outputs.pa_l + audio.outputs.pa_r + audio.outputs.wedge + (audio.outputs.wedge2 || 0)
     + (audio.outputs.wedge3 || 0) + (audio.outputs.wedge4 || 0)) > 0.05;
   uE(() => {
-    if (!anyOutputActive) return;
+    if (!anyOutputActive || LITE_FREEZE || state.big16) return;
     const id = setInterval(() => force(t => t + 1), 120);
     return () => clearInterval(id);
-  }, [anyOutputActive]);
+  }, [anyOutputActive, state.big16]);
 
   // Load a scenario. reuseSeed replays the same attempt (Reset); omitting it
   // rolls a fresh seed (level change, Practice Again), which is what makes a
@@ -8848,6 +9061,19 @@ function App() {
     setHintCount(0);
     prevStateRef.current = sab;
     lastMoveRef.current = { key: null, at: 0 };
+  };
+
+  // Free Play 8/16 selector: switch the whole Free Play scenario between the
+  // MX-8 board (SANDBOX_INDEX) and the 16-channel board (BAND_INDEX). 8 is the
+  // default and free; 16 is members-only (non-members get the pitch instead of
+  // the switch). Reaching the 16-channel board flips state.big16 on, which is
+  // what drives the direct-to-DOM meters, steady gains, and no per-frame render.
+  const onFreePlaySize = (sz) => {
+    const want16 = sz === 16;
+    const isBandNow = !!(SCENARIOS[levelIdx] && SCENARIOS[levelIdx].isBand);
+    if (want16 === isBandNow) return; // already on that size
+    if (want16 && TIER !== 'member') { setPitchFor({ title: '16-channel mixer', big16: true }); return; }
+    loadLevel(want16 ? BAND_INDEX : SANDBOX_INDEX);
   };
 
   // Resume where I left off: on mount, jump to the saved scenario (captured at
@@ -9246,10 +9472,12 @@ function App() {
   // Big-desk view is offered in the same places the stage toggle is: not in
   // guided lessons or the walkthrough (authored against the 5-strip band) and
   // not on mobile. Elsewhere the console can present as an 8/16-channel desk.
-  // Staging-only while the bigger console is prototyped: production runs the
-  // single MX-8 desk with no size selector (IS_STAGING gates it).
-  const sizeSelectable = stageHideable && IS_STAGING;
-  const effConsoleSize = sizeSelectable ? consoleSize : 0;
+  // The 8/16 selector lives in Free Play (both its MX-8 and 16-channel boards).
+  // It switches the whole scenario between the two (source-swap), so there is no
+  // empty-strip padding: effConsoleSize stays 0 and padConsole is a no-op. 16 is
+  // member-gated in the handler (onFreePlaySize).
+  const sizeSelectable = !isMobile && (level.id === 'sandbox' || level.id === 'band');
+  const effConsoleSize = 0;
   const nCh = state && Array.isArray(state.channels) ? state.channels.length : NATIVE_CH;
   // The console footprint grows with the TOTAL strip count above the native 5 —
   // whether the extra strips are unused big-desk padding or a real band's inputs.
@@ -9456,7 +9684,7 @@ function App() {
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
         stageHidden={effStageHidden} onToggleStage={(stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null}
-        consoleSize={consoleSize} onSetConsoleSize={setConsoleSize} sizeSelectable={sizeSelectable}
+        consoleSize={consoleSize} onSetConsoleSize={onFreePlaySize} sizeSelectable={sizeSelectable}
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
@@ -9551,16 +9779,18 @@ function App() {
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
               {pitchFor.isLesson
-                ? 'Run the show is the full course: set up a live system with nothing powered on yet and run a real show, step by step. Ten lessons, from patching and powering up in order to setting levels, building a monitor mix, and staying clean through feedback. It is part of the Audio University membership.'
+                ? 'Set up and run a full live show, step by step, across ten guided lessons.'
+                : pitchFor.big16
+                ? 'Mix a full 16-channel board with every input up.'
                 : pitchFor.isDigital
-                ? 'The digital console surface teaches the part of modern live sound the analog desk cannot: one shared channel section that follows whatever you SELECT, so the real skill is confirming what is selected before you touch a knob. Same signal flow and faults, a different surface. It is part of the membership.'
+                ? 'Build the confidence to walk up to a digital console and mix the show.'
                 : pitchFor.isLibrary
-                ? 'The Scenario Library is a growing shelf of real-world situations, each one a specific show that went sideways and the exact board behind it. Members can browse and play the whole library, and it keeps growing. Some land as free links in the videos; the full shelf is part of the membership.'
+                ? 'A growing library of real-world scenarios to troubleshoot, each a different board.'
                 : pitchFor.isFeedbackMode
-                ? 'Mic Feedback Mode is ring-out training. Push the singer\'s monitor toward a target level, and when a frequency rings, find it on a full 25-band graphic EQ and cut it a few dB. A real ring-out only takes a few cuts, and the wedge has to keep sounding natural. Each one is a new wedge with a new ring profile.'
+                ? 'Ring-out training: find the frequency that is feeding back and cut it on a graphic EQ.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
-                ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free tries. Members keep going with no limit: a new fault each time, two or three at once when you turn the difficulty up, for as long as you want to practice.'
-                : 'The free lessons teach you to set up and run the system. Practice Mode trains you to troubleshoot it: a new fault each time, two or three at once when you turn the difficulty up, for as long as you want to practice.'}
+                ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free tries. Members practice with no limit.'
+                : 'Endless troubleshooting reps: a new fault each time, more at once as you turn it up.'}
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
               {pitchFor.title} is part of the Audio University membership.
@@ -9596,8 +9826,8 @@ function App() {
             <div ref={designRef} style={{ width: designW, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
-                surface={(level.isWalkthrough || level.isLesson) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital}
-                surfaceLocked={level.isWalkthrough || level.isLesson} stageHidden={effStageHidden} briefBelow={briefBelow}
+                surface={(level.isWalkthrough || level.isLesson || state.big16) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital && !state.big16}
+                surfaceLocked={level.isWalkthrough || level.isLesson || !!state.big16} stageHidden={effStageHidden} briefBelow={briefBelow}
                 sidebarContent={
                   <StableSlot levelKey={levelIdx}>
                   {solved
@@ -10098,12 +10328,12 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           <button onClick={onToggleStage} className="mono ui-no-select" title={stageHidden ? 'Show the stage: sources, cables, and speakers' : 'Hide the stage to give the console the whole screen'} style={{ ...navBtn, padding: '6px 12px' }}>{stageHidden ? 'SHOW STAGE' : 'HIDE STAGE'}</button>
         )}
         {sizeSelectable && onSetConsoleSize && (
-          <div className="mono ui-no-select" title="Console size: show the desk as 8, 16, or 24 channels. The band keeps the first strips; the rest are spare line inputs." style={{ ...navBtn, padding: 0, display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden' }}>
+          <div className="mono ui-no-select" title="Mixer size: 8 or 16 channels. 16 opens every input from the same performance." style={{ ...navBtn, padding: 0, display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden' }}>
             {[8, 16].map((sz, ix) => {
-              const on = consoleSize === sz;
+              const on = (sz === 16) ? !!level.isBand : !level.isBand;
               return (
-                <button key={sz} onClick={() => onSetConsoleSize(on ? 0 : sz)} className="mono ui-no-select"
-                  title={on ? 'Back to the band (native size)' : ('Show the console as a ' + sz + '-channel desk')}
+                <button key={sz} onClick={() => onSetConsoleSize(sz)} className="mono ui-no-select"
+                  title={on ? 'Current mixer size' : ('Switch to the ' + sz + '-channel mixer' + (sz === 16 ? ' (members)' : ''))}
                   style={{ border: 'none', borderLeft: ix ? '1px solid #38383e' : 'none', background: on ? 'var(--cool)' : 'transparent', color: on ? '#08080a' : 'var(--ink-2)', padding: '6px 8px', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: 'pointer' }}>
                   {sz}
                 </button>
