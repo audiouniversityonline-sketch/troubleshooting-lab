@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=90"></script>
+<script src="content-staging.js?v=91"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4467,13 +4467,14 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     floor: { top: 138, left: '43%' },              // floor tom, left of the stack
     ohr:   { top: 138, left: '66%' },              // overhead R, right of the rack tom
     ohl:   { top: 138, left: '34%' },              // overhead L, left of the floor tom
-    // Backline instruments in front of the drums, each UPSTAGE of the singer who
-    // plays it: bass above Vocal 2 (screen-left), the two guitars above Vocal 1
-    // (centre), keys above Vocal 3 (screen-right). They feed the backline snake.
-    bass:  { top: 372, left: '26%' },              // bass rig
-    egtr:  { top: 372, left: '40%' },              // electric gtr
-    agtr:  { top: 372, left: '54%' },              // acoustic gtr
-    keys:  { top: 372, left: '66%' },              // keys rig
+    // Backline amps sit on the SAME upstage line as the drums — a real backline
+    // row. The kit holds the centre, so the amps flank it: bass + electric to
+    // stage-left (nearest Vocal 2 / Vocal 1), acoustic + keys to stage-right
+    // (Vocal 1 / Vocal 3). They drop down into the backline sub-snake below.
+    bass:  { top: 150, left: '10%' },              // bass rig, far stage-left
+    egtr:  { top: 150, left: '24%' },              // electric gtr, left of the kit
+    agtr:  { top: 150, left: '76%' },              // acoustic gtr, right of the kit
+    keys:  { top: 150, left: '88%' },              // keys rig, far stage-right
     // The three singers across the downstage line, over the vocal sub-snake.
     vx2:   { top: 476, left: '26%' },              // Vocal 2 (bassist)
     vx1:   { top: 476, left: '46%' },              // Vocal 1 (guitarist, lead)
@@ -4653,9 +4654,11 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             <div style={{ position: 'absolute', top: 256, left: '50%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DRUM SUB-SNAKE" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
             </div>
-            {/* Backline sub-snake — in FRONT of the drums (just below the drum
-                sub-snake); the bass, both guitars and keys DI up into it. */}
-            <div style={{ position: 'absolute', top: 314, left: '46%', transform: 'translateX(-50%)' }}>
+            {/* Backline sub-snake — centred just downstage of the two sub-snake
+                boxes, with an open lane above it: the flanking bass, guitars and
+                keys drop DOWN off the backline row into that lane and in to their
+                channels. */}
+            <div style={{ position: 'absolute', top: 345, left: '46%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="BACKLINE SUB-SNAKE" items={instItems} subJackRefs={subJackRefs} outRef={instHeadOutRef}/>
             </div>
             {/* Vocal sub-snake box — below the three singers; only Vocal 1/2/3
@@ -5475,14 +5478,19 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             }
             return { src: k, from: pts[0], to: jc, port, unplugged: !(port >= 1), xlr: true, drumPts: pts };
           }
-          // Backline box sits ABOVE its instruments (cable leaves the card top);
-          // the vocal box sits BELOW the singers (cable leaves the bottom). Each
-          // cable gets its own lane so a group's XLRs run parallel, never stacked.
-          const fromSide = (sk === 'inst') ? 'top' : 'bottom';
-          const from = anchorPos(src, fromSide);
+          // Backline amps now sit UP on the drum plane (a real backline row),
+          // ABOVE the backline sub-snake, so their cable leaves the card BOTTOM
+          // and drops into a lane just above the backline box (below the drum
+          // sub-snake, so the horizontal run crosses neither box), then plugs
+          // down into its channel. Vocals leave the bottom into the vocal box
+          // below them. Each cable gets its own lane height so parallel runs
+          // never stack.
+          const from = anchorPos(src, 'bottom');
           const grpList = sourceKeys.filter(x => window.SOURCES[x] && window.SOURCES[x].snake === sk);
           const li = grpList.indexOf(k);
-          const midY = (from.y + jc.y) / 2 + (li - (grpList.length - 1) / 2) * 6;
+          const midY = (sk === 'inst')
+            ? jc.y - 48 + li * 3                                   // lane just above the backline box
+            : (from.y + jc.y) / 2 + (li - (grpList.length - 1) / 2) * 6;
           return { src: k, from, to: jc, port, unplugged: !(port >= 1), xlr: true, midY };
         }
         const from = anchorPos(src, 'top');
