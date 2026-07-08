@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=59"></script>
+<script src="content-staging.js?v=60"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8210,7 +8210,7 @@ function App() {
       // the re-render further (~8fps) as an extreme fallback.
       if (!LITE_METERS) {
         const nowMs = performance.now();
-        if (nowMs - lastRenderMs >= 32) { lastRenderMs = nowMs; setEnvTick(n => (n + 1) & 0xff); }
+        if (nowMs - lastRenderMs >= 48) { lastRenderMs = nowMs; setEnvTick(n => (n + 1) & 0xff); }
       }
       raf = requestAnimationFrame(loop);
     };
@@ -8223,8 +8223,16 @@ function App() {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     let ctx;
-    try { ctx = new AC(); }
-    catch (e) { console.warn('AudioContext failed', e); return; }
+    // latencyHint:'playback' asks for a LARGER audio buffer, so the audio thread
+    // renders bigger chunks less often and can ride through a busy main thread
+    // (the meter re-render / GC) without underrunning. The default 'interactive'
+    // buffer is tiny and was underrunning on lower-powered machines, which
+    // glitched playback (heard as compression / lost transients on the band).
+    try { ctx = new AC({ latencyHint: 'playback' }); }
+    catch (e1) {
+      try { ctx = new AC(); }
+      catch (e2) { console.warn('AudioContext failed', e2); return; }
+    }
     const master = ctx.createGain();
     master.gain.value = 0;
     master.connect(ctx.destination);
