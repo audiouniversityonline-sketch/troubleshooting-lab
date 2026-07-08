@@ -4435,16 +4435,18 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // top + left only; the per-source marginLeft (to centre on `left`) is applied
   // in the map from wOf(k) so each card centres on its own width.
   const positions = big16 ? {
-    // Drum kit laid out like a stage plot from above (drummer upstage, kit
-    // facing downstage): overheads at the back corners, rack tom centre, floor
-    // tom to the side, snare front-left, kick front-centre nearest the audience.
-    ohl:   { top: 2,   left: '42%' },              // overhead, back-left
-    ohr:   { top: 2,   left: '58%' },              // overhead, back-right
-    rack:  { top: 36,  left: '50%' },              // rack tom, centre
-    floor: { top: 44,  left: '62%' },              // floor tom, drummer's right
-    snare: { top: 74,  left: '40%' },              // snare, front-left
-    kick:  { top: 92,  left: '51%' },              // kick, front-centre
-    vx4:   { top: 40,  left: '70%' },              // drummer's vocal, beside the kit (upstage snake)
+    // Drum kit stage plot (drum sub-snake box sits ABOVE the kit, so the drum
+    // cables run straight up to it): rack + snare side by side just above the
+    // kick; kick centred between the two overheads; overheads dropped down and
+    // out; floor tom far left, just above overhead left. Drummer's vocal in line
+    // with the cluster on the right, with its wedge beside it.
+    floor: { top: 100, left: '27%' },              // far left, just above OH L
+    rack:  { top: 100, left: '46%' },              // just above the kick
+    snare: { top: 100, left: '54%' },              // beside the rack, above the kick
+    ohl:   { top: 158, left: '40%' },              // dropped down, left of the kick
+    kick:  { top: 158, left: '50%' },              // between the overheads
+    ohr:   { top: 158, left: '60%' },              // dropped down, right of the kick
+    vx4:   { top: 158, left: '72%' },              // drummer's vocal, in line with the kit
     // Downstage-snake performers, all in the lower half so they physically sit on
     // the downstage sub-snake: bass + keys + guitars mid, the three lead vocals
     // across the front over their wedges.
@@ -4528,7 +4530,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', top: 132, left: '72%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', top: big16 ? 158 : 132, left: big16 ? '84%' : '72%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 4" accent="var(--amber)" on={state.outputs.wedge4.on} mute={state.outputs.wedge4.mute} volume={state.outputs.wedge4.volume} level={audio.outputs.wedge4}
               onTogglePower={() => setOut('wedge4', { on: !state.outputs.wedge4.on })}
               onToggleMute={() => setOut('wedge4', { mute: !state.outputs.wedge4.mute })}
@@ -4622,9 +4624,9 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             the console panel's header label instead of cutting through it). */}
         {big16 ? (
           <>
-            {/* Drum sub-snake box — sits right by the kit; the six drum mics and
-                the drummer's vocal XLR into its channels 1-7. */}
-            <div style={{ position: 'absolute', top: 150, left: '50%', transform: 'translateX(-50%)' }}>
+            {/* Drum sub-snake box — sits ABOVE the kit, so the six drum mics and
+                the drummer's vocal XLR straight up into its channels 1-7. */}
+            <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DRUM SUB-SNAKE" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
             </div>
             {/* Downstage sub-snake box — sits by the front line; vocals, guitars,
@@ -5399,14 +5401,17 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         if (!src) return null;
         const port = state.cables[k];
         // 16-channel: the input cable is the instrument's XLR to its channel on
-        // the nearby sub-snake box. The box sits below its instruments, so the
-        // cable leaves the card's bottom edge.
+        // the nearby sub-snake box. The drum box sits ABOVE its kit (cable leaves
+        // the card top); the downstage box sits below its performers (cable leaves
+        // the bottom). midY is a shared right-angle rail between the two.
         if (state.big16) {
-          const from = anchorPos(src, 'bottom');
+          const grpUp = window.SOURCES[k] && window.SOURCES[k].snake === 'up';
+          const from = anchorPos(src, grpUp ? 'top' : 'bottom');
           const jack = subJackRefs.current[k];
           const to = jack ? anchorPos(jack, 'center') : null;
           if (!from || !to) return null;
-          return { src: k, from, to, port, unplugged: !(port >= 1), xlr: true };
+          const midY = (from.y + to.y) / 2;
+          return { src: k, from, to, port, unplugged: !(port >= 1), xlr: true, midY };
         }
         const from = anchorPos(src, 'top');
         const portEl = port >= 1 ? portRefs.current[port] : null;
@@ -5776,11 +5781,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             // cursor and draw a direct bezier instead of the rail-routed
             // path (the cable is in the engineer's hand, not on the rail).
             const portEnd = isDragged ? dragState.cursor : c.to;
-            // Band inputs run a SHORT direct cable to their nearby sub-snake head;
-            // the MX-8 routes up-and-over a shared back rail to the single box.
+            // A cable in the engineer's hand shows the loose curve; once patched it
+            // snaps to a clean right-angle run (a shared rail), like the outputs.
             const d = isDragged
               ? window._cableCurve(c.from, portEnd)
-              : (state.big16 ? window._cableCurve(c.from, c.to) : window._routedCable(c.from, c.to, railY));
+              : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY);
             const opacity = someOtherDragged ? 0.18 : (hovered ? 1 : 0.95);
             // No "unplugged" badge: the loose cable dangling from the source
             // is enough to read that it needs patching.
