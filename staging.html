@@ -4048,7 +4048,7 @@ function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive, nPor
       padding: '5px 8px 8px',
       display: 'flex', flexDirection: 'column', gap: 3,
       position: 'relative',
-      width: wide ? 320 : 176,
+      width: wide ? 208 : 176,
       boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
     }}>
       <div className="mono" style={{ fontSize: 6.5, color: 'var(--cool)', letterSpacing: 1, fontWeight: 700, textAlign: 'center' }}>STAGE BOX</div>
@@ -4330,9 +4330,9 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     ohr:   { top: 62,  left: '57%' },
     vx4:   { top: 34,  left: '67%' },              // drummer's vocal, beside the kit
     bass:  { top: 40,  left: '8%'  },              // upstage left
-    keys:  { top: 40,  left: '92%' },              // upstage right
-    egtr:  { top: 160, left: '18%' },
-    agtr:  { top: 160, left: '82%' },
+    keys:  { top: 26,  left: '86%' },              // upstage right, clear above the stage box
+    egtr:  { top: 184, left: '17%' },
+    agtr:  { top: 184, left: '80%' },              // mid-right, clear below the stage box
     vx1:   { top: 296, left: '31%' },              // front line, over the wedges
     vx2:   { top: 296, left: '50%' },
     vx3:   { top: 296, left: '69%' },
@@ -4501,7 +4501,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         {/* Stage Box at upstage-RIGHT, pulled slightly downstage so the snake
             exits at roughly the same Y as the FOH fan-out (and stays below
             the console panel's header label instead of cutting through it). */}
-        <div ref={stageBoxRef} style={{ position: 'absolute', top: 130, right: 8 }}>
+        <div ref={stageBoxRef} style={{ position: 'absolute', top: big16 ? 92 : 130, right: 8 }}>
           <StageBox
             portRefs={portRefs}
             outRefs={outRefs}
