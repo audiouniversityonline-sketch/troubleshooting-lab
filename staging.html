@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=65"></script>
+<script src="content-staging.js?v=66"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6305,26 +6305,26 @@ const IS_STAGING = (() => {
 })();
 window.IS_STAGING = IS_STAGING;
 
-// The 16-input full band (?band=1). A sandbox-style board (no fault, no win, no
-// lock) that swaps the console over to the 16-input band via bandState(). Kept
-// off the normal menu for now — appended only when the ?band link is used —
-// while the stage/snake views are still being built. Staging-only for now.
-// Lock is bypassed at load.
+// The 16-channel Free Play board: the same recorded performance as the MX-8
+// sandbox, with all of its inputs up on a bigger desk (bandState). Always
+// present so the Free Play size selector can switch to it (member-gated). It
+// maps to the 'PLAY' band, which the picker never lists, so it stays out of the
+// menu — reached only through the selector, or the ?band=1 test link.
+const BAND_INDEX = SCENARIOS.length;
+SCENARIOS.push({
+  id: 'band', isSandbox: true, isBand: true,
+  title: 'Free Play',
+  symptom: 'A 16-channel mixer with every input up and the system healthy. Nothing is broken and there is no goal here. Move faders, set gains, and build a mix on the bigger desk. Switch back to 8 channels any time from the size selector above.',
+  conditions: [], involves: [], defaultInspect: 'pa',
+  sabotage: () => {
+    const s = bandState();
+    ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => { if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.7; } });
+    return s;
+  },
+});
+// ?band=1 still auto-loads the 16-channel board on load (staging-only, for our
+// own testing). Everyone else reaches it through the member-gated size selector.
 const BAND_PARAM = IS_STAGING && (() => { try { return new URLSearchParams(window.location.search).get('band') === '1'; } catch (e) { return false; } })();
-const BAND_INDEX = BAND_PARAM ? SCENARIOS.length : -1;
-if (BAND_PARAM) {
-  SCENARIOS.push({
-    id: 'band', isSandbox: true, isBand: true,
-    title: 'Full Band',
-    symptom: 'The full band is patched and up on an MX-16: fourteen inputs fanned out to the desk plus the FOH playback line on the top pair (15/16). Nothing is broken and there is no goal here yet — poke around the bigger console. Hide the stage to see it as front of house.',
-    conditions: [], involves: [], defaultInspect: 'pa',
-    sabotage: () => {
-      const s = bandState();
-      ['wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => { if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.7; } });
-      return s;
-    },
-  });
-}
 
 // Lessons ("Run the show") are members-only now, alongside the challenge modes.
 const isLocked = (sc) => !!(sc && (sc.isChallenge || sc.isLesson) && TIER !== 'member');
@@ -9056,6 +9056,19 @@ function App() {
     lastMoveRef.current = { key: null, at: 0 };
   };
 
+  // Free Play 8/16 selector: switch the whole Free Play scenario between the
+  // MX-8 board (SANDBOX_INDEX) and the 16-channel board (BAND_INDEX). 8 is the
+  // default and free; 16 is members-only (non-members get the pitch instead of
+  // the switch). Reaching the 16-channel board flips state.big16 on, which is
+  // what drives the direct-to-DOM meters, steady gains, and no per-frame render.
+  const onFreePlaySize = (sz) => {
+    const want16 = sz === 16;
+    const isBandNow = !!(SCENARIOS[levelIdx] && SCENARIOS[levelIdx].isBand);
+    if (want16 === isBandNow) return; // already on that size
+    if (want16 && TIER !== 'member') { setPitchFor({ title: '16-channel mixer', big16: true }); return; }
+    loadLevel(want16 ? BAND_INDEX : SANDBOX_INDEX);
+  };
+
   // Resume where I left off: on mount, jump to the saved scenario (captured at
   // init, before any persist overwrote it). Fires once; only when the target
   // is a real, unlocked level other than the default. Difficulty (FAULTS and
@@ -9452,10 +9465,12 @@ function App() {
   // Big-desk view is offered in the same places the stage toggle is: not in
   // guided lessons or the walkthrough (authored against the 5-strip band) and
   // not on mobile. Elsewhere the console can present as an 8/16-channel desk.
-  // Staging-only while the bigger console is prototyped: production runs the
-  // single MX-8 desk with no size selector (IS_STAGING gates it).
-  const sizeSelectable = stageHideable && IS_STAGING;
-  const effConsoleSize = sizeSelectable ? consoleSize : 0;
+  // The 8/16 selector lives in Free Play (both its MX-8 and 16-channel boards).
+  // It switches the whole scenario between the two (source-swap), so there is no
+  // empty-strip padding: effConsoleSize stays 0 and padConsole is a no-op. 16 is
+  // member-gated in the handler (onFreePlaySize).
+  const sizeSelectable = !isMobile && (level.id === 'sandbox' || level.id === 'band');
+  const effConsoleSize = 0;
   const nCh = state && Array.isArray(state.channels) ? state.channels.length : NATIVE_CH;
   // The console footprint grows with the TOTAL strip count above the native 5 —
   // whether the extra strips are unused big-desk padding or a real band's inputs.
@@ -9662,7 +9677,7 @@ function App() {
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
         stageHidden={effStageHidden} onToggleStage={(stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null}
-        consoleSize={consoleSize} onSetConsoleSize={setConsoleSize} sizeSelectable={sizeSelectable}
+        consoleSize={consoleSize} onSetConsoleSize={onFreePlaySize} sizeSelectable={sizeSelectable}
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
@@ -9758,6 +9773,8 @@ function App() {
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
               {pitchFor.isLesson
                 ? 'Run the show is the full course: set up a live system with nothing powered on yet and run a real show, step by step. Ten lessons, from patching and powering up in order to setting levels, building a monitor mix, and staying clean through feedback. It is part of the Audio University membership.'
+                : pitchFor.big16
+                ? 'The 16-channel mixer opens every input from the same performance, so you mix a full board instead of the four channels you learn on. Start small on the 8-channel desk to build the fundamentals, then step up to the bigger console when you are ready. It is part of the Audio University membership.'
                 : pitchFor.isDigital
                 ? 'The digital console surface teaches the part of modern live sound the analog desk cannot: one shared channel section that follows whatever you SELECT, so the real skill is confirming what is selected before you touch a knob. Same signal flow and faults, a different surface. It is part of the membership.'
                 : pitchFor.isLibrary
@@ -9802,8 +9819,8 @@ function App() {
             <div ref={designRef} style={{ width: designW, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
-                surface={(level.isWalkthrough || level.isLesson) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital}
-                surfaceLocked={level.isWalkthrough || level.isLesson} stageHidden={effStageHidden} briefBelow={briefBelow}
+                surface={(level.isWalkthrough || level.isLesson || state.big16) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital && !state.big16}
+                surfaceLocked={level.isWalkthrough || level.isLesson || !!state.big16} stageHidden={effStageHidden} briefBelow={briefBelow}
                 sidebarContent={
                   <StableSlot levelKey={levelIdx}>
                   {solved
@@ -10304,12 +10321,12 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           <button onClick={onToggleStage} className="mono ui-no-select" title={stageHidden ? 'Show the stage: sources, cables, and speakers' : 'Hide the stage to give the console the whole screen'} style={{ ...navBtn, padding: '6px 12px' }}>{stageHidden ? 'SHOW STAGE' : 'HIDE STAGE'}</button>
         )}
         {sizeSelectable && onSetConsoleSize && (
-          <div className="mono ui-no-select" title="Console size: show the desk as 8, 16, or 24 channels. The band keeps the first strips; the rest are spare line inputs." style={{ ...navBtn, padding: 0, display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden' }}>
+          <div className="mono ui-no-select" title="Mixer size: 8 or 16 channels. 16 opens every input from the same performance." style={{ ...navBtn, padding: 0, display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden' }}>
             {[8, 16].map((sz, ix) => {
-              const on = consoleSize === sz;
+              const on = (sz === 16) ? !!level.isBand : !level.isBand;
               return (
-                <button key={sz} onClick={() => onSetConsoleSize(on ? 0 : sz)} className="mono ui-no-select"
-                  title={on ? 'Back to the band (native size)' : ('Show the console as a ' + sz + '-channel desk')}
+                <button key={sz} onClick={() => onSetConsoleSize(sz)} className="mono ui-no-select"
+                  title={on ? 'Current mixer size' : ('Switch to the ' + sz + '-channel mixer' + (sz === 16 ? ' (members)' : ''))}
                   style={{ border: 'none', borderLeft: ix ? '1px solid #38383e' : 'none', background: on ? 'var(--cool)' : 'transparent', color: on ? '#08080a' : 'var(--ink-2)', padding: '6px 8px', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: 'pointer' }}>
                   {sz}
                 </button>
