@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=69"></script>
+<script src="content-staging.js?v=70"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8138,7 +8138,7 @@ function App() {
     // listed ports, snake tails on their numbered channels, console outputs
     // into snake 1-6, speaker lines on their planned ports. A pro's patch
     // matches the paperwork (the Input List).
-    const patchOk = !level.requirePatch || (() => {
+    const patchOk = !level.requirePatch || state.big16 || (() => {
       const c = state.cables || {};
       const cablesOk = c.vocal === 1 && c.vocal2 === 2 && c.guitar === 3 && c.laptop === 4;
       const fo = state.fanOut || [1, 2, 3, 4];
@@ -9070,10 +9070,20 @@ function App() {
   // what drives the direct-to-DOM meters, steady gains, and no per-frame render.
   const onFreePlaySize = (sz) => {
     const want16 = sz === 16;
-    const isBandNow = !!(SCENARIOS[levelIdx] && SCENARIOS[levelIdx].isBand);
-    if (want16 === isBandNow) return; // already on that size
+    const isBig = !!(state && state.big16);
+    if (want16 === isBig) return; // already on that size
     if (want16 && TIER !== 'member') { setPitchFor({ title: '16-channel mixer', big16: true }); return; }
-    loadLevel(want16 ? BAND_INDEX : SANDBOX_INDEX);
+    const cur = SCENARIOS[levelIdx];
+    if (cur && cur.isPractice) {
+      // Practice keeps its scenario; the size flag makes the rep rebuild on the
+      // 16-channel board (bandState) with faults across all 14 inputs. Persists
+      // so Practice Again / next rep stay on the chosen size.
+      window.PRACTICE_16 = want16;
+      loadLevel(levelIdx);
+    } else {
+      // Free Play swaps between the two boards outright.
+      loadLevel(want16 ? BAND_INDEX : SANDBOX_INDEX);
+    }
   };
 
   // Resume where I left off: on mount, jump to the saved scenario (captured at
@@ -9476,7 +9486,7 @@ function App() {
   // It switches the whole scenario between the two (source-swap), so there is no
   // empty-strip padding: effConsoleSize stays 0 and padConsole is a no-op. 16 is
   // member-gated in the handler (onFreePlaySize).
-  const sizeSelectable = !isMobile && (level.id === 'sandbox' || level.id === 'band');
+  const sizeSelectable = !isMobile && (level.id === 'sandbox' || level.id === 'band' || level.isPractice);
   const effConsoleSize = 0;
   const nCh = state && Array.isArray(state.channels) ? state.channels.length : NATIVE_CH;
   // The console footprint grows with the TOTAL strip count above the native 5 —
@@ -9574,7 +9584,7 @@ function App() {
   // separate rows; practice reps get one combined row (the patch is usually
   // fine there — the row exists so a crosspatch fault has a visible miss).
   let patchStatus = null;
-  if (level.requirePatch) {
+  if (level.requirePatch && !state.big16) {
     const c = state.cables || {};
     const cablesOk = c.vocal === 1 && c.vocal2 === 2 && c.guitar === 3 && c.laptop === 4;
     const fo = state.fanOut || [];
@@ -9684,7 +9694,7 @@ function App() {
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
         stageHidden={effStageHidden} onToggleStage={(stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null}
-        consoleSize={consoleSize} onSetConsoleSize={onFreePlaySize} sizeSelectable={sizeSelectable}
+        consoleSize={consoleSize} onSetConsoleSize={onFreePlaySize} sizeSelectable={sizeSelectable} big16={!!state.big16}
         onOpenIoList={() => setIoListOpen(true)}
         onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
@@ -10182,7 +10192,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, consoleSize, onSetConsoleSize, sizeSelectable }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, consoleSize, onSetConsoleSize, sizeSelectable, big16 }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -10330,7 +10340,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         {sizeSelectable && onSetConsoleSize && (
           <div className="mono ui-no-select" title="Mixer size: 8 or 16 channels. 16 opens every input from the same performance." style={{ ...navBtn, padding: 0, display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden' }}>
             {[8, 16].map((sz, ix) => {
-              const on = (sz === 16) ? !!level.isBand : !level.isBand;
+              const on = (sz === 16) ? !!big16 : !big16;
               return (
                 <button key={sz} onClick={() => onSetConsoleSize(sz)} className="mono ui-no-select"
                   title={on ? 'Current mixer size' : ('Switch to the ' + sz + '-channel mixer' + (sz === 16 ? ' (members)' : ''))}

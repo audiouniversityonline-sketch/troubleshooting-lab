@@ -643,7 +643,46 @@ window.LEVELS = [
 // 0.27 (conditions min 0.2 with margin); the main bus power-sums to about
 // 0 dBu, 22 dB under the clip. Same meters as the old uniform-0.42 board — the
 // gain KNOBS now sit at realistic per-source spots.
+// ---- Board descriptor. Which channels are real inputs, on the MX-8 OR the
+// 16-channel board, derived from state so ONE fault engine serves both. For the
+// MX-8 these reproduce the old hardcoded values exactly (inputs 0-3, powered
+// 1-2, playback ch6); on the 16-channel board they expand to all 14 inputs.
+function pbInputs(s) {
+  const out = [];
+  for (let i = 0; i < s.channels.length; i++) {
+    if (s.channels[i].stereo) continue;                                 // the playback strip
+    if (window.sourceFor && window.sourceFor(s, i)) out.push(i);        // patched to a real source
+  }
+  return out;
+}
+function pbSources(s) { return pbInputs(s).map((i) => window.sourceFor(s, i)); }
+function pbPowered(s) { return pbInputs(s).filter((i) => { const d = window.SOURCES[window.sourceFor(s, i)]; return d && (d.kind === 'condenser' || d.diActive); }); }
+function pbMics(s) { return pbInputs(s).filter((i) => { const d = window.SOURCES[window.sourceFor(s, i)]; return d && (d.kind === 'dynamic' || d.kind === 'condenser'); }); }
+function pbPlayback(s) { return s.channels.findIndex((c) => c.stereo); }
+function pbPick(arr, rng) { return arr.length ? arr[Math.floor((rng ? rng() : 0) * arr.length)] : -1; }
+
+// Healthy 16-channel start: every one of the 14 inputs up at its per-source
+// nominal gain, playback muted, PA and wedges on. Mirrors the MX-8 bandUp.
+function bandUp16(s) {
+  for (const i of pbInputs(s)) {
+    const c = s.channels[i];
+    const d = window.SOURCES[window.sourceFor(s, i)];
+    c.mute = false;
+    c.fader = 0.6;
+    c.gain = window.healthyGain(d ? d.dbu : null);
+    c.phantom = !!(d && (d.kind === 'condenser' || d.diActive));
+  }
+  const pb = pbPlayback(s);
+  if (pb >= 0) { s.channels[pb].mute = true; s.channels[pb].fader = 0; s.channels[pb].gain = 0; }
+  s.master.mute = false; s.master.fader = 0.75;
+  ['pa_l', 'pa_r', 'wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => {
+    if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.6; }
+  });
+  return s;
+}
+
 function bandUp(s) {
+  if (s.big16) return bandUp16(s);
   for (let i = 0; i < 4; i++) {
     s.channels[i].mute = false;
     s.channels[i].fader = 0.6;
@@ -716,8 +755,8 @@ function crosspatchBad(s) {
 // STAY UP, so pulling the send to zero isn't a fix; ringing the wedge out on
 // its EQ band is.
 window.PRACTICE_FAULTS = [
-  { key: 'cable',        label: 'Cable unplugged',   blurb: "A channel's input cable is unplugged.",                  par: 3, apply: (s, rng) => { s.cables[BAND_SOURCES[Math.floor(rng() * 4)]] = 0; } },
-  { key: 'gain',         label: 'Gain at zero',      blurb: "A channel's gain is at zero, so its meter never moves.",  par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].gain = 0; } },
+  { key: 'cable',        label: 'Cable unplugged',   blurb: "A channel's input cable is unplugged.",                  par: 3, apply: (s, rng) => { const src = pbPick(pbSources(s), rng); if (src) s.cables[src] = 0; } },
+  { key: 'gain',         label: 'Gain at zero',      blurb: "A channel's gain is at zero, so its meter never moves.",  par: 1, apply: (s, rng) => { const i = pbPick(pbInputs(s), rng); if (i >= 0) s.channels[i].gain = 0; } },
   // GAIN TOO HOT — the opposite of 'gain at zero'. A channel's gain is set a few
   // dB into the red, so the preamp clips and the channel distorts even though
   // signal is flowing fine. The win engine already blocks a solve while anything
@@ -731,13 +770,16 @@ window.PRACTICE_FAULTS = [
   // realistic few-dB overshoot, not an absurd slam. Restricted to vox 1/2 and
   // keys (bass's quiet source reads borderline). Aux sends are 0 in the base
   // Practice state, so cranking the preamp distorts without ringing a wedge.
-  { key: 'gain-hot',     label: 'Gain too hot',      blurb: "A channel's gain is set so hot the preamp clips and the channel distorts.", par: 2, apply: (s, rng) => { const ch = [0, 1, 3][Math.floor((rng ? rng() : 0) * 3)]; s.channels[ch].gain = Math.min(1, window.HEALTHY_GAIN_BY_CH[ch] + 0.22); } },
-  { key: 'fader',        label: 'Fader down',        blurb: 'A channel fader is all the way down.',                    par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].fader = 0; } },
-  { key: 'mute',         label: 'Channel muted',     blurb: 'A channel is muted.',                                    par: 1, apply: (s, rng) => { s.channels[Math.floor(rng() * 4)].mute = true; } },
+  { key: 'gain-hot',     label: 'Gain too hot',      blurb: "A channel's gain is set so hot the preamp clips and the channel distorts.", par: 2, apply: (s, rng) => {
+      if (s.big16) { const i = pbPick(pbInputs(s), rng); if (i >= 0) s.channels[i].gain = Math.min(1, s.channels[i].gain + 0.22); return; }
+      const ch = [0, 1, 3][Math.floor((rng ? rng() : 0) * 3)]; s.channels[ch].gain = Math.min(1, window.HEALTHY_GAIN_BY_CH[ch] + 0.22);
+    } },
+  { key: 'fader',        label: 'Fader down',        blurb: 'A channel fader is all the way down.',                    par: 1, apply: (s, rng) => { const i = pbPick(pbInputs(s), rng); if (i >= 0) s.channels[i].fader = 0; } },
+  { key: 'mute',         label: 'Channel muted',     blurb: 'A channel is muted.',                                    par: 1, apply: (s, rng) => { const i = pbPick(pbInputs(s), rng); if (i >= 0) s.channels[i].mute = true; } },
   // NOTE: no 'pan' fault. The win reads the LOUDER PA side (pan is a free
   // creative choice, not a fault — see PRACTICE_CONDITIONS below), so a hard
   // pan still passes every condition. It was an automatic win, so it's out.
-  { key: 'phantom',      label: 'Phantom power off', blurb: 'Phantom power is off, so a condenser or active DI is silent.', par: 3, apply: (s, rng) => { s.channels[POWERED_IDX[Math.floor(rng() * 2)]].phantom = false; } },
+  { key: 'phantom',      label: 'Phantom power off', blurb: 'Phantom power is off, so a condenser or active DI is silent.', par: 3, apply: (s, rng) => { const i = pbPick(pbPowered(s), rng); if (i >= 0) s.channels[i].phantom = false; } },
   { key: 'master-mute',  label: 'Master muted',      blurb: 'The master is muted, so nothing reaches the room.',       par: 1, apply: (s)      => { s.master.mute = true; } },
   { key: 'master-fader', label: 'Master fader down', blurb: 'The master fader is down.',                               par: 1, apply: (s)      => { s.master.fader = 0; } },
   { key: 'pa-volume',    label: 'PA volume down',    blurb: 'One PA speaker is turned down.',                          par: 1, apply: (s, rng) => { s.outputs[rng() < 0.5 ? 'pa_l' : 'pa_r'].volume = 0; } },
@@ -793,6 +835,17 @@ window.PRACTICE_FAULTS = [
     // real-dB engine: the top two or three resonances ring (matching the
     // blurb and the par), each clearing with a small cut. Hotter settings
     // light up every band at once, which is a different, harsher lesson.
+    // 16-channel: any MIC input into any wedge (DIs don't feed back).
+    if (s.big16) {
+      const ci = pbPick(pbMics(s), rng);
+      if (ci < 0) return;
+      const src = window.sourceFor(s, ci);
+      const opts = [['aux1', 'wedge'], ['aux2', 'wedge2'], ['aux3', 'wedge3'], ['aux4', 'wedge4']];
+      const o = opts[Math.floor(rng() * opts.length)];
+      s.channels[ci][o[0]] = 0.72;
+      if (s.outputs[o[1]]) s.outputs[o[1]].volume = 0.72;
+      return { conditions: [{ source: src, dest: o[1], min: 0.42 }] };
+    }
     if (rng() < 0.5) {
       s.channels[0].aux1 = 0.72;
       s.outputs.wedge.volume = 0.72;
@@ -810,7 +863,7 @@ window.PRACTICE_FAULTS = [
   // both swapped channels happen to stay audible. Par 3 because changing a
   // patch on a live channel POPS: the safe fix is master down (one move,
   // covers both channels) -> swap -> master back up.
-  { key: 'crosspatch-stage', label: 'Crosspatch at the stage box', blurb: 'Two inputs are swapped at the stage box.', par: 3, apply: (s, rng) => {
+  { key: 'crosspatch-stage', label: 'Crosspatch at the stage box', blurb: 'Two inputs are swapped at the stage box.', par: 3, big8only: true, apply: (s, rng) => {
     // Random source-port swaps, but reject any that leave a live mic on the hot
     // (bass) channel — that howls and reads as feedback, not a crosspatch. Falls
     // back to trading the two mics, which can never land a mic on the DI channel.
@@ -824,7 +877,7 @@ window.PRACTICE_FAULTS = [
     }
     const t = s.cables['vocal']; s.cables['vocal'] = s.cables['vocal2']; s.cables['vocal2'] = t;
   } },
-  { key: 'crosspatch-snake', label: 'Crosspatch at the snake', blurb: 'Two channels are swapped at the snake.', par: 3, apply: (s, rng) => {
+  { key: 'crosspatch-snake', label: 'Crosspatch at the snake', blurb: 'Two channels are swapped at the snake.', par: 3, big8only: true, apply: (s, rng) => {
     // Same guard for the snake variant (swaps which channel each port feeds).
     // Fallback trades the two non-mic channel tails, so the mics stay put.
     for (let tries = 0; tries < 16; tries++) {
@@ -943,8 +996,16 @@ window.PRACTICE = {
   // channels happen to stay audible.
   requirePatch: true,
   sabotage: (s, rng) => {
+    // 16-channel Practice: rebuild the rep on the big board (bandState sets
+    // big16), then band it up and fault it exactly like the MX-8.
+    if (window.PRACTICE_16 && window.bandState) s = window.bandState();
     bandUp(s);
     const r = rng || (() => 0);
+    // Board-aware win: require every ACTIVE input source audible in the PA.
+    // Captured from the healthy board BEFORE faults, so an unplugged cable still
+    // counts. On the 16-channel board this REPLACES the static 4-source list via
+    // winSpec; null on the MX-8 leaves its existing conditions untouched.
+    const boardWinSpec = s.big16 ? { conditions: pbSources(s).map((src) => ({ source: src, dest: 'pa', min: 0.2 })) } : null;
     // ONBOARDING ONE-SHOT. The welcome screen's "quick fix" sets
     // window.PRACTICE_FORCE to a fault key (or array of keys) so a brand-new
     // signup's very first rep is always a single, legible, winnable fault, never
@@ -963,7 +1024,7 @@ window.PRACTICE = {
         fpar += f.par; ffaults.push(f.key);
       }
       if (ffaults.length) {
-        window.PRACTICE_LAST = { par: fpar, faults: ffaults, extraConditions: fcond };
+        window.PRACTICE_LAST = { par: fpar, faults: ffaults, extraConditions: fcond, winSpec: boardWinSpec };
         return s;
       }
     }
@@ -978,7 +1039,7 @@ window.PRACTICE = {
     const goalPool = window.PRACTICE_FREE
       ? window.PRACTICE_GOALS.filter((g) => g.key !== 'speaker-check')
       : window.PRACTICE_GOALS;
-    if (goalPool && goalPool.length && r() < GOAL_TASK_CHANCE) {
+    if (!s.big16 && goalPool && goalPool.length && r() < GOAL_TASK_CHANCE) {
       const g = goalPool[Math.floor(r() * goalPool.length)];
       const winSpec = g.apply(s, r);
       window.PRACTICE_LAST = { par: g.par, faults: [], goalKey: g.key, goalLabel: g.label, winSpec: winSpec, extraConditions: [] };
@@ -995,6 +1056,9 @@ window.PRACTICE = {
       // analog (or before it's set), these are skipped so a player is never
       // handed a fault they have no way to reach.
       if (f.digital && window.PRACTICE_SURFACE !== 'digital') continue;
+      // Crosspatch faults need the input-patch UI, which the 16-channel board
+      // does not have yet, so skip them there (they'd be unfixable).
+      if (f.big8only && s.big16) continue;
       // "Practice what needs it" biases the draw toward the fault types the
       // member is rusty on (window.PRACTICE_FOCUS, set by the app from the
       // freshness ledger). Unset = an even draw across the pool.
@@ -1013,7 +1077,7 @@ window.PRACTICE = {
       par += f.par;
       faults.push(f.key);
     }
-    window.PRACTICE_LAST = { par, faults, extraConditions };
+    window.PRACTICE_LAST = { par, faults, extraConditions, winSpec: boardWinSpec };
     return s;
   },
   // Never shown (the debrief replaces the answer key); kept for the contract.
