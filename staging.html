@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=82"></script>
+<script src="content-staging.js?v=83"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4443,13 +4443,13 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     // the right of that stack, floor tom to the left; overheads just outside the
     // toms. The sub-snake box sits above the cluster; the drummer's wedge sits to
     // the RIGHT of the kit (where a drum wedge usually goes).
-    vx4:   { top: 84,  left: '50%' },              // the drummer (vocal mic), top of the stack
-    snare: { top: 134, left: '50%' },              // snare, right below the drummer
-    kick:  { top: 186, left: '50%' },              // kick, right below the snare
-    rack:  { top: 148, left: '62%' },              // rack tom, right of the stack
-    floor: { top: 148, left: '38%' },              // floor tom, left of the stack
-    ohr:   { top: 148, left: '74%' },              // overhead R, right of the rack tom
-    ohl:   { top: 148, left: '26%' },              // overhead L, left of the floor tom
+    vx4:   { top: 74,  left: '50%' },              // the drummer (vocal mic), top of the stack
+    snare: { top: 140, left: '50%' },              // snare, right below the drummer
+    kick:  { top: 206, left: '50%' },              // kick, right below the snare
+    rack:  { top: 156, left: '62%' },              // rack tom, right of the stack
+    floor: { top: 156, left: '38%' },              // floor tom, left of the stack
+    ohr:   { top: 156, left: '74%' },              // overhead R, right of the rack tom
+    ohl:   { top: 156, left: '26%' },              // overhead L, left of the floor tom
     // Downstage-snake performers, all in the lower half so they physically sit on
     // the downstage sub-snake: bass + keys upstage corners, the two guitars mid,
     // the three lead vocals across the front over their wedges. The whole band is
