@@ -1045,7 +1045,11 @@ window.PRACTICE = {
       window.PRACTICE_LAST = { par: g.par, faults: [], goalKey: g.key, goalLabel: g.label, winSpec: winSpec, extraConditions: [] };
       return s;
     }
-    const n = Math.max(1, Math.min(3, window.PRACTICE_FAULT_COUNT || 1));
+    // The 16-channel board carries one extra fault at every difficulty (capped
+    // at 4): more inputs to scan AND more to find, so graduating from 8 to 16 is
+    // a real step up in challenge, not just a wider desk.
+    const baseN = window.PRACTICE_FAULT_COUNT || 1;
+    const n = s.big16 ? Math.max(2, Math.min(4, baseN + 1)) : Math.max(1, Math.min(3, baseN));
     // Distinct fault TYPES per rep (weighted entries appear more often, but
     // never twice). Two faults can still land on the same channel — that
     // just makes the diagnosis honest work.
