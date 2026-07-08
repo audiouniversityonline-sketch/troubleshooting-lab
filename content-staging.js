@@ -821,40 +821,14 @@ window.PRACTICE_FAULTS = [
       ];
       s.currentScene = 1;
     } },
-  // FEEDBACK — a singer's wedge pushed into ringing (hot send + hot wedge).
-  // The extra condition keeps her monitor level REQUIRED, so the fix is the
-  // Feedback Awareness skill: pull the glowing bands down on that wedge's EQ.
-  // The wedge carries the realistic multi-resonance profile, reseeded per load,
-  // so a send this hot rings at its top couple of resonances at frequencies that
-  // VARY from rep to rep (find them by the glow/ear, don't memorize). The fix is
-  // a small cut on each glowing band; a couple of dB drops each loop clear while
-  // the monitor stays up. min 0.42 keeps the send required (can't cheat by
-  // pulling it to zero) with room to ring out without fighting the floor.
-  { key: 'feedback', label: 'Wedge feeding back', blurb: 'A wedge is ringing at a couple of frequencies; cut those bands to clear it.', par: 2, weight: 2, apply: (s, rng) => {
-    // 0.72 send + 0.72 wedge puts the loop about +1.5 dB over unity under the
-    // real-dB engine: the top two or three resonances ring (matching the
-    // blurb and the par), each clearing with a small cut. Hotter settings
-    // light up every band at once, which is a different, harsher lesson.
-    // 16-channel: any MIC input into any wedge (DIs don't feed back).
-    if (s.big16) {
-      const ci = pbPick(pbMics(s), rng);
-      if (ci < 0) return;
-      const src = window.sourceFor(s, ci);
-      const opts = [['aux1', 'wedge'], ['aux2', 'wedge2'], ['aux3', 'wedge3'], ['aux4', 'wedge4']];
-      const o = opts[Math.floor(rng() * opts.length)];
-      s.channels[ci][o[0]] = 0.72;
-      if (s.outputs[o[1]]) s.outputs[o[1]].volume = 0.72;
-      return { conditions: [{ source: src, dest: o[1], min: 0.42 }] };
-    }
-    if (rng() < 0.5) {
-      s.channels[0].aux1 = 0.72;
-      s.outputs.wedge.volume = 0.72;
-      return { conditions: [{ source: 'vocal', dest: 'wedge', min: 0.42 }] };
-    }
-    s.channels[1].aux2 = 0.72;
-    s.outputs.wedge2.volume = 0.72;
-    return { conditions: [{ source: 'vocal2', dest: 'wedge2', min: 0.42 }] };
-  } },
+  // FEEDBACK is NOT in this stacked pool. Faults here share one generic prompt
+  // ("something is broken, find it"), so a feedback fault could only announce
+  // itself by RINGING on load, and stacked with others that meant the rep could
+  // open on a wall of howling wedges (Kyle 2026-07-08: "very annoying"). Real
+  // feedback is caused, not walked into: you push a wedge up and it rings. So it
+  // lives as its own latent task, window.MONITOR_RING (below), which opens quiet
+  // and rings only when the student raises the send. It never stacks and never
+  // opens howling.
   // CROSSPATCH — two cables traded places. The console's channel labels and
   // the patch row in the brief are the evidence; one drag (swap) fixes it.
   // Stage-box version trades two sources' input ports; snake version trades
@@ -984,6 +958,55 @@ window.PRACTICE_GOALS = [
   },
 ];
 
+// MONITOR RING-OUT — the signature live-sound task, framed the way it really
+// happens: a singer wants more in her wedge, you push her monitor up, and at a
+// strong level it starts to ring. The fix is the Feedback Awareness skill: find
+// the glowing band on that wedge's Monitor EQ and cut it a touch, keeping her
+// level up. It opens QUIET (send low, well under the ring point) so the rep never
+// starts howling; the ring only appears once the student raises the send
+// (Kyle 2026-07-08). Board-aware: MX-8 uses vocal 1 or 2 into its wedge; the
+// 16-channel board picks any live mic into any wedge. Rolled on its own chance in
+// PRACTICE.sabotage so it stays frequent on both boards and never stacks.
+//
+// Calibration (real-dB engine): the wedge's tallest resonance rings once the
+// mic's contribution to it crosses ~0.68 (FEED_0DB / 1.22). Start send 0.18 sits
+// far below that (silent). Win min 0.70 is just ABOVE the ring onset, so the only
+// way to satisfy it is to push through the ring and cut it out — pulling the send
+// back down to kill the ring would drop below the required level and fail. A
+// strong push lands ~0.75, where ONE band rings (the second onset is ~0.79), and
+// a surgical few-dB cut clears it while the level stays above 0.70.
+window.MONITOR_RING = {
+  key: 'monitor-ring', label: 'Ring out the monitor', par: 2,
+  apply: (s, rng) => {
+    const r = rng || (() => 0.5);
+    let ci, auxKey, wedgeKey, wedgeLabel;
+    if (s.big16) {
+      ci = pbPick(pbMics(s), r);
+      if (ci < 0) ci = 0;
+      const opts = [['aux1', 'wedge', 'Wedge 1'], ['aux2', 'wedge2', 'Wedge 2'], ['aux3', 'wedge3', 'Wedge 3'], ['aux4', 'wedge4', 'Wedge 4']];
+      const o = opts[Math.floor(r() * opts.length)];
+      auxKey = o[0]; wedgeKey = o[1]; wedgeLabel = o[2];
+    } else if (r() < 0.5) {
+      ci = 0; auxKey = 'aux1'; wedgeKey = 'wedge'; wedgeLabel = 'Wedge 1';
+    } else {
+      ci = 1; auxKey = 'aux2'; wedgeKey = 'wedge2'; wedgeLabel = 'Wedge 2';
+    }
+    const src = window.sourceFor(s, ci);
+    const chLabel = (s.channels[ci] && s.channels[ci].label) || 'the vocal';
+    // Latent: the singer has a little monitor, well under the ring point. The
+    // wedge is live so raising the send climbs straight toward feedback.
+    s.channels[ci][auxKey] = 0.18;
+    if (s.outputs[wedgeKey]) { s.outputs[wedgeKey].on = true; s.outputs[wedgeKey].mute = false; s.outputs[wedgeKey].volume = 0.78; }
+    return {
+      conditions: [{ source: src, dest: wedgeKey, min: 0.70 }],
+      symptom: chLabel + ' wants more in ' + wedgeLabel + '. Bring her monitor up to a strong level. As you push it, the wedge starts to ring. Find the glowing band on that wedge\'s Monitor EQ, cut it a touch to stop the ring, and leave the level up.',
+      title: 'Give the Monitor More',
+      hint: 'Raise the ' + auxKey.toUpperCase() + ' send on ' + chLabel + '\'s channel toward a strong level. When it rings, open that wedge\'s Monitor EQ, find the glowing band, and pull it down a few dB, just enough to stop the ring. Keep the level up, do not pull the send back down.',
+      solution: chLabel + '\'s monitor brought up to a strong level with the ring cut out on the wedge EQ. Pulling the send back down would lose her the monitor; ringing out the one glowing band keeps her level and kills the feedback.',
+    };
+  },
+};
+
 window.PRACTICE = {
   id: 'practice',
   title: 'Practice Mode',
@@ -1027,6 +1050,17 @@ window.PRACTICE = {
         window.PRACTICE_LAST = { par: fpar, faults: ffaults, extraConditions: fcond, winSpec: boardWinSpec };
         return s;
       }
+    }
+    // MONITOR RING-OUT gets its OWN roll, before the generic goal roll and on
+    // BOTH boards, so the signature feedback lesson stays frequent. It opens
+    // quiet and only rings when the student pushes the wedge up, so the rep never
+    // starts howling (Kyle 2026-07-08). Its winSpec carries the single ring win
+    // condition + prompt, replacing the generic board win for this focused task.
+    const RING_CHANCE = (typeof window.PRACTICE_RING_CHANCE === 'number') ? window.PRACTICE_RING_CHANCE : 0.16;
+    if (!window.PRACTICE_FREE && window.MONITOR_RING && r() < RING_CHANCE) {
+      const winSpec = window.MONITOR_RING.apply(s, r);
+      window.PRACTICE_LAST = { par: window.MONITOR_RING.par, faults: [], goalKey: window.MONITOR_RING.key, goalLabel: window.MONITOR_RING.label, winSpec: winSpec, extraConditions: [] };
+      return s;
     }
     // Sometimes the call is a positive task, not a fault: build a monitor mix,
     // fix the gain, check the speakers. These ignore the FAULTS count (a task is

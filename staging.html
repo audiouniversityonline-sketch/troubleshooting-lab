@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=71"></script>
+<script src="content-staging.js?v=72"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8200,6 +8200,11 @@ function App() {
   const ctxRef = uR(null);
   const masterGainRef = uR(null);
   const chainsRef = uR({});
+  // Incremental graph builders, published by ensureAudio so a later board
+  // switch (e.g. into the 16-channel board) can build the chains + load the
+  // stems for sources that weren't on the board when sound first turned on.
+  const buildChainRef = uR(null);
+  const startClipsRef = uR(null);
 
   // Pop sound effect — fires on every pop event (phantom into a live
   // channel, plug into a live channel, console power transient into live
@@ -8477,8 +8482,11 @@ function App() {
     // Build a chain only for the sources on THIS board (its snake inputs = the
     // keys of state.cables) plus the playback line — so the MX-8 builds 5 chains,
     // the 16-band builds its 15, and neither carries the other's idle voices.
-    const chainKeys = [...new Set([...(state && state.cables ? Object.keys(state.cables) : []), 'playback'])];
-    for (const k of chainKeys) {
+    // Build ONE source's channel chain. Idempotent (never rebuilds a live
+    // chain) so it's safe to call again when the board gains a source after
+    // the graph is already up (the 16-channel switch).
+    const buildChain = (k) => {
+      if (chainsRef.current[k]) return;
       const p = profiles[k] || CLIP_ONLY_PROFILE;
       // Per-side output gains. Both fanout from `makeup` so the source's
       // post-shaper mono signal is split into independent L/R levels.
@@ -8561,7 +8569,10 @@ function App() {
       o1.start(); o2.start();
       chordOscs.forEach(co => co.start());
       chainsRef.current[k] = { gainL, gainR, filter, drive, shaper, makeup, envelope, hpf, analyser, mix, o1, o2, lfo, chordOscs };
-    }
+    };
+    buildChainRef.current = buildChain;
+    const chainKeys = [...new Set([...(state && state.cables ? Object.keys(state.cables) : []), 'playback'])];
+    for (const k of chainKeys) buildChain(k);
 
     // PLAYBACK 5/6 — MUSIC / PINK toggle. The chord-pad oscillators are the
     // FALLBACK "music" bed; the real music file loads just below and takes over
@@ -8667,17 +8678,22 @@ function App() {
       agtr: 'audio/agtr.wav?v=6', keys: 'audio/keys.wav?v=6', vx1: 'audio/vocal1.wav?v=6', vx2: 'audio/vocal2.wav?v=6',
       vx3: 'audio/vocal3.wav?v=6', vx4: 'audio/vocal4.wav?v=6',
     };
-    // Only fetch the stems for sources actually on THIS board (its snake inputs =
-    // the keys of state.cables, patch-independent), so the MX-8 loads its 4 stems
-    // and never downloads the 14 band stems, and the band loads only its own.
-    const boardSources = (state && state.cables) ? state.cables : {};
-    Promise.all(Object.keys(CLIP_SOURCES).filter(k => k in boardSources).map(k =>
-      fetch(CLIP_SOURCES[k])
-        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
-        .then(ab => ctx.decodeAudioData(ab))
-        .then(buf => ({ k, buf }))
-        .catch(e => { console.warn('clip load failed:', k, e); return null; })
-    )).then(results => {
+    // Fetch + start the recorded loops for a set of source keys. Only the
+    // stems for sources actually on the board load (the MX-8 loads its 4 and
+    // never downloads the 14 band stems). Skips any key with no stem, no chain
+    // yet, or a clip already running, so a later incremental call (the
+    // 16-channel switch) loads ONLY the newly-added band stems, and all of a
+    // batch share one start time so they stay phase-locked to each other.
+    const startClips = (keys) => {
+      const want = keys.filter(k => (k in CLIP_SOURCES) && chainsRef.current[k] && !chainsRef.current[k].clipSrc);
+      if (!want.length) return;
+      Promise.all(want.map(k =>
+        fetch(CLIP_SOURCES[k])
+          .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+          .then(ab => ctx.decodeAudioData(ab))
+          .then(buf => ({ k, buf }))
+          .catch(e => { console.warn('clip load failed:', k, e); return null; })
+      )).then(results => {
       const ok = results.filter(Boolean);
       if (!ok.length) return;
       // One shared start time for every decoded loop = phase-locked playback.
@@ -8746,7 +8762,10 @@ function App() {
         chain.envelope.gain.value = 1;
         chain.clipSrc = src;
       }
-    });
+      });
+    };
+    startClipsRef.current = startClips;
+    startClips(Object.keys((state && state.cables) ? state.cables : {}));
     // Feedback ring voices — one per third-octave band (63 Hz .. 16 kHz), all
     // silent until detectFeedback lights them. Each voice is a sine at the
     // band's center frequency (the ring you hear is the band you cut) plus
@@ -8937,6 +8956,21 @@ function App() {
       }
     }
   }, [audioOn, audio, state.inspect]);
+
+  // Board-source growth: when the board gains inputs after the graph is already
+  // up (switching into the 16-channel board), build the chains and load the
+  // stems for the new sources so they actually make sound. Without this the 14
+  // band inputs stay silent, because ensureAudio only builds the board that was
+  // live when sound first turned on. Idempotent once every source has a chain.
+  const boardSig = (state && state.cables) ? Object.keys(state.cables).sort().join(',') : '';
+  uE(() => {
+    if (!audioOn || !ctxRef.current || !buildChainRef.current || !startClipsRef.current) return;
+    const keys = (state && state.cables) ? Object.keys(state.cables) : [];
+    const missing = keys.filter(k => !chainsRef.current[k]);
+    if (!missing.length) return;
+    for (const k of missing) buildChainRef.current(k);
+    startClipsRef.current(missing);
+  }, [audioOn, boardSig]);
 
   // Playback MUSIC / PINK crossfade. Audible only — the simulation treats the
   // 5/6 line input identically, so nothing in computeAudio or the win logic
