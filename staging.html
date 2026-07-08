@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=73"></script>
+<script src="content-staging.js?v=74"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4153,10 +4153,14 @@ function SubSnakeHead({ label, items, subJackRefs, outRef }) {
 // leaves its right edge for the FOH fan-out.
 function SideStageBox({ inChannels, stageChRefs, outRefs, snakeOutRef, retActive, inUpRef, inDownRef }) {
   const outs = [1, 2, 3, 4, 5, 6].map(ch => ({ key: ch, color: (window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52', active: !!(retActive && retActive[ch]) }));
+  // All fourteen IN jacks sit in ONE numbered row, left→right 1..14 — the same
+  // order they hit the console, so "IN 1:1 to FOH" reads at a glance. The two
+  // sub-snake multicores break out onto this row as a clean rake (drawn in the
+  // cable layer): drums drop into 1-6 + 14, the downstage snake into 7-13.
   const inRow = (arr) => (
-    <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+    <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
       {arr.map(c => (
-        <div key={c.ch} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 27 }}>
+        <div key={c.ch} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 20 }}>
           <div className="mono" style={{ fontSize: 6, color: '#e9e6df', fontWeight: 700, lineHeight: 1 }}>{c.ch}</div>
           <div ref={el => { if (stageChRefs) stageChRefs.current[c.ch] = el; }} style={{ width: 10, height: 10, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (c.color || '#38383e'), display: 'grid', placeItems: 'center', boxShadow: c.flowing ? `0 0 4px ${c.color}` : 'inset 0 0 2px #000', margin: '1px 0' }}>
             <div style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: c.srcKey ? c.color : '#222' }}/>
@@ -4170,12 +4174,11 @@ function SideStageBox({ inChannels, stageChRefs, outRefs, snakeOutRef, retActive
     <div className="ui-no-select" style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
       border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 8px 8px',
-      position: 'relative', width: 236, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
+      position: 'relative', width: 320, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
     }}>
       <div className="mono" style={{ fontSize: 6.5, color: 'var(--cool)', letterSpacing: 1, fontWeight: 700, textAlign: 'center' }}>STAGE BOX · side stage</div>
-      <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, textAlign: 'left', marginTop: 2 }}>IN — to FOH fan-out 1:1</div>
-      {inRow((inChannels || []).slice(0, 7))}
-      {inRow((inChannels || []).slice(7, 14))}
+      <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, textAlign: 'left', marginTop: 2, marginBottom: 1 }}>IN — to FOH fan-out 1:1</div>
+      {inRow(inChannels || [])}
       <div style={{ height: 1, background: '#38383e', margin: '4px 0 2px' }}/>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, fontWeight: 700, width: 16 }}>OUT</div>
@@ -4190,11 +4193,11 @@ function SideStageBox({ inChannels, stageChRefs, outRefs, snakeOutRef, retActive
           ))}
         </div>
       </div>
-      {/* The drum multicore drops in from the TOP, the downstage multicore comes
-          up from the BOTTOM — so their fan-out tails spread into the channels
-          instead of bunching on one edge. */}
-      <div ref={inUpRef} style={{ position: 'absolute', top: -3, left: '38%', width: 5, height: 5, pointerEvents: 'none' }}/>
-      <div ref={inDownRef} style={{ position: 'absolute', bottom: -3, left: '38%', width: 5, height: 5, pointerEvents: 'none' }}/>
+      {/* Both multicores arrive at the TOP-LEFT and break out onto two stacked
+          rails above the jack row (drum rail outer/higher, downstage rail
+          inner) — every tail is then a clean vertical drop, no crossings. */}
+      <div ref={inUpRef} style={{ position: 'absolute', top: -3, left: '5%', width: 5, height: 5, pointerEvents: 'none' }}/>
+      <div ref={inDownRef} style={{ position: 'absolute', top: -3, left: '11%', width: 5, height: 5, pointerEvents: 'none' }}/>
       <div ref={snakeOutRef} style={{ position: 'absolute', right: -2, top: '50%', width: 8, height: 8, transform: 'translateY(-50%)', pointerEvents: 'none' }}/>
     </div>
   );
@@ -5449,24 +5452,41 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
 
       // 16-channel sub-snake bundles: each head's out anchor → the side-stage
       // box's matching in anchor. Empty on the MX-8 (those refs are null).
+      // Sub-snake trunks + FAN-OUT, drawn as a clean RAKE. Both multicores arrive
+      // at the box's top-left and each breaks out onto its own horizontal rail
+      // above the single IN row: the drum rail (outer/higher) feeds channels
+      // 1-6 + 14, the downstage rail (inner) feeds 7-13. Every patch tail is then
+      // a short vertical DROP from its rail into its jack — so nothing crosses
+      // except where the patch genuinely is non-1:1 (the drummer's vocal on 14).
       const subSnakes = [];
-      const ac = (ref) => (ref && ref.current) ? anchorPos(ref.current, 'center') : null;
-      const upOut = ac(upHeadOutRef), downOut = ac(downHeadOutRef), inUp = ac(sideInUpRef), inDown = ac(sideInDownRef);
-      if (upOut && inUp) subSnakes.push({ from: upOut, to: inUp });
-      if (downOut && inDown) subSnakes.push({ from: downOut, to: inDown });
-      // Sub-snake FAN-OUT at the stage box: where each multicore enters (inUp /
-      // inDown), it breaks out into individual tails that patch into the stage-box
-      // channels — the drum vocal's tail crosses from the drum bundle to ch 14.
+      const breakoutRails = [];
       const patchTails = [];
-      if (state.big16) {
-        const chTop = (ch) => { const el = stageBoxChRefs.current[ch]; return el ? portTopAnchor(el) : null; };
+      const ac = (ref) => (ref && ref.current) ? anchorPos(ref.current, 'center') : null;
+      const upOut = ac(upHeadOutRef), downOut = ac(downHeadOutRef);
+      const inUpA = ac(sideInUpRef), inDownA = ac(sideInDownRef);
+      const jackTop = (ch) => { const el = stageBoxChRefs.current[ch]; return el ? anchorPos(el, 'top') : null; };
+      let jackRowY = null;
+      for (let ch = 1; ch <= 14; ch++) { const j = jackTop(ch); if (j) { jackRowY = j.y; break; } }
+      if (state.big16 && jackRowY != null && inUpA && inDownA) {
+        const drumRailY = jackRowY - 24;   // outer rail, sits higher
+        const downRailY = jackRowY - 10;   // inner rail, just above the jacks
+        const drumEntry = { x: inUpA.x, y: drumRailY };
+        const downEntry = { x: inDownA.x, y: downRailY };
+        if (upOut)   subSnakes.push({ from: upOut,   to: drumEntry });
+        if (downOut) subSnakes.push({ from: downOut, to: downEntry });
+        const drumXs = [drumEntry.x], downXs = [downEntry.x];
         for (const k of sourceKeys) {
           const grpUp = window.SOURCES[k] && window.SOURCES[k].snake === 'up';
-          const from = grpUp ? inUp : inDown;
           const ch = state.cables[k];
-          const to = ch >= 1 ? chTop(ch) : null;
-          if (from && to) patchTails.push({ from, to, color: window.SOURCES[k].color, ch, srcKey: k, cross: grpUp && ch >= 8 });
+          if (!(ch >= 1)) continue;
+          const j = jackTop(ch);
+          if (!j) continue;
+          const railY = grpUp ? drumRailY : downRailY;
+          patchTails.push({ x: j.x, yRail: railY, yJack: j.y, color: window.SOURCES[k].color, ch, srcKey: k, cross: grpUp && ch >= 8 });
+          (grpUp ? drumXs : downXs).push(j.x);
         }
+        if (drumXs.length > 1) breakoutRails.push({ y: drumRailY, x0: Math.min(...drumXs), x1: Math.max(...drumXs) });
+        if (downXs.length > 1) breakoutRails.push({ y: downRailY, x0: Math.min(...downXs), x1: Math.max(...downXs) });
       }
 
       // Fan-out → channel inputs (input side of snake)
@@ -5585,7 +5605,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       const stageZoneRect = stageZoneRef.current ? stageZoneRef.current.getBoundingClientRect() : null;
       const snakeMidX = stageZoneRect ? (stageZoneRect.right - cb.left) / S + 6 : 0;
 
-      setPaths({ stageCables, snake, subSnakes, patchTails, fanOutCables, outCables, outFanCables, backRailY, frontRailY, snakeMidX });
+      setPaths({ stageCables, snake, subSnakes, breakoutRails, patchTails, fanOutCables, outCables, outFanCables, backRailY, frontRailY, snakeMidX });
     }
     compute();
     const t = setTimeout(compute, 60);
@@ -5897,16 +5917,29 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           );
         })}
 
-        {/* Sub-snake fan-out: the multicore breaks into individual tails that
-            patch into the stage-box channels. A crossed tail (drum vocal → 14)
-            is drawn brighter so the non-1:1 patch stands out. */}
+        {/* Breakout rails: each sub-snake's trunk runs as a horizontal bus just
+            above the IN row. The individual channel tails tap off it. Drawn as a
+            neutral multicore-gray line, one per sub-snake. */}
+        {(paths.breakoutRails || []).map((r, i) => (
+          <g key={'brail-' + i} style={{ pointerEvents: 'none' }}>
+            <path d={`M ${r.x0} ${r.y} L ${r.x1} ${r.y}`} stroke="#1a1a1d" strokeWidth="5" fill="none" opacity="0.9" strokeLinecap="round"/>
+            <path d={`M ${r.x0} ${r.y} L ${r.x1} ${r.y}`} stroke="#3a3a40" strokeWidth="3.5" fill="none" opacity="1" strokeLinecap="round"/>
+          </g>
+        ))}
+
+        {/* Sub-snake fan-out tails: a short vertical DROP from the breakout rail
+            into each stage-box jack — one clean tap per channel, in the channel's
+            own color. The drummer's vocal tail (→ ch 14) is drawn brighter: its
+            rail simply extends past 7-13 and drops in on the far right, the one
+            place the patch is deliberately non-1:1. */}
         {(paths.patchTails || []).map((t) => {
-          const d = window._cableCurve(t.from, t.to);
+          const d = `M ${t.x} ${t.yRail} L ${t.x} ${t.yJack}`;
           return (
             <g key={'patch-' + t.srcKey} style={{ pointerEvents: 'none' }}>
               <path d={d} stroke="#000" strokeWidth="3.5" fill="none" opacity="0.35" strokeLinecap="round"/>
-              <path d={d} stroke={t.color} strokeWidth={t.cross ? 2.2 : 1.6} fill="none" opacity={t.cross ? 0.95 : 0.7} strokeLinecap="round"/>
-              <circle cx={t.to.x} cy={t.to.y} r="2" fill={t.color} stroke="#0a0a0c" strokeWidth="0.6"/>
+              <path d={d} stroke={t.color} strokeWidth={t.cross ? 2.4 : 1.8} fill="none" opacity={t.cross ? 0.98 : 0.8} strokeLinecap="round"/>
+              <circle cx={t.x} cy={t.yRail} r="1.6" fill={t.color} opacity="0.9"/>
+              <circle cx={t.x} cy={t.yJack} r="2" fill={t.color} stroke="#0a0a0c" strokeWidth="0.6"/>
             </g>
           );
         })}
