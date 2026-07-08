@@ -4151,14 +4151,14 @@ function SubSnakeHead({ label, items, subJackRefs, outRef }) {
 // The single SIDE-STAGE box on the 16-channel stage: both sub-snakes arrive on
 // its left edge, its OUT (return) ports feed PA + wedges, and the main snake
 // leaves its right edge for the FOH fan-out.
-function SideStageBox({ inChannels, outRefs, snakeOutRef, retActive, inUpRef, inDownRef }) {
+function SideStageBox({ inChannels, stageChRefs, outRefs, snakeOutRef, retActive, inUpRef, inDownRef }) {
   const outs = [1, 2, 3, 4, 5, 6].map(ch => ({ key: ch, color: (window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52', active: !!(retActive && retActive[ch]) }));
   const inRow = (arr) => (
     <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
       {arr.map(c => (
         <div key={c.ch} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 27 }}>
           <div className="mono" style={{ fontSize: 6, color: '#e9e6df', fontWeight: 700, lineHeight: 1 }}>{c.ch}</div>
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (c.color || '#38383e'), display: 'grid', placeItems: 'center', boxShadow: c.flowing ? `0 0 4px ${c.color}` : 'inset 0 0 2px #000', margin: '1px 0' }}>
+          <div ref={el => { if (stageChRefs) stageChRefs.current[c.ch] = el; }} style={{ width: 10, height: 10, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (c.color || '#38383e'), display: 'grid', placeItems: 'center', boxShadow: c.flowing ? `0 0 4px ${c.color}` : 'inset 0 0 2px #000', margin: '1px 0' }}>
             <div style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: c.srcKey ? c.color : '#222' }}/>
           </div>
           <div className="mono" style={{ fontSize: 4.5, color: '#c8c8d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>{c.label || ''}</div>
@@ -4351,7 +4351,7 @@ function ZoneHeader({ label, sublabel, badge, accent, badgeColor }) {
   );
 }
 
-function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef, upHeadOutRef, downHeadOutRef, sideInUpRef, sideInDownRef, subJackRefs, wedgeMargins, onOpenPlacement }) {
+function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef, upHeadOutRef, downHeadOutRef, sideInUpRef, sideInDownRef, subJackRefs, stageBoxChRefs, wedgeMargins, onOpenPlacement }) {
   const topo = state.topology || {};
   const isPassive = topo.paRig === 'amp+passive';
   // In passive mode the cabinets are dumb — the external amp powers them, so a
@@ -4637,7 +4637,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             {/* Side-stage box — both sub-snakes patch in here (drum vocal lands on
                 14); the main snake runs its channels 1:1 to the FOH fan-out. */}
             <div ref={stageBoxRef} style={{ position: 'absolute', top: 270, right: 8 }}>
-              <SideStageBox inChannels={inChannels} outRefs={outRefs} snakeOutRef={snakeOutRef} retActive={retActive} inUpRef={sideInUpRef} inDownRef={sideInDownRef}/>
+              <SideStageBox inChannels={inChannels} stageChRefs={stageBoxChRefs} outRefs={outRefs} snakeOutRef={snakeOutRef} retActive={retActive} inUpRef={sideInUpRef} inDownRef={sideInDownRef}/>
             </div>
           </>
         ) : (
@@ -5048,6 +5048,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   // Per-source XLR jack on a sub-snake box (keyed by source), so each instrument's
   // XLR draws to its own channel on the box near it.
   const subJackRefs = useR2({});
+  // Each IN channel on the main stage box (keyed by channel 1..14), so the
+  // sub-snake fan-out tails can patch into them (drum vocal fans to 14).
+  const stageBoxChRefs = useR2({});
   const [paths, setPaths] = useS2({
     stageCables: [], snake: null, subSnakes: [], fanOutCables: [], outCables: [], outFanCables: [],
     backRailY: 0, frontRailY: 0, snakeMidX: 0,
@@ -5447,6 +5450,20 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       const upOut = ac(upHeadOutRef), downOut = ac(downHeadOutRef), inUp = ac(sideInUpRef), inDown = ac(sideInDownRef);
       if (upOut && inUp) subSnakes.push({ from: upOut, to: inUp });
       if (downOut && inDown) subSnakes.push({ from: downOut, to: inDown });
+      // Sub-snake FAN-OUT at the stage box: where each multicore enters (inUp /
+      // inDown), it breaks out into individual tails that patch into the stage-box
+      // channels — the drum vocal's tail crosses from the drum bundle to ch 14.
+      const patchTails = [];
+      if (state.big16) {
+        const chTop = (ch) => { const el = stageBoxChRefs.current[ch]; return el ? portTopAnchor(el) : null; };
+        for (const k of sourceKeys) {
+          const grpUp = window.SOURCES[k] && window.SOURCES[k].snake === 'up';
+          const from = grpUp ? inUp : inDown;
+          const ch = state.cables[k];
+          const to = ch >= 1 ? chTop(ch) : null;
+          if (from && to) patchTails.push({ from, to, color: window.SOURCES[k].color, ch, srcKey: k, cross: grpUp && ch >= 8 });
+        }
+      }
 
       // Fan-out → channel inputs (input side of snake)
       const fanOutCables = [];
@@ -5564,7 +5581,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       const stageZoneRect = stageZoneRef.current ? stageZoneRef.current.getBoundingClientRect() : null;
       const snakeMidX = stageZoneRect ? (stageZoneRect.right - cb.left) / S + 6 : 0;
 
-      setPaths({ stageCables, snake, subSnakes, fanOutCables, outCables, outFanCables, backRailY, frontRailY, snakeMidX });
+      setPaths({ stageCables, snake, subSnakes, patchTails, fanOutCables, outCables, outFanCables, backRailY, frontRailY, snakeMidX });
     }
     compute();
     const t = setTimeout(compute, 60);
@@ -5656,7 +5673,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                   snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
                   wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
                   paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef}
-                  upHeadOutRef={upHeadOutRef} downHeadOutRef={downHeadOutRef} sideInUpRef={sideInUpRef} sideInDownRef={sideInDownRef} subJackRefs={subJackRefs}
+                  upHeadOutRef={upHeadOutRef} downHeadOutRef={downHeadOutRef} sideInUpRef={sideInUpRef} sideInDownRef={sideInDownRef} subJackRefs={subJackRefs} stageBoxChRefs={stageBoxChRefs}
                   wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
               </div>
             )}
@@ -5870,6 +5887,20 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
               <path d={d} stroke="#1a1a1d" strokeWidth="9" fill="none" opacity="0.95" strokeLinecap="round" strokeLinejoin="round"/>
               <path d={d} stroke="#3a3a40" strokeWidth="6.5" fill="none" opacity="1" strokeLinecap="round" strokeLinejoin="round"/>
               <path d={d} stroke="#6c6a64" strokeWidth="1" fill="none" opacity="0.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 8"/>
+            </g>
+          );
+        })}
+
+        {/* Sub-snake fan-out: the multicore breaks into individual tails that
+            patch into the stage-box channels. A crossed tail (drum vocal → 14)
+            is drawn brighter so the non-1:1 patch stands out. */}
+        {(paths.patchTails || []).map((t) => {
+          const d = window._cableCurve(t.from, t.to);
+          return (
+            <g key={'patch-' + t.srcKey} style={{ pointerEvents: 'none' }}>
+              <path d={d} stroke="#000" strokeWidth="3.5" fill="none" opacity="0.35" strokeLinecap="round"/>
+              <path d={d} stroke={t.color} strokeWidth={t.cross ? 2.2 : 1.6} fill="none" opacity={t.cross ? 0.95 : 0.7} strokeLinecap="round"/>
+              <circle cx={t.to.x} cy={t.to.y} r="2" fill={t.color} stroke="#0a0a0c" strokeWidth="0.6"/>
             </g>
           );
         })}
