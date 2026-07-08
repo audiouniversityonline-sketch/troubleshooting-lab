@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=52"></script>
+<script src="content-staging.js?v=53"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8469,13 +8469,13 @@ function App() {
     // the bare filename); bump it whenever the .wav bytes change.
     const CLIP_SOURCES = {
       // MX-8 band (Golden V2 stems, shared with the full band's same instruments).
-      guitar: 'audio/bass.m4a?v=3', laptop: 'audio/keys.m4a?v=3', vocal: 'audio/vocal1.m4a?v=3', vocal2: 'audio/vocal2.m4a?v=3',
+      guitar: 'audio/bass.flac?v=4', laptop: 'audio/keys.flac?v=4', vocal: 'audio/vocal1.flac?v=4', vocal2: 'audio/vocal2.flac?v=4',
       // Full 16-input band (?band=1). vx1/vx2 reuse the shared vocal1/vocal2 stems;
       // bass/keys reuse the shared bass/keys stems, so those files load once.
-      kick: 'audio/kick.m4a?v=3', snare: 'audio/snare.m4a?v=3', rack: 'audio/rack.m4a?v=3', floor: 'audio/floor.m4a?v=3',
-      ohl: 'audio/ohl.m4a?v=3', ohr: 'audio/ohr.m4a?v=3', bass: 'audio/bass.m4a?v=3', egtr: 'audio/egtr.m4a?v=3',
-      agtr: 'audio/agtr.m4a?v=3', keys: 'audio/keys.m4a?v=3', vx1: 'audio/vocal1.m4a?v=3', vx2: 'audio/vocal2.m4a?v=3',
-      vx3: 'audio/vocal3.m4a?v=3', vx4: 'audio/vocal4.m4a?v=3',
+      kick: 'audio/kick.flac?v=4', snare: 'audio/snare.flac?v=4', rack: 'audio/rack.flac?v=4', floor: 'audio/floor.flac?v=4',
+      ohl: 'audio/ohl.flac?v=4', ohr: 'audio/ohr.flac?v=4', bass: 'audio/bass.flac?v=4', egtr: 'audio/egtr.flac?v=4',
+      agtr: 'audio/agtr.flac?v=4', keys: 'audio/keys.flac?v=4', vx1: 'audio/vocal1.flac?v=4', vx2: 'audio/vocal2.flac?v=4',
+      vx3: 'audio/vocal3.flac?v=4', vx4: 'audio/vocal4.flac?v=4',
     };
     // Only fetch the stems for sources actually on THIS board (its snake inputs =
     // the keys of state.cables, patch-independent), so the MX-8 loads its 4 stems
