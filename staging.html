@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=61"></script>
+<script src="content-staging.js?v=62"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -2053,12 +2053,112 @@ const peakHoldIdx = (holdDb, segments) => (holdDb > DBFS_FLOOR + 1
   ? Math.max(0, Math.min(segments - 1, Math.round(dbfsFrac(holdDb) * segments) - 1)) : -1);
 window.peakHoldIdx = peakHoldIdx;
 
-function LedMeter({ level, height = 180, segments = 18, scale = false }) {
+// ---- Imperative meter system --------------------------------------------
+// The audio math (computeAudio) is cheap (~0.08ms), but re-rendering the whole
+// mixer to move the meters every frame reconciles ~3700 nodes and stalls the
+// audio thread on slower machines (proven: freezing the redraw makes playback
+// clean). So meters render their STRUCTURE once via React, then the animation
+// loop pushes live levels straight to their segment DOM through this registry.
+// No per-frame React render. Each meter registers by a stable mkey; the loop
+// calls window.__applyMeters(getLevel) with a level lookup.
+const METER_REG = new Map(); // mkey -> Set of entry objects
+function meterRegister(mkey, entry) {
+  if (!mkey) return () => {};
+  let set = METER_REG.get(mkey);
+  if (!set) { set = new Set(); METER_REG.set(mkey, set); }
+  set.add(entry);
+  return () => { const s = METER_REG.get(mkey); if (s) { s.delete(entry); if (!s.size) METER_REG.delete(mkey); } };
+}
+// Vertical LED bar (LedMeter): cells in DOM order i=0..N-1, i=0 is the TOP.
+function applyLedCells(cells, segments, hold, level) {
+  const db = window.levelToDbfs(level);
+  const lit = Math.round(dbfsFrac(db) * segments);
+  const holdDb = advancePeakHold({ current: hold }, db);
+  const holdIdx = peakHoldIdx(holdDb, segments);
+  for (let i = 0; i < segments; i++) {
+    const idx = segments - 1 - i;
+    const segDb = DBFS_FLOOR + ((idx + 1) / segments) * (0 - DBFS_FLOOR);
+    const isHold = idx === holdIdx;
+    const col = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+    const on = idx < lit || isHold;
+    const el = cells[i];
+    if (!el) continue;
+    el.style.background = on ? col : '#1a1a1c';
+    el.style.boxShadow = on ? ('0 0 ' + (isHold ? 6 : 4) + 'px ' + col) : 'inset 0 0 2px #000';
+    el.style.opacity = on ? '1' : '0.5';
+  }
+}
+// Horizontal mini bar (MiniMeter): cells in DOM order i=0..N-1, i=0 is LEFT/low.
+function applyMiniCells(cells, segments, hold, level) {
+  const db = window.levelToDbfs(level);
+  const lit = Math.min(segments, Math.round(dbfsFrac(db) * segments));
+  const holdDb = advancePeakHold({ current: hold }, db);
+  const holdIdx = peakHoldIdx(holdDb, segments);
+  for (let i = 0; i < segments; i++) {
+    const segDb = -48 + ((i + 1) / segments) * 48;
+    const isHold = i === holdIdx;
+    const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+    const on = i < lit || isHold;
+    const el = cells[i];
+    if (!el) continue;
+    el.style.background = on ? c : '#1a1a1c';
+    el.style.boxShadow = on ? ('0 0 ' + (isHold ? 4 : 2) + 'px ' + c) : 'none';
+    el.style.opacity = on ? '1' : '0.45';
+  }
+}
+// Horizontal PFL bar: same zone map as mini, PFLBar's own off-opacity/glow.
+function applyPflCells(cells, segments, hold, level) {
+  const db = window.levelToDbfs(level);
+  const lit = Math.min(segments, Math.round(dbfsFrac(db) * segments));
+  const holdDb = advancePeakHold({ current: hold }, db);
+  const holdIdx = peakHoldIdx(holdDb, segments);
+  for (let i = 0; i < segments; i++) {
+    const segDb = -48 + ((i + 1) / segments) * 48;
+    const isHold = i === holdIdx;
+    const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
+    const on = i < lit || isHold;
+    const el = cells[i];
+    if (!el) continue;
+    el.style.background = on ? c : '#1a1a1c';
+    el.style.boxShadow = on ? ('0 0 ' + (isHold ? 5 : 3) + 'px ' + c) : 'none';
+    el.style.opacity = on ? '1' : '0.5';
+  }
+}
+const METER_APPLY = { led: applyLedCells, mini: applyMiniCells, pfl: applyPflCells };
+// Called by the animation loop. getLevel(mkey) returns the live level (or undef).
+window.__applyMeters = function (getLevel) {
+  METER_REG.forEach((set, mkey) => {
+    const lvl = getLevel(mkey);
+    if (lvl == null) return;
+    set.forEach(entry => {
+      if (!entry.cells || !entry.cells.length) return;
+      (METER_APPLY[entry.kind] || applyLedCells)(entry.cells, entry.segments, entry.hold, lvl);
+    });
+  });
+};
+// Hook: registers a meter's cells under mkey and keeps them live imperatively.
+function useMeterCells(mkey, kind, segments) {
+  const rootRef = useRef(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !mkey) return;
+    const cells = Array.from(root.querySelectorAll('.led-cell'));
+    const entry = { kind, segments, cells, hold: { db: -60, t: null, holdUntil: 0 } };
+    return meterRegister(mkey, entry);
+  }, [mkey, kind, segments]);
+  return rootRef;
+}
+window.__meterKeys = null; // set by App each state change: fn(mkey)->level base
+
+function LedMeter({ level, height = 180, segments = 18, scale = false, mkey = null }) {
   const db = window.levelToDbfs(level);
   const lit = Math.round(dbfsFrac(db) * segments);
   const holdRef = useRef({ db: -60, t: null, holdUntil: 0 });
   const holdDb = advancePeakHold(holdRef, db);
   const holdIdx = peakHoldIdx(holdDb, segments);
+  // With mkey, this meter renders its structure once and the animation loop
+  // pushes live levels straight to the .led-cell DOM (no per-frame React).
+  const rootRef = useMeterCells(mkey, 'led', segments);
   const cells = [];
   for (let i = 0; i < segments; i++) {
     const idx = segments - 1 - i; // segDb rises with idx; idx 0 = bottom, high idx = top
@@ -2068,7 +2168,7 @@ function LedMeter({ level, height = 180, segments = 18, scale = false }) {
     const col = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
     const on = idx < lit || isHold;
     cells.push(
-      <div key={i} style={{
+      <div key={i} className="led-cell" style={{
         flex: 1, margin: '1px 0', borderRadius: 1,
         background: on ? col : '#1a1a1c',
         boxShadow: on ? `0 0 ${isHold ? 6 : 4}px ${col}` : 'inset 0 0 2px #000',
@@ -2081,7 +2181,7 @@ function LedMeter({ level, height = 180, segments = 18, scale = false }) {
   // clip line is brighter and wider — that's the one that means distortion.
   const hotFrac = dbfsFrac(-12), clipFrac = dbfsFrac(-3);
   const bar = (
-    <div className="ui-no-select" style={{ position: 'relative', display: 'flex', flexDirection: 'column', height, width: 10, padding: 1, background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 2 }}>
+    <div ref={rootRef} className="ui-no-select" style={{ position: 'relative', display: 'flex', flexDirection: 'column', height, width: 10, padding: 1, background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 2 }}>
       {cells}
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 'calc(' + (hotFrac * 100) + '% - 0.5px)', height: 1, background: 'rgba(233,231,224,0.28)', pointerEvents: 'none' }}/>
       <div style={{ position: 'absolute', left: -1.5, right: -1.5, bottom: 'calc(' + (clipFrac * 100) + '% - 0.5px)', height: 1.5, background: 'rgba(233,231,224,0.6)', pointerEvents: 'none' }}/>
@@ -2105,14 +2205,15 @@ function LedMeter({ level, height = 180, segments = 18, scale = false }) {
 // Small horizontal LED meter — used on destination devices (PA speakers, wedge,
 // stream gear) so engineers can see signal arriving at each output without
 // needing the full signal-flow diagnostic.
-function MiniMeter({ level, width = 44, segments = 10 }) {
+function MiniMeter({ level, width = 44, segments = 10, mkey = null }) {
   const db = window.levelToDbfs(level);
   const lit = Math.min(segments, Math.round((window.dbfsFrac ? window.dbfsFrac(db) : 0) * segments));
   const holdRef = useRef({ db: -60, t: null, holdUntil: 0 });
   const holdDb = advancePeakHold(holdRef, db);
   const holdIdx = peakHoldIdx(holdDb, segments);
+  const rootRef = useMeterCells(mkey, 'mini', segments);
   return (
-    <div className="ui-no-select" style={{
+    <div ref={rootRef} className="ui-no-select" style={{
       display: 'flex', gap: 1,
       width, height: 6,
       padding: 1,
@@ -2125,7 +2226,7 @@ function MiniMeter({ level, width = 44, segments = 10 }) {
         const isHold = i === holdIdx;
         const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
         const on = i < lit || isHold;
-        return <div key={i} style={{
+        return <div key={i} className="led-cell" style={{
           flex: 1,
           background: on ? c : '#1a1a1c',
           borderRadius: 0.5,
@@ -2195,6 +2296,7 @@ window.Knob = Knob;
 window.Fader = Fader;
 window.LedMeter = LedMeter;
 window.MiniMeter = MiniMeter;
+window.useMeterCells = useMeterCells;
 window.ButtonPad = ButtonPad;
 window.Led = Led;
 </script>
@@ -2205,7 +2307,7 @@ window.Led = Led;
 <script type="text/babel">
 const { Knob: K, Fader: F, LedMeter: M, ButtonPad: BP, Led: L } = window;
 
-function PFLBar({ level, hot }) {
+function PFLBar({ level, hot, mkey = null }) {
   const segs = 14;
   // dBFS bar: full scale = the console's clip point (0 dBFS = +22 dBu). Read the
   // meter's own zones like a real digital desk: keep the average up in the
@@ -2215,9 +2317,10 @@ function PFLBar({ level, hot }) {
   const holdRef = React.useRef({ db: -60, t: null, holdUntil: 0 });
   const holdDb = window.advancePeakHold ? window.advancePeakHold(holdRef, db) : db;
   const holdIdx = window.peakHoldIdx ? window.peakHoldIdx(holdDb, segs) : -1;
+  const rootRef = window.useMeterCells(mkey, 'pfl', segs);
   return (
     <div className="ui-no-select" style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
-      <div style={{
+      <div ref={rootRef} style={{
         display: 'flex', gap: 1,
         width: '100%',
         padding: 2,
@@ -2235,7 +2338,7 @@ function PFLBar({ level, hot }) {
           const isHold = i === holdIdx;
           const c = isHold ? dbfsColor(holdDb) : dbfsColor(segDb);
           const on = i < lit || isHold;
-          return <div key={i} style={{ flex: 1, height: 4, background: on ? c : '#1a1a1c', borderRadius: 0.5, boxShadow: on ? `0 0 ${isHold ? 5 : 3}px ${c}` : 'none', opacity: on ? 1 : 0.5 }}/>;
+          return <div key={i} className="led-cell" style={{ flex: 1, height: 4, background: on ? c : '#1a1a1c', borderRadius: 0.5, boxShadow: on ? `0 0 ${isHold ? 5 : 3}px ${c}` : 'none', opacity: on ? 1 : 0.5 }}/>;
         })}
       </div>
     </div>
@@ -2293,7 +2396,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
         tip="Input gain. Sets how strong the source hits the preamp. Set it first, checking in PFL." />)}
 
       <div style={{ width: '94%' }}>
-        <PFLBar level={pflLevel} hot={ch.solo}/>
+        <PFLBar level={pflLevel} hot={ch.solo} mkey={'pfl:' + idx}/>
         <div className="mono" style={{ fontSize: 6.5, color: ch.solo ? 'var(--amber)' : 'var(--ink-3)', textAlign: 'center', marginTop: 1, letterSpacing: 0.5, fontWeight: 700 }}>
           {ch.solo ? 'PFL' : 'INPUT'}
         </div>
@@ -2335,7 +2438,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
           centered, including the meter the lesson is talking about. */}
       <div data-walk={'ch' + (idx + 1) + '-fader'} style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
         <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>
-        <M level={channelLevel} height={172} segments={22}/>
+        <M level={channelLevel} height={172} segments={22} mkey={'chlvl:' + idx}/>
       </div>
 
       <div style={{
@@ -2405,8 +2508,8 @@ function MasterSection({ master, onChange, paLevel, paRLevel, powered = true, on
       <div data-walk="master-fader" style={{ display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: 1 }}>
         <F value={master.fader} onChange={(v) => { onChange({ ...master, fader: v }); if (onInspect) onInspect('pa'); }} height={208}/>
         <div style={{ display: 'flex', gap: 3 }}>
-          <M level={paLevel} height={208} segments={26}/>
-          <M level={paRLevel} height={208} segments={26} scale/>
+          <M level={paLevel} height={208} segments={26} mkey="out:pa_l"/>
+          <M level={paRLevel} height={208} segments={26} scale mkey="out:pa_r"/>
         </div>
       </div>
 
@@ -7807,6 +7910,9 @@ function App() {
   const [fbSeverity, setFbSeverity] = uS({ level: 0, count: 0 });
 
   const audio = uM(() => window.computeAudio(state, envelopeRef.current), [state, envTick]);
+  // Current state for the animation loop (which has stale closures) — used to
+  // drive the band's meters straight to the DOM without a per-frame re-render.
+  const stateRef = uR(state); stateRef.current = state;
 
   // Clipping warnings read the SETTLED signal only (clipsStable, below).
   // With real crest factors, live peaks cross thresholds on every hot
@@ -8215,7 +8321,29 @@ function App() {
       // thread on lower-powered machines (audible as compression / lost
       // transients while the audio graph itself measured clean). ?lite=1 drops
       // the re-render further (~8fps) as an extreme fallback.
-      if (!LITE_METERS) {
+      // BAND scenario: drive the meters straight to the DOM every frame (no
+      // per-frame React render). Re-rendering 15 strips 60x/sec starved the
+      // audio thread on slower machines and glitched playback; computeAudio
+      // itself is ~0.08ms, so recomputing it here and pushing levels to the
+      // meter segments is cheap and leaves the audio thread alone. Every other
+      // scenario keeps the throttled re-render below (unchanged behavior).
+      if (BAND_PARAM && !LITE_METERS) {
+        const st = stateRef.current;
+        const on = st.mixer ? st.mixer.on !== false : true;
+        const a = window.computeAudio(st, envelopeRef.current);
+        const mb = a.mainBus || { L: 0, R: 0 };
+        window.__applyMeters((mkey) => {
+          if (mkey === 'out:pa_l') return mb.L || 0;
+          if (mkey === 'out:pa_r') return mb.R || 0;
+          const c = mkey.indexOf(':');
+          if (c > 0) {
+            const kind = mkey.slice(0, c), i = +mkey.slice(c + 1);
+            if (kind === 'chlvl') return on ? (a.post[i] || 0) * 1.2 : 0;
+            if (kind === 'pfl') return on ? (a.chanIn[i] || 0) : 0;
+          }
+          return null;
+        });
+      } else if (!LITE_METERS) {
         const nowMs = performance.now();
         if (nowMs - lastRenderMs >= 48) { lastRenderMs = nowMs; setEnvTick(n => (n + 1) & 0xff); }
       }
@@ -8797,7 +8925,7 @@ function App() {
   const anyOutputActive = (audio.outputs.pa_l + audio.outputs.pa_r + audio.outputs.wedge + (audio.outputs.wedge2 || 0)
     + (audio.outputs.wedge3 || 0) + (audio.outputs.wedge4 || 0)) > 0.05;
   uE(() => {
-    if (!anyOutputActive || LITE_FREEZE) return;
+    if (!anyOutputActive || LITE_FREEZE || BAND_PARAM) return;
     const id = setInterval(() => force(t => t + 1), 120);
     return () => clearInterval(id);
   }, [anyOutputActive]);
