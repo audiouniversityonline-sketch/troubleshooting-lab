@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store">
+<title>Stem A/B Test · Troubleshooting Lab</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0d0f12; color: #e6e8eb; font: 14px/1.5 -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #9aa2ad; margin: 0 0 20px; max-width: 760px; }
+  .sub b { color: #e6e8eb; }
+  table { border-collapse: collapse; width: 100%; max-width: 760px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #222831; }
+  th { color: #9aa2ad; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.name { font-weight: 700; }
+  td.info { color: #7f8894; font-variant-numeric: tabular-nums; font-size: 12px; }
+  button { background: #1b2027; color: #e6e8eb; border: 1px solid #313a45; border-radius: 6px; padding: 6px 12px; cursor: pointer; font: inherit; }
+  button:hover { background: #232a33; }
+  button.on { background: #2e7d5b; border-color: #2e7d5b; color: #fff; }
+  button.mix.on { background: #2f6ba3; border-color: #2f6ba3; }
+  .now { margin: 16px 0 0; color: #9aa2ad; min-height: 20px; }
+  .now b { color: #e6e8eb; }
+  code { background: #1b2027; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Stem A/B Test</h1>
+<p class="sub">
+  This page plays the raw <code>.wav</code> stems <b>completely outside the Troubleshooting Lab app</b> — no console,
+  no EQ, no metering, no React. It exists to answer one question: does the file itself sound right on your machine?
+</p>
+<p class="sub">
+  <b>Raw</b> plays the buffer straight to your speakers at unity gain (nothing touches it).
+  <b>Mixer path</b> plays the same buffer through the exact chain the app uses for a band stem in v57 — a 20&nbsp;Hz
+  high-pass (off, transparent) and a unity gain, and nothing else. If <b>Raw</b> and <b>Mixer path</b> sound identical,
+  the app's signal path is transparent. If <b>Raw</b> already sounds wrong, it is your output or monitoring, not the app.
+  Only one clip plays at a time so you can A/B cleanly.
+</p>
+
+<table>
+  <thead><tr><th>Stem</th><th>Decoded</th><th></th><th></th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<p class="now" id="now">Nothing playing.</p>
+
+<script>
+const STEMS = [
+  ['Kick','kick'],['Snare','snare'],['Rack Tom','rack'],['Floor Tom','floor'],
+  ['Overhead L','ohl'],['Overhead R','ohr'],['Bass','bass'],['Electric Gtr','egtr'],
+  ['Acoustic Gtr','agtr'],['Keys','keys'],['Vocal 1','vocal1'],['Vocal 2','vocal2'],
+  ['Vocal 3','vocal3'],['Vocal 4','vocal4'],
+];
+const V = 6; // matches CLIP_SOURCES ?v= in the app
+let ctx = null;
+const buffers = {};        // key -> AudioBuffer
+let current = null;        // { src, key, mode }
+const nowEl = document.getElementById('now');
+
+function ensureCtx() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+
+async function loadBuffer(key, infoCell) {
+  if (buffers[key]) return buffers[key];
+  const c = ensureCtx();
+  const ab = await fetch('audio/' + key + '.wav?v=' + V).then(r => r.arrayBuffer());
+  const buf = await c.decodeAudioData(ab);
+  buffers[key] = buf;
+  infoCell.textContent = buf.length.toLocaleString() + ' smp · ' + buf.sampleRate/1000 + 'k · ' + buf.duration.toFixed(2) + 's';
+  return buf;
+}
+
+function stopCurrent() {
+  if (current) { try { current.src.stop(); } catch(e){} current = null; }
+  document.querySelectorAll('button.on').forEach(b => b.classList.remove('on'));
+  nowEl.innerHTML = 'Nothing playing.';
+}
+
+async function play(key, label, mode, btn, infoCell) {
+  const wasThis = current && current.key === key && current.mode === mode;
+  stopCurrent();
+  if (wasThis) return;              // toggle off
+  const c = ensureCtx();
+  const buf = await loadBuffer(key, infoCell);
+  const src = c.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  if (mode === 'raw') {
+    src.connect(c.destination);
+  } else {
+    const hpf = c.createBiquadFilter();
+    hpf.type = 'highpass'; hpf.frequency.value = 20; hpf.Q.value = 0.707;
+    const g = c.createGain(); g.gain.value = 1;
+    src.connect(hpf); hpf.connect(g); g.connect(c.destination);
+  }
+  src.start();
+  current = { src, key, mode };
+  btn.classList.add('on');
+  nowEl.innerHTML = 'Playing <b>' + label + '</b> — ' + (mode === 'raw' ? 'Raw (bypasses everything)' : 'Mixer path (20 Hz HPF + unity gain)') + '. Click again to stop.';
+}
+
+const rows = document.getElementById('rows');
+for (const [label, key] of STEMS) {
+  const tr = document.createElement('tr');
+  const nameTd = document.createElement('td'); nameTd.className = 'name'; nameTd.textContent = label;
+  const infoTd = document.createElement('td'); infoTd.className = 'info'; infoTd.textContent = '—';
+  const rawTd = document.createElement('td');
+  const mixTd = document.createElement('td');
+  const rawBtn = document.createElement('button'); rawBtn.textContent = '▶ Raw';
+  const mixBtn = document.createElement('button'); mixBtn.textContent = '▶ Mixer path'; mixBtn.className = 'mix';
+  rawBtn.onclick = () => play(key, label, 'raw', rawBtn, infoTd);
+  mixBtn.onclick = () => play(key, label, 'mix', mixBtn, infoTd);
+  rawTd.appendChild(rawBtn); mixTd.appendChild(mixBtn);
+  tr.append(nameTd, infoTd, rawTd, mixTd);
+  rows.appendChild(tr);
+}
+</script>
+</body>
+</html>
