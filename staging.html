@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=60"></script>
+<script src="content-staging.js?v=61"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -294,10 +294,13 @@ const EQ_BAND_HZ = [250, 500, 1000, 2000, 4000];
 const FULL_EQ_BANDS = ['63', '80', '100', '125', '160', '200', '250', '315', '400', '500', '630', '800', '1k', '1.25k', '1.6k', '2k', '2.5k', '3.15k', '4k', '5k', '6.3k', '8k', '10k', '12.5k', '16k'];
 const FULL_EQ_HZ = [63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
 const EQ_CUT_DB = 12;
-// Diagnostic flags (URL): ?lite=1 stops the 60fps meter re-render (meters then
-// update at ~8fps via the slow interval), to test whether the per-frame redraw
-// is starving the audio thread on lower-powered machines.
-const LITE_METERS = typeof location !== 'undefined' && /[?&]lite=1/.test(location.search);
+// Diagnostic flags (URL): ?lite=1 stops the throttled meter re-render; ?lite=2
+// additionally freezes the whole per-frame meter loop + the slow interval, so
+// the main thread is nearly idle while audio keeps playing. Used to confirm
+// whether the per-frame redraw is starving the audio thread on slower machines.
+const LITE_LEVEL = (typeof location !== 'undefined' && parseInt(((location.search.match(/[?&]lite=(\d)/) || [])[1]) || '0', 10)) || 0;
+const LITE_METERS = LITE_LEVEL >= 1;
+const LITE_FREEZE = LITE_LEVEL >= 2;
 // A wedge's inherent feedback fingerprint: the frequencies where the mic +
 // wedge + room loop peaks, so those ring first. This is what makes feedback
 // behave like real life instead of one fixed tone. Per band, a "sensitivity"
@@ -8102,6 +8105,10 @@ function App() {
     let raf = 0;
     let lastRenderMs = 0;
     const loop = () => {
+      // Diagnostic: freeze the entire per-frame meter loop (no analyser reads,
+      // no ballistics, no feedback, no re-render) so the main thread is nearly
+      // idle while the audio graph keeps playing on its own thread.
+      if (LITE_FREEZE) { raf = requestAnimationFrame(loop); return; }
       const t = performance.now() / 1000 - envStartRef.current;
       const ctxRunning = ctxRef.current && ctxRef.current.state === 'running';
       for (const k of METER_SOURCES) {
@@ -8790,7 +8797,7 @@ function App() {
   const anyOutputActive = (audio.outputs.pa_l + audio.outputs.pa_r + audio.outputs.wedge + (audio.outputs.wedge2 || 0)
     + (audio.outputs.wedge3 || 0) + (audio.outputs.wedge4 || 0)) > 0.05;
   uE(() => {
-    if (!anyOutputActive) return;
+    if (!anyOutputActive || LITE_FREEZE) return;
     const id = setInterval(() => force(t => t + 1), 120);
     return () => clearInterval(id);
   }, [anyOutputActive]);
