@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=84"></script>
+<script src="content-staging.js?v=85"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5495,8 +5495,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         // (the standard code), so it can differ from the box jack it lands on.
         const groups = {
           up:   { out: ac(upHeadOutRef),   midX: fanX - 40, block: (o) => o.ch <= 6, list: [] },
-          inst: { out: ac(instHeadOutRef), midX: fanX - 56, block: null,              list: [] },
-          down: { out: ac(downHeadOutRef), midX: fanX - 72, block: null,              list: [] },
+          // The backline trunk starts stage-left, so it runs UP and OVER the very
+          // top edge (above the drum sub-snake box) before dropping into its fan
+          // point — never cutting across the drum box.
+          inst: { out: ac(instHeadOutRef), midX: fanX - 58, block: null, list: [], overTopY: 4 },
+          down: { out: ac(downHeadOutRef), midX: fanX - 76, block: null,              list: [] },
         };
         const localIdx = {};
         for (const g of ['up', 'inst', 'down']) { let i = 0; for (const k of sourceKeys) if (window.SOURCES[k] && window.SOURCES[k].snake === g) localIdx[k] = ++i; }
@@ -5519,7 +5522,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           const use = ys.length ? ys : grp.list.map(o => o.y);
           const fp = { x: fanX, y: (Math.min(...use) + Math.max(...use)) / 2 };
           for (const o of grp.list) patchTails.push({ fromX: fp.x, fromY: fp.y, x: o.x, y: o.y, color: o.color, ch: o.ch, srcKey: o.srcKey, cross: o.cross });
-          subSnakes.push({ from: grp.out, to: fp, endH: true, midX: grp.midX });
+          subSnakes.push({ from: grp.out, to: fp, endH: true, midX: grp.midX, overTopY: grp.overTopY });
         }
       }
 
@@ -5946,8 +5949,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           // Right-angle multicore hugging the stage edges, ending with a short
           // HORIZONTAL leg into the fan-out point (perpendicular to the vertical
           // jack stack) — midX sits just left of the fan point so the fan tails
-          // continue rightward into the jacks.
-          const d = window._cornerHV(s.from, s.to, s.midX != null ? s.midX : s.to.x);
+          // continue rightward into the jacks. A trunk with overTopY runs up and
+          // over the very top edge first (clears the drum box), then drops in.
+          const d = s.overTopY != null
+            ? `M ${s.from.x} ${s.from.y} L ${s.from.x} ${s.overTopY} L ${s.midX} ${s.overTopY} L ${s.midX} ${s.to.y} L ${s.to.x} ${s.to.y}`
+            : window._cornerHV(s.from, s.to, s.midX != null ? s.midX : s.to.x);
           return (
             <g key={'subsnake-' + i}>
               <path d={d} stroke="#1a1a1d" strokeWidth="9" fill="none" opacity="0.95" strokeLinecap="round" strokeLinejoin="round"/>
