@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=55"></script>
+<script src="content-staging.js?v=56"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8469,13 +8469,13 @@ function App() {
     // the bare filename); bump it whenever the .wav bytes change.
     const CLIP_SOURCES = {
       // MX-8 band (Golden V2 stems, shared with the full band's same instruments).
-      guitar: 'audio/bass.wav?v=5', laptop: 'audio/keys.wav?v=5', vocal: 'audio/vocal1.wav?v=5', vocal2: 'audio/vocal2.wav?v=5',
+      guitar: 'audio/bass.wav?v=6', laptop: 'audio/keys.wav?v=6', vocal: 'audio/vocal1.wav?v=6', vocal2: 'audio/vocal2.wav?v=6',
       // Full 16-input band (?band=1). vx1/vx2 reuse the shared vocal1/vocal2 stems;
       // bass/keys reuse the shared bass/keys stems, so those files load once.
-      kick: 'audio/kick.wav?v=5', snare: 'audio/snare.wav?v=5', rack: 'audio/rack.wav?v=5', floor: 'audio/floor.wav?v=5',
-      ohl: 'audio/ohl.wav?v=5', ohr: 'audio/ohr.wav?v=5', bass: 'audio/bass.wav?v=5', egtr: 'audio/egtr.wav?v=5',
-      agtr: 'audio/agtr.wav?v=5', keys: 'audio/keys.wav?v=5', vx1: 'audio/vocal1.wav?v=5', vx2: 'audio/vocal2.wav?v=5',
-      vx3: 'audio/vocal3.wav?v=5', vx4: 'audio/vocal4.wav?v=5',
+      kick: 'audio/kick.wav?v=6', snare: 'audio/snare.wav?v=6', rack: 'audio/rack.wav?v=6', floor: 'audio/floor.wav?v=6',
+      ohl: 'audio/ohl.wav?v=6', ohr: 'audio/ohr.wav?v=6', bass: 'audio/bass.wav?v=6', egtr: 'audio/egtr.wav?v=6',
+      agtr: 'audio/agtr.wav?v=6', keys: 'audio/keys.wav?v=6', vx1: 'audio/vocal1.wav?v=6', vx2: 'audio/vocal2.wav?v=6',
+      vx3: 'audio/vocal3.wav?v=6', vx4: 'audio/vocal4.wav?v=6',
     };
     // Only fetch the stems for sources actually on THIS board (its snake inputs =
     // the keys of state.cables, patch-independent), so the MX-8 loads its 4 stems
@@ -8510,12 +8510,11 @@ function App() {
         for (let i = 0; i < d0.length; i++) { const a = d0[i] < 0 ? -d0[i] : d0[i]; if (a > peak) peak = a; }
         const clipGain = ctx.createGain();
         const isMixStem = typeof BAND_KEYS !== 'undefined' && BAND_KEYS.indexOf(k) !== -1;
-        // Band stems play at their recorded level (preserves Kyle's mix balance),
-        // lifted by a single common trim so the whole mix sits at a healthy console
-        // level instead of the ~-28 dBFS the raw recorded levels land at through
-        // the downstream gain. One factor for all stems keeps the balance intact.
-        const BAND_TRIM = 10;
-        clipGain.gain.value = isMixStem ? BAND_TRIM : (peak > 0.0001 ? Math.min(8, 0.6 / peak) : 1);
+        // Band stems play at EXACT unity gain: no normalization, no trim, no makeup.
+        // The buffer is what Kyle uploaded, byte for byte. The only things that touch
+        // its level are the console's own fader, pan, and master. If the overall mix
+        // needs to be louder or quieter, that is a fader move, not signal treatment.
+        clipGain.gain.value = isMixStem ? 1 : (peak > 0.0001 ? Math.min(8, 0.6 / peak) : 1);
         const src = ctx.createBufferSource();
         src.buffer = buf; src.loop = true;
         src.connect(clipGain);
