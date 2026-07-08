@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=67"></script>
+<script src="content-staging.js?v=68"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8370,8 +8370,10 @@ function App() {
           return null;
         });
       } else if (!LITE_METERS) {
-        const nowMs = performance.now();
-        if (nowMs - lastRenderMs >= 48) { lastRenderMs = nowMs; setEnvTick(n => (n + 1) & 0xff); }
+        // 8-channel modes are light (8 strips) and never glitched at full rate,
+        // so they keep the original 60fps meters. Only the 16-channel desk needs
+        // the direct-to-DOM path above.
+        setEnvTick(n => (n + 1) & 0xff);
       }
       raf = requestAnimationFrame(loop);
     };
@@ -9774,11 +9776,11 @@ function App() {
               {pitchFor.isLesson
                 ? 'Set up and run a full live show, step by step, across ten guided lessons.'
                 : pitchFor.big16
-                ? 'Mix on a full 16-channel board with all the inputs, not just 8.'
+                ? 'Mix a full 16-channel board with every input up.'
                 : pitchFor.isDigital
-                ? 'Mix on a digital surface, where one channel section follows whatever you select.'
+                ? 'Build the confidence to walk up to a digital console and mix the show.'
                 : pitchFor.isLibrary
-                ? 'A growing library of real-world shows to troubleshoot, each a different board.'
+                ? 'A growing library of real-world scenarios to troubleshoot, each a different board.'
                 : pitchFor.isFeedbackMode
                 ? 'Ring-out training: find the frequency that is feeding back and cut it on a graphic EQ.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
