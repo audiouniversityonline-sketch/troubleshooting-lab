@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=56"></script>
+<script src="content-staging.js?v=57"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8525,6 +8525,15 @@ function App() {
           // default, and it feeds the meter tap) and its level/pan (gainL/R). The
           // only thing that touches the audio is the console's own controls.
           clipGain.connect(chain.hpf);
+          // PERF: also PRUNE the synth front-end from the graph. Bypassing it for
+          // audio isn't enough — mix -> filter -> drive -> shaper(4x oversampled)
+          // -> makeup -> envelope still had a live path to the output, so Web Audio
+          // kept running all of that DSP (14 oversampled waveshapers!) on silence
+          // every audio block. Disconnecting envelope from the HPF orphans the whole
+          // subgraph so the engine stops processing it. That idle DSP, x14 channels,
+          // is what made the full band crackle and lag where 4 tracks ran clean.
+          try { chain.envelope.disconnect(); } catch (_) {}
+          try { chain.filter && chain.filter.disconnect(); } catch (_) {}
         } else {
           // MX-8 gain-staging sources keep drive -> shaper (with the clean clip
           // curve, transparent until actually driven past the knee) so that
