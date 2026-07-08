@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=62"></script>
+<script src="content-staging.js?v=63"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -2070,11 +2070,17 @@ function meterRegister(mkey, entry) {
   return () => { const s = METER_REG.get(mkey); if (s) { s.delete(entry); if (!s.size) METER_REG.delete(mkey); } };
 }
 // Vertical LED bar (LedMeter): cells in DOM order i=0..N-1, i=0 is the TOP.
-function applyLedCells(cells, segments, hold, level) {
+// Each function skips all DOM writes when nothing visible changed (lit + hold
+// segment identical to last frame), so per-frame work stays near zero.
+function applyLedCells(entry, level) {
+  const { cells, segments, hold } = entry;
   const db = window.levelToDbfs(level);
   const lit = Math.round(dbfsFrac(db) * segments);
   const holdDb = advancePeakHold({ current: hold }, db);
   const holdIdx = peakHoldIdx(holdDb, segments);
+  const zone = holdDb >= -3 ? 2 : holdDb >= -12 ? 1 : 0;
+  if (entry._lit === lit && entry._hi === holdIdx && entry._z === zone) return;
+  entry._lit = lit; entry._hi = holdIdx; entry._z = zone;
   for (let i = 0; i < segments; i++) {
     const idx = segments - 1 - i;
     const segDb = DBFS_FLOOR + ((idx + 1) / segments) * (0 - DBFS_FLOOR);
@@ -2089,11 +2095,15 @@ function applyLedCells(cells, segments, hold, level) {
   }
 }
 // Horizontal mini bar (MiniMeter): cells in DOM order i=0..N-1, i=0 is LEFT/low.
-function applyMiniCells(cells, segments, hold, level) {
+function applyMiniCells(entry, level) {
+  const { cells, segments, hold } = entry;
   const db = window.levelToDbfs(level);
   const lit = Math.min(segments, Math.round(dbfsFrac(db) * segments));
   const holdDb = advancePeakHold({ current: hold }, db);
   const holdIdx = peakHoldIdx(holdDb, segments);
+  const zone = holdDb >= -3 ? 2 : holdDb >= -12 ? 1 : 0;
+  if (entry._lit === lit && entry._hi === holdIdx && entry._z === zone) return;
+  entry._lit = lit; entry._hi = holdIdx; entry._z = zone;
   for (let i = 0; i < segments; i++) {
     const segDb = -48 + ((i + 1) / segments) * 48;
     const isHold = i === holdIdx;
@@ -2107,11 +2117,15 @@ function applyMiniCells(cells, segments, hold, level) {
   }
 }
 // Horizontal PFL bar: same zone map as mini, PFLBar's own off-opacity/glow.
-function applyPflCells(cells, segments, hold, level) {
+function applyPflCells(entry, level) {
+  const { cells, segments, hold } = entry;
   const db = window.levelToDbfs(level);
   const lit = Math.min(segments, Math.round(dbfsFrac(db) * segments));
   const holdDb = advancePeakHold({ current: hold }, db);
   const holdIdx = peakHoldIdx(holdDb, segments);
+  const zone = holdDb >= -3 ? 2 : holdDb >= -12 ? 1 : 0;
+  if (entry._lit === lit && entry._hi === holdIdx && entry._z === zone) return;
+  entry._lit = lit; entry._hi = holdIdx; entry._z = zone;
   for (let i = 0; i < segments; i++) {
     const segDb = -48 + ((i + 1) / segments) * 48;
     const isHold = i === holdIdx;
@@ -2132,7 +2146,7 @@ window.__applyMeters = function (getLevel) {
     if (lvl == null) return;
     set.forEach(entry => {
       if (!entry.cells || !entry.cells.length) return;
-      (METER_APPLY[entry.kind] || applyLedCells)(entry.cells, entry.segments, entry.hold, lvl);
+      (METER_APPLY[entry.kind] || applyLedCells)(entry, lvl);
     });
   });
 };
