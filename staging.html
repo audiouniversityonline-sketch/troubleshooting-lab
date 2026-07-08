@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=76"></script>
+<script src="content-staging.js?v=77"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4482,7 +4482,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     }}>
       <ZoneHeader label="Stage" sublabel="band, sources, PA + wedges · downstage ↓ audience" badge="LIVE AREA" badgeColor="var(--green)"/>
 
-      <div style={{ position: 'relative', minHeight: big16 ? 640 : 480 }}>
+      <div style={{ position: 'relative', minHeight: big16 ? 700 : 480 }}>
         {/* Downstage row — PA L, Wedge 1, Wedge 2, PA R, evenly spaced along
             the front of the stage. Each one's cable comes out of its bottom
             edge and runs along the front rail back to the stage box. */}
@@ -4642,7 +4642,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 line; vocals, guitars, bass and keys XLR into its channels 1-7.
                 Placed right-of-centre so its trunk rises into the stage-right
                 corridor without cutting back through the band. */}
-            <div style={{ position: 'absolute', top: 524, left: '60%', transform: 'translateX(-50%)' }}>
+            <div style={{ position: 'absolute', top: 600, left: '60%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DOWNSTAGE SUB-SNAKE" items={downItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — both sub-snakes patch in here (drum vocal lands on
