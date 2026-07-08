@@ -4120,27 +4120,28 @@ function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive, nPor
 // inputs plug into (each port registers portRefs[port] so the source→port cable
 // still draws), with an out anchor on the right for the sub-snake bundle that
 // runs to the side-stage box.
-function SubSnakeHead({ label, ports, portRefs, activePorts, outRef }) {
+function SubSnakeHead({ label, items, subJackRefs, outRef }) {
+  // items: [{ srcKey, localCh, label, color, flowing, stageCh }] in local-channel
+  // order. Each channel shows its LOCAL number, the instrument, and (when the
+  // patch is non-1:1) where it lands on the main stage box, e.g. "→14".
   return (
     <div className="ui-no-select" style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
-      border: '1px solid #0a0a0c', borderRadius: 4, padding: '4px 10px 5px',
+      border: '1px solid #0a0a0c', borderRadius: 4, padding: '4px 8px 6px',
       position: 'relative', boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
     }}>
-      <div className="mono" style={{ fontSize: 6, color: 'var(--cool)', letterSpacing: 0.8, fontWeight: 700, textAlign: 'center', marginBottom: 2 }}>{label}</div>
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-        {ports.map(p => {
-          const a = activePorts.find(x => x.port === p);
-          const chColor = (window.SNAKE_COLORS || [])[p - 1] || '#38383e';
-          return (
-            <div key={p} ref={el => portRefs.current[p] = el} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{ width: 11, height: 11, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + chColor, display: 'grid', placeItems: 'center', boxShadow: a && a.flowing ? `0 0 4px ${a.color}` : 'inset 0 0 2px #000' }}>
-                <div style={{ width: 3, height: 3, borderRadius: '50%', background: a ? a.color : '#222' }}/>
-              </div>
-              <div className="mono" style={{ fontSize: 6, color: '#e9e6df', fontWeight: 700, lineHeight: 1.1 }}>{p}</div>
+      <div className="mono" style={{ fontSize: 6, color: 'var(--cool)', letterSpacing: 0.8, fontWeight: 700, textAlign: 'center', marginBottom: 3 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+        {items.map(it => (
+          <div key={it.srcKey} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 30 }}>
+            <div className="mono" style={{ fontSize: 6, color: 'var(--ink-3)', fontWeight: 700, lineHeight: 1 }}>{it.localCh}</div>
+            <div ref={el => { subJackRefs.current[it.srcKey] = el; }} style={{ width: 11, height: 11, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + it.color, display: 'grid', placeItems: 'center', boxShadow: it.flowing ? `0 0 4px ${it.color}` : 'inset 0 0 2px #000', margin: '1px 0' }}>
+              <div style={{ width: 3, height: 3, borderRadius: '50%', background: it.color }}/>
             </div>
-          );
-        })}
+            <div className="mono" style={{ fontSize: 5, color: '#c8c8d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>{it.label}</div>
+            <div className="mono" style={{ fontSize: 5, color: it.localCh === it.stageCh ? 'var(--ink-3)' : 'var(--amber)', fontWeight: 700, lineHeight: 1.1 }}>{'→' + it.stageCh}</div>
+          </div>
+        ))}
       </div>
       <div ref={outRef} style={{ position: 'absolute', right: -2, top: '50%', width: 5, height: 5, transform: 'translateY(-50%)', pointerEvents: 'none' }}/>
     </div>
@@ -4150,17 +4151,32 @@ function SubSnakeHead({ label, ports, portRefs, activePorts, outRef }) {
 // The single SIDE-STAGE box on the 16-channel stage: both sub-snakes arrive on
 // its left edge, its OUT (return) ports feed PA + wedges, and the main snake
 // leaves its right edge for the FOH fan-out.
-function SideStageBox({ outRefs, snakeOutRef, retActive, inUpRef, inDownRef }) {
+function SideStageBox({ inChannels, outRefs, snakeOutRef, retActive, inUpRef, inDownRef }) {
   const outs = [1, 2, 3, 4, 5, 6].map(ch => ({ key: ch, color: (window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52', active: !!(retActive && retActive[ch]) }));
+  const inRow = (arr) => (
+    <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+      {arr.map(c => (
+        <div key={c.ch} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 27 }}>
+          <div className="mono" style={{ fontSize: 6, color: '#e9e6df', fontWeight: 700, lineHeight: 1 }}>{c.ch}</div>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (c.color || '#38383e'), display: 'grid', placeItems: 'center', boxShadow: c.flowing ? `0 0 4px ${c.color}` : 'inset 0 0 2px #000', margin: '1px 0' }}>
+            <div style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: c.srcKey ? c.color : '#222' }}/>
+          </div>
+          <div className="mono" style={{ fontSize: 4.5, color: '#c8c8d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>{c.label || ''}</div>
+        </div>
+      ))}
+    </div>
+  );
   return (
     <div className="ui-no-select" style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
       border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 8px 8px',
-      position: 'relative', width: 132, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
+      position: 'relative', width: 236, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
     }}>
-      <div className="mono" style={{ fontSize: 6.5, color: 'var(--cool)', letterSpacing: 1, fontWeight: 700, textAlign: 'center' }}>STAGE BOX</div>
-      <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, textAlign: 'center' }}>side stage</div>
-      <div style={{ height: 1, background: '#38383e', margin: '3px 0' }}/>
+      <div className="mono" style={{ fontSize: 6.5, color: 'var(--cool)', letterSpacing: 1, fontWeight: 700, textAlign: 'center' }}>STAGE BOX · side stage</div>
+      <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, textAlign: 'left', marginTop: 2 }}>IN — to FOH fan-out 1:1</div>
+      {inRow((inChannels || []).slice(0, 7))}
+      {inRow((inChannels || []).slice(7, 14))}
+      <div style={{ height: 1, background: '#38383e', margin: '4px 0 2px' }}/>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, fontWeight: 700, width: 16 }}>OUT</div>
         <div style={{ display: 'flex', gap: 5, justifyContent: 'space-around', flex: 1 }}>
@@ -4175,7 +4191,7 @@ function SideStageBox({ outRefs, snakeOutRef, retActive, inUpRef, inDownRef }) {
         </div>
       </div>
       <div ref={inUpRef} style={{ position: 'absolute', left: -2, top: '30%', width: 5, height: 5, pointerEvents: 'none' }}/>
-      <div ref={inDownRef} style={{ position: 'absolute', left: -2, top: '72%', width: 5, height: 5, pointerEvents: 'none' }}/>
+      <div ref={inDownRef} style={{ position: 'absolute', left: -2, top: '62%', width: 5, height: 5, pointerEvents: 'none' }}/>
       <div ref={snakeOutRef} style={{ position: 'absolute', right: -2, top: '50%', width: 8, height: 8, transform: 'translateY(-50%)', pointerEvents: 'none' }}/>
     </div>
   );
@@ -4335,7 +4351,7 @@ function ZoneHeader({ label, sublabel, badge, accent, badgeColor }) {
   );
 }
 
-function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef, upHeadOutRef, downHeadOutRef, sideInUpRef, sideInDownRef, wedgeMargins, onOpenPlacement }) {
+function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef, upHeadOutRef, downHeadOutRef, sideInUpRef, sideInDownRef, subJackRefs, wedgeMargins, onOpenPlacement }) {
   const topo = state.topology || {};
   const isPassive = topo.paRig === 'amp+passive';
   // In passive mode the cabinets are dumb — the external amp powers them, so a
@@ -4352,13 +4368,23 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     return { port: p, color: window.SOURCES[srcKey].color, flowing, srcKey };
   }).filter(Boolean);
 
-  // Sub-snake grouping (16-channel): which physical ports live on each head.
-  // Home port = the source's position in the band order (stable even if a source
-  // is unplugged), so a head always shows all its ports.
-  const homePort = (k) => (window.BAND_KEYS || []).indexOf(k) + 1;
+  // Sub-snake grouping (16-channel): each group's sources in local-channel order,
+  // with where each lands on the main stage box (= its console channel). The
+  // drum sub-snake's ch7 (drummer vocal) lands on stage-box 14, not 7 — the patch
+  // that makes this worth practicing.
   const isUpSnake = (k) => window.SOURCES[k] && window.SOURCES[k].snake === 'up';
-  const upPorts = big16 ? sourceKeys.filter(isUpSnake).map(homePort).filter(p => p >= 1).sort((a, b) => a - b) : [];
-  const downPorts = big16 ? sourceKeys.filter(k => !isUpSnake(k)).map(homePort).filter(p => p >= 1).sort((a, b) => a - b) : [];
+  const flowOf = (k) => { const ch = window.effectiveChannel ? window.effectiveChannel(state, k) : 0; return ch >= 1 && audio.chanInSource[ch - 1] === k && audio.chanIn[ch - 1] > 0.05; };
+  const buildItems = (grp) => grp.map((k, i) => ({ srcKey: k, localCh: i + 1, label: window.SOURCES[k].short, color: window.SOURCES[k].color, flowing: flowOf(k), stageCh: state.cables[k] || 0 }));
+  const drumItems = big16 ? buildItems(sourceKeys.filter(isUpSnake)) : [];
+  const downItems = big16 ? buildItems(sourceKeys.filter(k => !isUpSnake(k))) : [];
+  // Main stage box IN channels 1..14: which instrument lands on each console
+  // channel (via the sub-snake patch), so the drummer's vocal reads on 14.
+  const inChannels = big16 ? Array.from({ length: 14 }, (_, i) => {
+    const ch = i + 1;
+    const k = sourceKeys.find(s => (state.cables[s] || 0) === ch);
+    return k ? { ch, srcKey: k, label: window.SOURCES[k].short, color: window.SOURCES[k].color, flowing: flowOf(k) }
+             : { ch, srcKey: null, label: '', color: '#38383e', flowing: false };
+  }) : [];
   const retActive = (() => {
     const ofan = state.outFan || window.DEFAULT_OUT_FAN;
     const busAct = {
@@ -4596,20 +4622,20 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             the console panel's header label instead of cutting through it). */}
         {big16 ? (
           <>
-            {/* Upstage sub-snake head — the drum-kit + drummer vocal inputs plug
-                in here, right below the kit. */}
+            {/* Drum sub-snake box — sits right by the kit; the six drum mics and
+                the drummer's vocal XLR into its channels 1-7. */}
             <div style={{ position: 'absolute', top: 150, left: '50%', transform: 'translateX(-50%)' }}>
-              <SubSnakeHead label="UPSTAGE SUB-SNAKE" ports={upPorts} portRefs={portRefs} activePorts={activePorts} outRef={upHeadOutRef}/>
+              <SubSnakeHead label="DRUM SUB-SNAKE" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
             </div>
-            {/* Downstage sub-snake head — vocals, guitars, bass, keys plug in here,
-                just behind the front line. */}
+            {/* Downstage sub-snake box — sits by the front line; vocals, guitars,
+                bass and keys XLR into its channels 1-7. */}
             <div style={{ position: 'absolute', top: 452, left: '50%', transform: 'translateX(-50%)' }}>
-              <SubSnakeHead label="DOWNSTAGE SUB-SNAKE" ports={downPorts} portRefs={portRefs} activePorts={activePorts} outRef={downHeadOutRef}/>
+              <SubSnakeHead label="DOWNSTAGE SUB-SNAKE" items={downItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
-            {/* Side-stage box — both sub-snakes arrive here; the main snake leaves
-                for the FOH fan-out. */}
-            <div ref={stageBoxRef} style={{ position: 'absolute', top: 290, right: 8 }}>
-              <SideStageBox outRefs={outRefs} snakeOutRef={snakeOutRef} retActive={retActive} inUpRef={sideInUpRef} inDownRef={sideInDownRef}/>
+            {/* Side-stage box — both sub-snakes patch in here (drum vocal lands on
+                14); the main snake runs its channels 1:1 to the FOH fan-out. */}
+            <div ref={stageBoxRef} style={{ position: 'absolute', top: 270, right: 8 }}>
+              <SideStageBox inChannels={inChannels} outRefs={outRefs} snakeOutRef={snakeOutRef} retActive={retActive} inUpRef={sideInUpRef} inDownRef={sideInDownRef}/>
             </div>
           </>
         ) : (
@@ -5017,6 +5043,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   const downHeadOutRef = useR2(null);
   const sideInUpRef = useR2(null);
   const sideInDownRef = useR2(null);
+  // Per-source XLR jack on a sub-snake box (keyed by source), so each instrument's
+  // XLR draws to its own channel on the box near it.
+  const subJackRefs = useR2({});
   const [paths, setPaths] = useS2({
     stageCables: [], snake: null, subSnakes: [], fanOutCables: [], outCables: [], outFanCables: [],
     backRailY: 0, frontRailY: 0, snakeMidX: 0,
@@ -5368,8 +5397,18 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       const stageCables = sourceKeys.map(k => {
         const src = sourceRefs.current[k];
         if (!src) return null;
-        const from = anchorPos(src, 'top');
         const port = state.cables[k];
+        // 16-channel: the input cable is the instrument's XLR to its channel on
+        // the nearby sub-snake box. The box sits below its instruments, so the
+        // cable leaves the card's bottom edge.
+        if (state.big16) {
+          const from = anchorPos(src, 'bottom');
+          const jack = subJackRefs.current[k];
+          const to = jack ? anchorPos(jack, 'center') : null;
+          if (!from || !to) return null;
+          return { src: k, from, to, port, unplugged: !(port >= 1), xlr: true };
+        }
+        const from = anchorPos(src, 'top');
         const portEl = port >= 1 ? portRefs.current[port] : null;
         let to = portTopAnchor(portEl);
         let unplugged = false;
@@ -5612,7 +5651,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                   snakeOutRef={snakeOutRef} wedgeOnStageRef={wedgeOnStageRef} wedge2OnStageRef={wedge2OnStageRef}
                   wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
                   paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef}
-                  upHeadOutRef={upHeadOutRef} downHeadOutRef={downHeadOutRef} sideInUpRef={sideInUpRef} sideInDownRef={sideInDownRef}
+                  upHeadOutRef={upHeadOutRef} downHeadOutRef={downHeadOutRef} sideInUpRef={sideInUpRef} sideInDownRef={sideInDownRef} subJackRefs={subJackRefs}
                   wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
               </div>
             )}
@@ -5761,7 +5800,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                     zone over a slightly larger visible plug graphic. Cursor
                     is `grab` when idle, `grabbing` while this specific
                     cable is being dragged. */}
-                {!someOtherDragged && (
+                {!someOtherDragged && !c.xlr && (
                   <g style={{ pointerEvents: 'auto' }}>
                     <circle className="cable-hit" cx={portEnd.x} cy={portEnd.y} r="11" fill="transparent"
                       onPointerDown={(e) => startDrag(e, { type: 'source', id: c.src })}/>
@@ -5770,6 +5809,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                       pointerEvents="none"/>
                     <circle cx={portEnd.x} cy={portEnd.y} r="2" fill="#0a0a0c" pointerEvents="none"/>
                   </g>
+                )}
+                {/* 16-channel XLR: a fixed plug at the sub-snake jack (patching is
+                    not draggable yet — static-first). */}
+                {c.xlr && !someOtherDragged && (
+                  <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8"/>
                 )}
               </g>
             );
