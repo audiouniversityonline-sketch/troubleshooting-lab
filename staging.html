@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=63"></script>
+<script src="content-staging.js?v=64"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7923,7 +7923,14 @@ function App() {
   // so the warning can escalate (ring -> howl -> "too many, pull it down").
   const [fbSeverity, setFbSeverity] = uS({ level: 0, count: 0 });
 
-  const audio = uM(() => window.computeAudio(state, envelopeRef.current), [state, envTick]);
+  // Band: use STEADY (envelope-free) levels for `audio`, which drives the
+  // audible per-channel gains. The recorded clips carry their own dynamics, so
+  // folding the per-frame envelope into the gain is wrong — and because the
+  // band recomputes `audio` only on state changes (no per-frame re-render),
+  // every fader move would otherwise re-snapshot every channel's instantaneous
+  // envelope and jolt the whole mix balance. Meters still bounce: they read the
+  // live envelope directly in the animation loop, not from `audio`.
+  const audio = uM(() => window.computeAudio(state, BAND_PARAM ? {} : envelopeRef.current), [state, envTick]);
   // Current state for the animation loop (which has stale closures) — used to
   // drive the band's meters straight to the DOM without a per-frame re-render.
   const stateRef = uR(state); stateRef.current = state;
