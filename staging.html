@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=78"></script>
+<script src="content-staging.js?v=79"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4148,57 +4148,50 @@ function SubSnakeHead({ label, items, subJackRefs, outRef }) {
   );
 }
 
-// The single SIDE-STAGE box on the 16-channel stage: both sub-snakes arrive on
-// its left edge, its OUT (return) ports feed PA + wedges, and the main snake
-// leaves its right edge for the FOH fan-out.
-function SideStageBox({ inChannels, stageChRefs, outRefs, snakeOutRef, retActive, inUpRef, inDownRef }) {
-  const outs = [1, 2, 3, 4, 5, 6].map(ch => ({ key: ch, color: (window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52', active: !!(retActive && retActive[ch]) }));
-  // All fourteen IN jacks sit in ONE numbered row, left→right 1..14 — the same
-  // order they hit the console, so "IN 1:1 to FOH" reads at a glance. The two
-  // sub-snake multicores break out onto this row as a clean rake (drawn in the
-  // cable layer): drums drop into 1-6 + 14, the downstage snake into 7-13.
-  const inRow = (arr) => (
-    <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-      {arr.map(c => (
-        <div key={c.ch} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 20 }}>
-          <div className="mono" style={{ fontSize: 6, color: '#e9e6df', fontWeight: 700, lineHeight: 1 }}>{c.ch}</div>
-          <div ref={el => { if (stageChRefs) stageChRefs.current[c.ch] = el; }} style={{ width: 10, height: 10, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (c.color || '#38383e'), display: 'grid', placeItems: 'center', boxShadow: c.flowing ? `0 0 4px ${c.color}` : 'inset 0 0 2px #000', margin: '1px 0' }}>
-            <div style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: c.srcKey ? c.color : '#222' }}/>
-          </div>
-          <div className="mono" style={{ fontSize: 4.5, color: '#c8c8d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>{c.label || ''}</div>
+// The single SIDE-STAGE box on the 16-channel stage: a vertical rack on the
+// stage-right edge. 16 inputs run top→bottom in one numbered line (two banks of
+// 8), the return side has 8 outputs, and the main snake leaves its right edge
+// for FOH. Both sub-snakes fan out onto the left face: the drum snake into IN
+// 1-6 (plus the drummer's vocal cross-patched down to 14), the downstage snake
+// into 7-13. Keeping 1-16 in one line is what lets that cross-patch read.
+function SideStageBox({ inChannels, stageChRefs, outRefs, snakeOutRef, retActive }) {
+  const outs = [1, 2, 3, 4, 5, 6, 7, 8].map(ch => ({ key: ch, color: (window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52', active: !!(retActive && retActive[ch]) }));
+  // One IN row of the vertical rack: jack on the LEFT face (where the fan-out
+  // tails plug in), then the channel number and the instrument on it.
+  const inRow = (c, i) => (
+    <React.Fragment key={c.ch}>
+      {i === 8 && <div style={{ height: 4, borderTop: '1px dashed #38383e', margin: '2px 0' }}/>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 3, height: 12.5 }}>
+        <div ref={el => { if (stageChRefs) stageChRefs.current[c.ch] = el; }} style={{ width: 9, height: 9, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (c.color || '#38383e'), display: 'grid', placeItems: 'center', boxShadow: c.flowing ? `0 0 4px ${c.color}` : 'inset 0 0 2px #000', flex: '0 0 auto' }}>
+          <div style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: c.srcKey ? c.color : '#222' }}/>
         </div>
-      ))}
-    </div>
+        <div className="mono" style={{ fontSize: 6, color: '#e9e6df', fontWeight: 700, width: 9, textAlign: 'right', flex: '0 0 auto' }}>{c.ch}</div>
+        <div className="mono" style={{ fontSize: 5, color: c.srcKey ? '#c8c8d0' : '#55555c', fontWeight: 700, whiteSpace: 'nowrap', flex: 1, overflow: 'hidden' }}>{c.label || '—'}</div>
+      </div>
+    </React.Fragment>
   );
   return (
     <div className="ui-no-select" style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
-      border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 8px 8px',
-      position: 'relative', width: 320, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
+      border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 6px 6px',
+      position: 'relative', width: 92, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
     }}>
-      <div className="mono" style={{ fontSize: 6.5, color: 'var(--cool)', letterSpacing: 1, fontWeight: 700, textAlign: 'center' }}>STAGE BOX · side stage</div>
-      <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, textAlign: 'left', marginTop: 2, marginBottom: 1 }}>IN — to FOH fan-out 1:1</div>
-      {inRow(inChannels || [])}
-      <div style={{ height: 1, background: '#38383e', margin: '4px 0 2px' }}/>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <div className="mono" style={{ fontSize: 5.5, color: 'var(--ink-3)', letterSpacing: 0.5, fontWeight: 700, width: 16 }}>OUT</div>
-        <div style={{ display: 'flex', gap: 5, justifyContent: 'space-around', flex: 1 }}>
-          {outs.map(o => (
-            <div key={o.key} ref={el => outRefs.current[o.key] = el} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{ width: 11, height: 11, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + o.color, display: 'grid', placeItems: 'center', boxShadow: o.active ? `0 0 4px ${o.color}` : 'inset 0 0 2px #000' }}>
-                <div style={{ width: 3, height: 3, borderRadius: '50%', background: o.color, opacity: o.active ? 1 : 0.55 }}/>
-              </div>
-              <div className="mono" style={{ fontSize: 6, color: '#e9e6df', fontWeight: 700, lineHeight: 1.1 }}>{o.key}</div>
-            </div>
-          ))}
+      <div className="mono" style={{ fontSize: 6, color: 'var(--cool)', letterSpacing: 0.6, fontWeight: 700, textAlign: 'center', lineHeight: 1.2 }}>STAGE BOX</div>
+      <div className="mono" style={{ fontSize: 5, color: 'var(--ink-3)', letterSpacing: 0.4, textAlign: 'center', marginBottom: 2 }}>side stage</div>
+      <div className="mono" style={{ fontSize: 5, color: 'var(--ink-3)', fontWeight: 700, letterSpacing: 0.3, marginBottom: 1 }}>IN 1-16 → FOH</div>
+      {(inChannels || []).map((c, i) => inRow(c, i))}
+      <div style={{ height: 1, background: '#38383e', margin: '4px 0 3px' }}/>
+      <div className="mono" style={{ fontSize: 5, color: 'var(--ink-3)', fontWeight: 700, letterSpacing: 0.3, marginBottom: 1 }}>OUT 1-8 · returns</div>
+      {outs.map(o => (
+        <div key={o.key} style={{ display: 'flex', alignItems: 'center', gap: 3, height: 12.5 }}>
+          <div ref={el => outRefs.current[o.key] = el} style={{ width: 9, height: 9, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + o.color, display: 'grid', placeItems: 'center', boxShadow: o.active ? `0 0 4px ${o.color}` : 'inset 0 0 2px #000', flex: '0 0 auto' }}>
+            <div style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: o.color, opacity: o.active ? 1 : 0.55 }}/>
+          </div>
+          <div className="mono" style={{ fontSize: 6, color: '#e9e6df', fontWeight: 700, width: 9, textAlign: 'right' }}>{o.key}</div>
         </div>
-      </div>
-      {/* Both multicores arrive at the TOP-LEFT and break out onto two stacked
-          rails above the jack row (drum rail outer/higher, downstage rail
-          inner) — every tail is then a clean vertical drop, no crossings. */}
-      <div ref={inUpRef} style={{ position: 'absolute', top: -3, left: '5%', width: 5, height: 5, pointerEvents: 'none' }}/>
-      <div ref={inDownRef} style={{ position: 'absolute', top: -3, left: '11%', width: 5, height: 5, pointerEvents: 'none' }}/>
-      <div ref={snakeOutRef} style={{ position: 'absolute', right: -2, top: '50%', width: 8, height: 8, transform: 'translateY(-50%)', pointerEvents: 'none' }}/>
+      ))}
+      {/* Main snake leaves the right (off-stage) edge for FOH. */}
+      <div ref={snakeOutRef} style={{ position: 'absolute', right: -2, top: '42%', width: 8, height: 8, pointerEvents: 'none' }}/>
     </div>
   );
 }
@@ -4385,7 +4378,10 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   const downItems = big16 ? buildItems(sourceKeys.filter(k => !isUpSnake(k))) : [];
   // Main stage box IN channels 1..14: which instrument lands on each console
   // channel (via the sub-snake patch), so the drummer's vocal reads on 14.
-  const inChannels = big16 ? Array.from({ length: 14 }, (_, i) => {
+  // A real 16-channel stage box: inputs 1-16 in one line. The band fills 14 of
+  // them (drums 1-6, downstage 7-13, drummer vocal cross-patched to 14); 15-16
+  // sit spare, like they would on any 16-input box.
+  const inChannels = big16 ? Array.from({ length: 16 }, (_, i) => {
     const ch = i + 1;
     const k = sourceKeys.find(s => (state.cables[s] || 0) === ch);
     return k ? { ch, srcKey: k, label: window.SOURCES[k].short, color: window.SOURCES[k].color, flowing: flowOf(k) }
@@ -4402,7 +4398,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
       aux4: (audio.auxBus?.wedge4 || 0) > 0.05,
     };
     const ra = {};
-    for (const ch of [1, 2, 3, 4, 5, 6]) ra[ch] = ofan[ch] ? !!busAct[ofan[ch]] : false;
+    for (const ch of [1, 2, 3, 4, 5, 6, 7, 8]) ra[ch] = ofan[ch] ? !!busAct[ofan[ch]] : false;
     return ra;
   })();
 
@@ -4459,13 +4455,16 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     // the three lead vocals across the front over their wedges. The whole band is
     // kept left of ~82% so the stage-right edge stays clear as a cable corridor
     // for the sub-snake trunks and the return runs.
-    bass:  { top: 240, left: '11%' },              // bass rig, upstage-left
-    keys:  { top: 240, left: '72%' },              // keys, upstage-right (clear of the box corridor)
-    egtr:  { top: 320, left: '16%' },              // electric gtr, mid-left
-    agtr:  { top: 320, left: '60%' },              // acoustic gtr, mid-right
-    vx2:   { top: 404, left: '28%' },              // backing vocal, front-left
-    vx1:   { top: 404, left: '44%' },              // lead vocal, front-centre
-    vx3:   { top: 404, left: '58%' },              // backing vocal, front-right
+    // Four performers, each an instrument + a vocal mic in the same spot (with
+    // their wedge in front): guitarist/Vocal 1 centre, bassist/Vocal 2 stage-
+    // left, keys/Vocal 3 stage-right, drummer/Vocal 4 upstage-centre (the kit).
+    bass:  { top: 330, left: '18%' },              // bassist rig
+    vx2:   { top: 432, left: '18%' },              // bassist sings Vocal 2
+    egtr:  { top: 330, left: '40%' },              // guitarist: electric...
+    agtr:  { top: 330, left: '55%' },              // ...and acoustic
+    vx1:   { top: 432, left: '47%' },              // guitarist sings Vocal 1 (lead, centre)
+    keys:  { top: 330, left: '78%' },              // keys rig
+    vx3:   { top: 432, left: '78%' },              // keys player sings Vocal 3
   } : {
     vocal:  { top: 180, left: '31%', marginLeft: -(SRC_W / 2) },            // vocal 1 — directly above Wedge 1, on the first third
     vocal2: { top: 180, left: '55%', marginLeft: -(SRC_W / 2) },            // vocal 2 — directly above Wedge 2, on the second third
@@ -4498,7 +4497,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         </div>
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 128 : 96, left: big16 ? '44%' : '31%', transform: 'translateX(-50%)' }}>
+          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 120 : 96, left: big16 ? '47%' : '31%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 1" on={state.outputs.wedge.on} mute={state.outputs.wedge.mute} volume={state.outputs.wedge.volume} level={audio.outputs.wedge}
               onTogglePower={() => setOut('wedge', { on: !state.outputs.wedge.on })}
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
@@ -4511,7 +4510,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 128 : 96, left: big16 ? '30%' : '55%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 120 : 96, left: big16 ? '18%' : '55%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 2" accent="var(--cool)" on={state.outputs.wedge2.on} mute={state.outputs.wedge2.mute} volume={state.outputs.wedge2.volume} level={audio.outputs.wedge2}
               onTogglePower={() => setOut('wedge2', { on: !state.outputs.wedge2.on })}
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
@@ -4526,7 +4525,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         {/* Wedge 3 + 4 sit upstage at the bass and keys players' feet, in front
             of each instrument (bass upstage-left, keys upstage-right). */}
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', top: big16 ? 380 : 132, left: big16 ? '4%' : '14%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', ...(big16 ? { bottom: 120, left: '78%' } : { top: 132, left: '14%' }), transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 3" accent="var(--green)" on={state.outputs.wedge3.on} mute={state.outputs.wedge3.mute} volume={state.outputs.wedge3.volume} level={audio.outputs.wedge3}
               onTogglePower={() => setOut('wedge3', { on: !state.outputs.wedge3.on })}
               onToggleMute={() => setOut('wedge3', { mute: !state.outputs.wedge3.mute })}
@@ -4539,7 +4538,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', ...(big16 ? { bottom: 128, left: '58%' } : { top: 132, left: '72%' }), transform: 'translateX(-50%)' }}>
+          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', ...(big16 ? { top: 226, left: '50%' } : { top: 132, left: '72%' }), transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 4" accent="var(--amber)" on={state.outputs.wedge4.on} mute={state.outputs.wedge4.mute} volume={state.outputs.wedge4.volume} level={audio.outputs.wedge4}
               onTogglePower={() => setOut('wedge4', { on: !state.outputs.wedge4.on })}
               onToggleMute={() => setOut('wedge4', { mute: !state.outputs.wedge4.mute })}
@@ -4638,19 +4637,18 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DRUM SUB-SNAKE" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
             </div>
-            {/* Downstage sub-snake box — sits just downstage-right of the vocal
-                line; vocals, guitars, bass and keys XLR into its channels 1-7.
-                Placed right-of-centre so its trunk rises into the stage-right
-                corridor without cutting back through the band. */}
-            <div style={{ position: 'absolute', top: 600, left: '60%', transform: 'translateX(-50%)' }}>
+            {/* Downstage sub-snake box — sits at the front of the stage below the
+                three singers; their mics + the guitar/bass/keys DIs XLR into its
+                channels 1-7. Its multicore runs the front edge to the stage box. */}
+            <div style={{ position: 'absolute', top: 636, left: '47%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DOWNSTAGE SUB-SNAKE" items={downItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
-            {/* Side-stage box — both sub-snakes patch in here (drum vocal lands on
-                14); the main snake runs its channels 1:1 to the FOH fan-out. Sits
-                stage-right, above the vocal line, so both trunks reach it and the
-                returns drop cleanly to the front. */}
-            <div ref={stageBoxRef} style={{ position: 'absolute', top: 300, right: 8 }}>
-              <SideStageBox inChannels={inChannels} stageChRefs={stageBoxChRefs} outRefs={outRefs} snakeOutRef={snakeOutRef} retActive={retActive} inUpRef={sideInUpRef} inDownRef={sideInDownRef}/>
+            {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
+                edge. The drum snake fans into IN 1-6 (+ the drummer's vocal
+                cross-patched to 14), the downstage snake into 7-13; the main
+                snake leaves the right edge for FOH. */}
+            <div ref={stageBoxRef} style={{ position: 'absolute', top: 168, right: 6 }}>
+              <SideStageBox inChannels={inChannels} stageChRefs={stageBoxChRefs} outRefs={outRefs} snakeOutRef={snakeOutRef} retActive={retActive}/>
             </div>
           </>
         ) : (
@@ -5456,47 +5454,49 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       if (!snakeTo && snakeFrom && state.big16) { snakeTo = { x: snakeFrom.x + 64, y: snakeFrom.y }; snakeToFOH = true; }
       const snake = (snakeFrom && snakeTo) ? { from: snakeFrom, to: snakeTo, toFOH: snakeToFOH } : null;
 
-      // 16-channel sub-snake bundles: each head's out anchor → the side-stage
-      // box's matching in anchor. Empty on the MX-8 (those refs are null).
-      // Sub-snake trunks + FAN-OUT, drawn as a clean RAKE. Both multicores arrive
-      // at the box's top-left and each breaks out onto its own horizontal rail
-      // above the single IN row: the drum rail (outer/higher) feeds channels
-      // 1-6 + 14, the downstage rail (inner) feeds 7-13. Every patch tail is then
-      // a short vertical DROP from its rail into its jack — so nothing crosses
-      // except where the patch genuinely is non-1:1 (the drummer's vocal on 14).
+      // Sub-snake trunks + FANTAIL into the vertical stage box. Each multicore
+      // runs in along the stage edges, then breaks out on the box's LEFT face
+      // into short horizontal tails — one per input — exactly how a real fan-tail
+      // plugs a consecutive block of a stage box. The drum snake fans into IN 1-6
+      // off an outer vertical bus; its 7th tail (the drummer's vocal) rides that
+      // same bus down the face to IN 14 — the one cross-patch, now easy to trace.
+      // The downstage snake fans into 7-13 off an inner bus.
       const subSnakes = [];
       const breakoutRails = [];
       const patchTails = [];
       const ac = (ref) => (ref && ref.current) ? anchorPos(ref.current, 'center') : null;
       const upOut = ac(upHeadOutRef), downOut = ac(downHeadOutRef);
-      const inUpA = ac(sideInUpRef), inDownA = ac(sideInDownRef);
-      const jackTop = (ch) => { const el = stageBoxChRefs.current[ch]; return el ? anchorPos(el, 'top') : null; };
-      let jackRowY = null;
-      for (let ch = 1; ch <= 14; ch++) { const j = jackTop(ch); if (j) { jackRowY = j.y; break; } }
-      if (state.big16 && jackRowY != null && inUpA && inDownA) {
-        const drumRailY = jackRowY - 24;   // outer rail, sits higher
-        const downRailY = jackRowY - 10;   // inner rail, just above the jacks
-        const drumEntry = { x: inUpA.x, y: drumRailY };
-        const downEntry = { x: inDownA.x, y: downRailY };
-        // Drum trunk drops in from the top (runs along the upstage edge, then
-        // straight down the right corridor). The downstage trunk comes UP first
-        // out of its box, then runs across at rail height — so it never cuts
-        // through the downstage speakers or the vocal line.
-        if (upOut)   subSnakes.push({ from: upOut,   to: drumEntry });
-        if (downOut) subSnakes.push({ from: downOut, to: downEntry, vFirst: true });
-        const drumXs = [drumEntry.x], downXs = [downEntry.x];
+      const jackLeftOf = (ch) => { const el = stageBoxChRefs.current[ch]; return el ? anchorPos(el, 'left') : null; };
+      const boxLeftX = sbRect ? (sbRect.left - cb.left) / S : null;
+      if (state.big16 && boxLeftX != null) {
+        const drumBusX = boxLeftX - 22;   // outer bus: drums 1-6 + the vocal to 14
+        const downBusX = boxLeftX - 11;   // inner bus: downstage 7-13
+        // Route the vertical bundle up along the deck to the bottom edge, then it
+        // rises up the box face. This Y sits just below the downstage box.
+        const bottomEdgeY = downOut ? downOut.y + 22 : null;
+        const drumYs = [], downYs = [];
         for (const k of sourceKeys) {
           const grpUp = window.SOURCES[k] && window.SOURCES[k].snake === 'up';
           const ch = state.cables[k];
           if (!(ch >= 1)) continue;
-          const j = jackTop(ch);
+          const j = jackLeftOf(ch);
           if (!j) continue;
-          const railY = grpUp ? drumRailY : downRailY;
-          patchTails.push({ x: j.x, yRail: railY, yJack: j.y, color: window.SOURCES[k].color, ch, srcKey: k, cross: grpUp && ch >= 8 });
-          (grpUp ? drumXs : downXs).push(j.x);
+          const busX = grpUp ? drumBusX : downBusX;
+          patchTails.push({ x0: busX, x1: j.x, y: j.y, color: window.SOURCES[k].color, ch, srcKey: k, cross: grpUp && ch >= 8 });
+          (grpUp ? drumYs : downYs).push(j.y);
         }
-        if (drumXs.length > 1) breakoutRails.push({ y: drumRailY, x0: Math.min(...drumXs), x1: Math.max(...drumXs) });
-        if (downXs.length > 1) breakoutRails.push({ y: downRailY, x0: Math.min(...downXs), x1: Math.max(...downXs) });
+        // Each bus is a vertical multicore on the box face spanning its taps; the
+        // trunk meets it at the near end (drum from the top, downstage from below).
+        if (drumYs.length) {
+          const y0 = Math.min(...drumYs), y1 = Math.max(...drumYs);
+          breakoutRails.push({ x: drumBusX, y0, y1 });
+          if (upOut) subSnakes.push({ from: upOut, to: { x: drumBusX, y: y0 } });
+        }
+        if (downYs.length) {
+          const y0 = Math.min(...downYs), y1 = Math.max(...downYs);
+          breakoutRails.push({ x: downBusX, y0, y1 });
+          if (downOut && bottomEdgeY != null) subSnakes.push({ from: downOut, to: { x: downBusX, y: y1 }, vFirst: true, midY: bottomEdgeY });
+        }
       }
 
       // Fan-out → channel inputs (input side of snake)
@@ -5580,15 +5580,16 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         if (!sref.current) return null;
         const to = anchorPos(sref.current, 'bottom');
         const portId = patch[spk];
-        let from = (portId && outRefs.current[portId]) ? portBottomAnchor(outRefs.current[portId]) : null;
+        // Returns leave the OUT jack on the box's LEFT face, then drop to the
+        // front rail and run it to each speaker (see the router below).
+        let from = (portId && outRefs.current[portId]) ? anchorPos(outRefs.current[portId], 'left') : null;
         let unplugged = false;
         if (!from && sbRect) {
           unplugged = true;
-          // Loose speaker lines spread out BELOW the stage box, two
-          // staggered rows, each one easy to pick out and grab.
+          // Loose speaker lines dangle off the box's lower-left corner.
           from = {
-            x: (sbRect.left - cb.left) / S + 14 + idx * 44,
-            y: (sbRect.bottom - cb.top) / S + 22 + (idx % 2) * 16,
+            x: (sbRect.left - cb.left) / S - 10,
+            y: (sbRect.bottom - cb.top) / S - 20 - idx * 12,
           };
         }
         const color = '#7d7a72'; // uniform gray; the channel color lives on the snake head + fan-out
@@ -5915,11 +5916,12 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         {/* Sub-snake bundles (16-channel): each head → the side-stage box. A
             slightly thinner multicore than the main snake. */}
         {(paths.subSnakes || []).map((s, i) => {
-          // Right-angle multicore. The drum trunk runs across then drops
-          // (horizontal-first); the downstage trunk rises out of its box then
-          // runs across at rail height (vertical-first) so it clears the front.
+          // Right-angle multicore hugging the stage edges. The drum trunk runs
+          // along the top edge then down the box face (horizontal-first). The
+          // downstage trunk drops to the front edge, runs it, then rises up the
+          // box face (vertical-first, cornered at the bottom edge).
           const d = s.vFirst
-            ? window._routedCable(s.from, s.to, s.to.y)
+            ? window._routedCable(s.from, s.to, s.midY != null ? s.midY : s.to.y)
             : window._cornerHV(s.from, s.to, s.to.x);
           return (
             <g key={'subsnake-' + i}>
@@ -5930,29 +5932,28 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           );
         })}
 
-        {/* Breakout rails: each sub-snake's trunk runs as a horizontal bus just
-            above the IN row. The individual channel tails tap off it. Drawn as a
-            neutral multicore-gray line, one per sub-snake. */}
+        {/* Breakout buses: each sub-snake's multicore runs as a VERTICAL bus down
+            the box's left face; the channel tails tap off it. Drawn as a neutral
+            multicore-gray line, one per sub-snake. */}
         {(paths.breakoutRails || []).map((r, i) => (
           <g key={'brail-' + i} style={{ pointerEvents: 'none' }}>
-            <path d={`M ${r.x0} ${r.y} L ${r.x1} ${r.y}`} stroke="#1a1a1d" strokeWidth="5" fill="none" opacity="0.9" strokeLinecap="round"/>
-            <path d={`M ${r.x0} ${r.y} L ${r.x1} ${r.y}`} stroke="#3a3a40" strokeWidth="3.5" fill="none" opacity="1" strokeLinecap="round"/>
+            <path d={`M ${r.x} ${r.y0} L ${r.x} ${r.y1}`} stroke="#1a1a1d" strokeWidth="5" fill="none" opacity="0.9" strokeLinecap="round"/>
+            <path d={`M ${r.x} ${r.y0} L ${r.x} ${r.y1}`} stroke="#3a3a40" strokeWidth="3.5" fill="none" opacity="1" strokeLinecap="round"/>
           </g>
         ))}
 
-        {/* Sub-snake fan-out tails: a short vertical DROP from the breakout rail
-            into each stage-box jack — one clean tap per channel, in the channel's
-            own color. The drummer's vocal tail (→ ch 14) is drawn brighter: its
-            rail simply extends past 7-13 and drops in on the far right, the one
-            place the patch is deliberately non-1:1. */}
+        {/* Fan-out tails: a short HORIZONTAL tap from the bus into each stage-box
+            jack — one clean tail per input, in the channel's own color, like the
+            fan of a real sub-snake. The drummer's vocal tail (→ 14) rides the drum
+            bus down past 7-13 and taps in on 14: the one deliberate cross-patch. */}
         {(paths.patchTails || []).map((t) => {
-          const d = `M ${t.x} ${t.yRail} L ${t.x} ${t.yJack}`;
+          const d = `M ${t.x0} ${t.y} L ${t.x1} ${t.y}`;
           return (
             <g key={'patch-' + t.srcKey} style={{ pointerEvents: 'none' }}>
               <path d={d} stroke="#000" strokeWidth="3.5" fill="none" opacity="0.35" strokeLinecap="round"/>
               <path d={d} stroke={t.color} strokeWidth={t.cross ? 2.4 : 1.8} fill="none" opacity={t.cross ? 0.98 : 0.8} strokeLinecap="round"/>
-              <circle cx={t.x} cy={t.yRail} r="1.6" fill={t.color} opacity="0.9"/>
-              <circle cx={t.x} cy={t.yJack} r="2" fill={t.color} stroke="#0a0a0c" strokeWidth="0.6"/>
+              <circle cx={t.x0} cy={t.y} r="1.6" fill={t.color} opacity="0.9"/>
+              <circle cx={t.x1} cy={t.y} r="2" fill={t.color} stroke="#0a0a0c" strokeWidth="0.6"/>
             </g>
           );
         })}
