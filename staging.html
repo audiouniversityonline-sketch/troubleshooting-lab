@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=57"></script>
+<script src="content-staging.js?v=58"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -294,6 +294,10 @@ const EQ_BAND_HZ = [250, 500, 1000, 2000, 4000];
 const FULL_EQ_BANDS = ['63', '80', '100', '125', '160', '200', '250', '315', '400', '500', '630', '800', '1k', '1.25k', '1.6k', '2k', '2.5k', '3.15k', '4k', '5k', '6.3k', '8k', '10k', '12.5k', '16k'];
 const FULL_EQ_HZ = [63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000];
 const EQ_CUT_DB = 12;
+// Diagnostic flags (URL): ?lite=1 stops the 60fps meter re-render (meters then
+// update at ~8fps via the slow interval), to test whether the per-frame redraw
+// is starving the audio thread on lower-powered machines.
+const LITE_METERS = typeof location !== 'undefined' && /[?&]lite=1/.test(location.search);
 // A wedge's inherent feedback fingerprint: the frequencies where the mic +
 // wedge + room loop peaks, so those ring first. This is what makes feedback
 // behave like real life instead of one fixed tone. Per band, a "sensitivity"
@@ -8197,7 +8201,7 @@ function App() {
         fbChain.voices.forEach(v => { if (v.gain.gain.value !== 0) v.gain.gain.value = 0; });
         if (lastSevRef.current && lastSevRef.current.level !== 0) { lastSevRef.current = { level: 0, count: 0 }; setFbSeverity({ level: 0, count: 0 }); }
       }
-      setEnvTick(n => (n + 1) & 0xff);
+      if (!LITE_METERS) setEnvTick(n => (n + 1) & 0xff);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
