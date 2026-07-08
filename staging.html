@@ -4322,20 +4322,23 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // top + left only; the per-source marginLeft (to centre on `left`) is applied
   // in the map from wOf(k) so each card centres on its own width.
   const positions = big16 ? {
-    kick:  { top: 4,   left: '43%' },
-    snare: { top: 4,   left: '50%' },
-    rack:  { top: 4,   left: '57%' },
-    floor: { top: 62,  left: '43%' },
-    ohl:   { top: 62,  left: '50%' },
-    ohr:   { top: 62,  left: '57%' },
-    vx4:   { top: 34,  left: '67%' },              // drummer's vocal, beside the kit
+    // Drum kit laid out like a stage plot from above (drummer upstage, kit
+    // facing downstage): overheads at the back corners, rack tom centre, floor
+    // tom to the side, snare front-left, kick front-centre nearest the audience.
+    ohl:   { top: 2,   left: '42%' },              // overhead, back-left
+    ohr:   { top: 2,   left: '58%' },              // overhead, back-right
+    rack:  { top: 36,  left: '50%' },              // rack tom, centre
+    floor: { top: 44,  left: '62%' },              // floor tom, drummer's right
+    snare: { top: 74,  left: '40%' },              // snare, front-left
+    kick:  { top: 92,  left: '51%' },              // kick, front-centre
+    vx4:   { top: 40,  left: '69%' },              // drummer's vocal, beside the kit
     bass:  { top: 40,  left: '8%'  },              // upstage left
     keys:  { top: 26,  left: '86%' },              // upstage right, clear above the stage box
-    egtr:  { top: 184, left: '17%' },
-    agtr:  { top: 184, left: '80%' },              // mid-right, clear below the stage box
-    vx1:   { top: 296, left: '31%' },              // front line, over the wedges
-    vx2:   { top: 296, left: '50%' },
-    vx3:   { top: 296, left: '69%' },
+    egtr:  { top: 196, left: '17%' },
+    agtr:  { top: 196, left: '80%' },              // mid-right, clear below the stage box
+    vx1:   { top: 300, left: '31%' },              // front line, over the wedges
+    vx2:   { top: 300, left: '50%' },
+    vx3:   { top: 300, left: '69%' },
   } : {
     vocal:  { top: 180, left: '31%', marginLeft: -(SRC_W / 2) },            // vocal 1 — directly above Wedge 1, on the first third
     vocal2: { top: 180, left: '55%', marginLeft: -(SRC_W / 2) },            // vocal 2 — directly above Wedge 2, on the second third
