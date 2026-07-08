@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=89"></script>
+<script src="content-staging.js?v=90"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4646,13 +4646,16 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         {big16 ? (
           <>
             {/* Drum sub-snake box — sits in FRONT of the kick (just below the
-                kit); the drum mics' side cables run down into its channels. */}
-            <div style={{ position: 'absolute', top: 238, left: '50%', transform: 'translateX(-50%)' }}>
+                kit). It's dropped clear of the kick so there's an open lane
+                between the kit and the box: the drum mic cables run DOWN into
+                that lane, along it, then straight down into their channels —
+                no cable crosses a drum card. */}
+            <div style={{ position: 'absolute', top: 256, left: '50%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DRUM SUB-SNAKE" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
             </div>
             {/* Backline sub-snake — in FRONT of the drums (just below the drum
                 sub-snake); the bass, both guitars and keys DI up into it. */}
-            <div style={{ position: 'absolute', top: 302, left: '46%', transform: 'translateX(-50%)' }}>
+            <div style={{ position: 'absolute', top: 314, left: '46%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="BACKLINE SUB-SNAKE" items={instItems} subJackRefs={subJackRefs} outRef={instHeadOutRef}/>
             </div>
             {/* Vocal sub-snake box — below the three singers; only Vocal 1/2/3
@@ -5443,13 +5446,34 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           const jack = subJackRefs.current[k];
           const jc = jack ? anchorPos(jack, 'center') : null;
           if (!jc) return null;
-          // Drum mics: the cable comes out the SIDE of the mic toward its channel,
-          // then runs down into the drum sub-snake — so the vocal/snare/kick stack
-          // no longer has cables piling straight down on top of each other.
+          // Drum mics: every cable drops into a COLLECTOR LANE that sits in the
+          // open gap between the kit and the drum sub-snake (below every drum
+          // card, above the box), runs along that lane to its channel, then
+          // plugs straight down into the jack. Because the horizontal run lives
+          // in the lane, it never crosses a drum card or the sub-snake box.
+          // Each cable gets its own lane height (a few px apart) so parallel
+          // runs don't stack. The two mics stacked directly over the kick
+          // (snare + the drummer's vocal) leave the SIDE and step just outside
+          // the stack before dropping, so their cable never runs down through
+          // the kick; the rest drop straight down off the card bottom.
           if (sk === 'up') {
             const micC = anchorPos(src, 'center');
-            const side = jc.x < micC.x ? 'left' : 'right';
-            return { src: k, from: anchorPos(src, side), to: jc, port, unplugged: !(port >= 1), xlr: true, drumSide: true };
+            const upList = sourceKeys.filter(x => window.SOURCES[x] && window.SOURCES[x].snake === 'up');
+            const li = Math.max(0, upList.indexOf(k));
+            const laneY = jc.y - 47 + li * 2;   // lane sits ~40px above the jack row
+            const jackX = jc.x;
+            const stacked = (k === 'snare' || k === 'vx4');
+            let pts;
+            if (stacked) {
+              const side = jackX < micC.x ? 'left' : 'right';
+              const edge = anchorPos(src, side);
+              const clearX = side === 'left' ? edge.x - 14 : edge.x + 14;
+              pts = [edge, { x: clearX, y: edge.y }, { x: clearX, y: laneY }, { x: jackX, y: laneY }, { x: jackX, y: jc.y }];
+            } else {
+              const bot = anchorPos(src, 'bottom');
+              pts = [bot, { x: bot.x, y: laneY }, { x: jackX, y: laneY }, { x: jackX, y: jc.y }];
+            }
+            return { src: k, from: pts[0], to: jc, port, unplugged: !(port >= 1), xlr: true, drumPts: pts };
           }
           // Backline box sits ABOVE its instruments (cable leaves the card top);
           // the vocal box sits BELOW the singers (cable leaves the bottom). Each
@@ -5847,6 +5871,27 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
               `L ${to.x} ${to.y}`,
             ].join(' ');
           };
+          // Rounded polyline through an explicit list of points. Each interior
+          // corner is softened with a short quadratic so a multi-leg cable run
+          // (down into a lane, along it, down into a jack) reads like dressed
+          // cable instead of hard right angles. Used by the drum mic cables.
+          window._polyRound = (pts, r) => {
+            if (!pts || pts.length < 2) return '';
+            if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
+            let d = `M ${pts[0].x} ${pts[0].y}`;
+            for (let i = 1; i < pts.length - 1; i++) {
+              const p0 = pts[i - 1], p1 = pts[i], p2 = pts[i + 1];
+              const d1 = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1;
+              const d2 = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
+              const rr = Math.max(0, Math.min(r, d1 / 2, d2 / 2));
+              const a = { x: p1.x - (p1.x - p0.x) / d1 * rr, y: p1.y - (p1.y - p0.y) / d1 * rr };
+              const b = { x: p1.x + (p2.x - p1.x) / d2 * rr, y: p1.y + (p2.y - p1.y) / d2 * rr };
+              d += ` L ${a.x} ${a.y} Q ${p1.x} ${p1.y} ${b.x} ${b.y}`;
+            }
+            const last = pts[pts.length - 1];
+            d += ` L ${last.x} ${last.y}`;
+            return d;
+          };
           return null;
         })()}
 
@@ -5885,8 +5930,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             // snaps to a clean right-angle run (a shared rail), like the outputs.
             const d = isDragged
               ? window._cableCurve(c.from, portEnd)
-              : (c.drumSide
-                  ? window._cornerHV(c.from, c.to, c.to.x)   // out the side, across, down into the jack
+              : (c.drumPts
+                  ? window._polyRound(c.drumPts, 6)          // down into the lane, along it, straight down into the jack
                   : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY));
             const opacity = someOtherDragged ? 0.18 : (hovered ? 1 : 0.95);
             // No "unplugged" badge: the loose cable dangling from the source
