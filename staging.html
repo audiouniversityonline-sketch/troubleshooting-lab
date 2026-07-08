@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=64"></script>
+<script src="content-staging.js?v=65"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1364,6 +1364,11 @@ function bandState() {
   s.outPatch = { ...DEFAULT_OUT_PATCH };
   s.testing = 'kick';
   s.inspect = 'pa';
+  // The desk is running the big (16-channel) source set. This flag — not the
+  // ?band=1 URL — is what drives the direct-to-DOM meters, the steady audible
+  // gains, and skipping the per-frame re-render, so those apply whenever the
+  // 16-channel desk is active (via the size selector, on any environment).
+  s.big16 = true;
   return s;
 }
 window.bandState = bandState;
@@ -7930,7 +7935,7 @@ function App() {
   // every fader move would otherwise re-snapshot every channel's instantaneous
   // envelope and jolt the whole mix balance. Meters still bounce: they read the
   // live envelope directly in the animation loop, not from `audio`.
-  const audio = uM(() => window.computeAudio(state, BAND_PARAM ? {} : envelopeRef.current), [state, envTick]);
+  const audio = uM(() => window.computeAudio(state, state.big16 ? {} : envelopeRef.current), [state, envTick]);
   // Current state for the animation loop (which has stale closures) — used to
   // drive the band's meters straight to the DOM without a per-frame re-render.
   const stateRef = uR(state); stateRef.current = state;
@@ -8348,7 +8353,7 @@ function App() {
       // itself is ~0.08ms, so recomputing it here and pushing levels to the
       // meter segments is cheap and leaves the audio thread alone. Every other
       // scenario keeps the throttled re-render below (unchanged behavior).
-      if (BAND_PARAM && !LITE_METERS) {
+      if (stateRef.current.big16 && !LITE_METERS) {
         const st = stateRef.current;
         const on = st.mixer ? st.mixer.on !== false : true;
         const a = window.computeAudio(st, envelopeRef.current);
@@ -8946,10 +8951,10 @@ function App() {
   const anyOutputActive = (audio.outputs.pa_l + audio.outputs.pa_r + audio.outputs.wedge + (audio.outputs.wedge2 || 0)
     + (audio.outputs.wedge3 || 0) + (audio.outputs.wedge4 || 0)) > 0.05;
   uE(() => {
-    if (!anyOutputActive || LITE_FREEZE || BAND_PARAM) return;
+    if (!anyOutputActive || LITE_FREEZE || state.big16) return;
     const id = setInterval(() => force(t => t + 1), 120);
     return () => clearInterval(id);
-  }, [anyOutputActive]);
+  }, [anyOutputActive, state.big16]);
 
   // Load a scenario. reuseSeed replays the same attempt (Reset); omitting it
   // rolls a fresh seed (level change, Practice Again), which is what makes a
