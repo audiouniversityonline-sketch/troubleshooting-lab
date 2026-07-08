@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=80"></script>
+<script src="content-staging.js?v=81"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5410,21 +5410,40 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       // Loose input cables SPREAD OUT in the open space ABOVE the stage box,
       // two staggered rows across its width, so each one is easy to pick out
       // and grab (they used to stack in one vertical line).
+      // Downstage XLR gather-rail: each front instrument sits just upstage of its
+      // singer, so route both onto ONE rail in the gap between them (instruments
+      // drop down to it, vocals rise up to it), then run it along to the sub-snake
+      // box. Keeps the front XLRs off the cards and out of the middle of the stage.
+      let dsRailY = null;
+      if (state.big16) {
+        const insB = [], voxT = [];
+        for (const k of sourceKeys) {
+          const d = window.SOURCES[k];
+          if (!d || d.snake !== 'down') continue;
+          const el = sourceRefs.current[k]; if (!el) continue;
+          if (d.group === 'vox') voxT.push(anchorPos(el, 'top').y);
+          else insB.push(anchorPos(el, 'bottom').y);
+        }
+        if (voxT.length && insB.length) dsRailY = (Math.max(...insB) + Math.min(...voxT)) / 2;
+        else if (voxT.length) dsRailY = Math.min(...voxT) - 10;
+      }
       const stageCables = sourceKeys.map(k => {
         const src = sourceRefs.current[k];
         if (!src) return null;
         const port = state.cables[k];
         // 16-channel: the input cable is the instrument's XLR to its channel on
-        // the nearby sub-snake box. The drum box sits ABOVE its kit (cable leaves
-        // the card top); the downstage box sits below its performers (cable leaves
-        // the bottom). midY is a shared right-angle rail between the two.
+        // the nearby sub-snake box. Drum mics leave the card top and run up into
+        // the drum box overhead; the front instruments/vocals gather on a shared
+        // rail (dsRailY) and run along to the downstage box.
         if (state.big16) {
-          const grpUp = window.SOURCES[k] && window.SOURCES[k].snake === 'up';
-          const from = anchorPos(src, grpUp ? 'top' : 'bottom');
+          const d = window.SOURCES[k];
+          const grpUp = d && d.snake === 'up';
+          const isVox = d && d.group === 'vox';
+          const from = anchorPos(src, grpUp ? 'top' : (isVox ? 'top' : 'bottom'));
           const jack = subJackRefs.current[k];
           const to = jack ? anchorPos(jack, 'center') : null;
           if (!from || !to) return null;
-          const midY = (from.y + to.y) / 2;
+          const midY = grpUp ? (from.y + to.y) / 2 : (dsRailY != null ? dsRailY : (from.y + to.y) / 2);
           return { src: k, from, to, port, unplugged: !(port >= 1), xlr: true, midY };
         }
         const from = anchorPos(src, 'top');
