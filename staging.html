@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=100"></script>
+<script src="content-staging.js?v=101"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1360,6 +1360,12 @@ function bandState() {
   const playbackCh = makeChannel({ id: BAND_KEYS.length + 1, label: '', gain: healthyGain(pb.dbu), stereo: true, fader: 0.70, pan: 0.5 });
   s.channels = [...monoChannels, playbackCh];
   s.cables = {}; BAND_KEYS.forEach((k, i) => { s.cables[k] = i + 1; });
+  // micIn[k] = which INPUT SLOT (local channel) on its sub-snake the mic for
+  // source k is plugged into. Default is the natural 1:1 slot. This is the
+  // stage-end patch; cables[k] stays the box channel the signal lands on. A mic
+  // swap trades both micIn and cables between two sources (the mic follows its
+  // conductor to the box), which models "kick plugged into the snare's input".
+  s.micIn = {}; { const cnt = {}; BAND_KEYS.forEach((k) => { const sn = (SOURCES[k] || {}).snake; if (!sn) return; cnt[sn] = (cnt[sn] || 0) + 1; s.micIn[k] = cnt[sn]; }); }
   s.fanOut = BAND_KEYS.map((_, i) => i + 1);
   s.sourceMute = {}; BAND_KEYS.forEach((k) => { s.sourceMute[k] = false; });
   s.sourceMute.playback = false;
@@ -4389,8 +4395,17 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // standard size; the unused channels render as empty jacks with a loose
   // (dangling) tail on the fan-out. Drums 7→8, backline 4, vocals 3→4.
   const buildItems = (grp, size) => {
-    const items = grp.map((k, i) => ({ srcKey: k, localCh: i + 1, label: window.SOURCES[k].short, color: codeColor(i + 1), flowing: flowOf(k), stageCh: state.cables[k] || 0 }));
-    for (let i = grp.length; i < size; i++) items.push({ srcKey: null, localCh: i + 1, color: codeColor(i + 1), flowing: false, stageCh: 0, empty: true });
+    // Render by SLOT (input jack position). Each slot shows whichever source's
+    // mic is currently plugged into it (state.micIn); default is the natural
+    // 1:1 slot. Colour is by slot = the conductor the mic rides.
+    const micIn = state.micIn || {};
+    const natural = (k) => grp.indexOf(k) + 1;
+    const items = [];
+    for (let slot = 1; slot <= size; slot++) {
+      const k = grp.find(kk => (micIn[kk] || natural(kk)) === slot);
+      if (k) items.push({ srcKey: k, localCh: slot, label: window.SOURCES[k].short, color: codeColor(slot), flowing: flowOf(k), stageCh: state.cables[k] || 0 });
+      else items.push({ srcKey: null, localCh: slot, color: codeColor(slot), flowing: false, stageCh: 0, empty: true });
+    }
     return items;
   };
   const drumItems = big16 ? buildItems(bySnake('up'), 8) : [];
@@ -5165,6 +5180,17 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           targets.push({ key: `port-${port}`, x, y, payload: port });
         }
       }
+    } else if (drag.type === 'mic') {
+      // A mic being moved at the sub-snake can plug into any OTHER input on the
+      // SAME sub-snake (dropping on an occupied input swaps the two mics).
+      const sn = window.SOURCES[drag.id] && window.SOURCES[drag.id].snake;
+      for (const k of sourceKeys) {
+        if (k === drag.id || !window.SOURCES[k] || window.SOURCES[k].snake !== sn) continue;
+        const el = subJackRefs.current[k];
+        if (!el) continue;
+        const { x, y } = local(el);
+        targets.push({ key: `mic-${k}`, x, y, payload: k });
+      }
     } else if (drag.type === 'fanout') {
       // Snake tails land on any MONO mic/line channel — the whole desk, not a
       // fixed four. The one exception is the stereo playback strip (7/8 on an
@@ -5307,6 +5333,21 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           .find(spk => window.speakerLiveForPatch && window.speakerLiveForPatch(s, spk));
         if (hot) next.phantomPop = { at: Date.now(), cause: 'speaker_patch' };
         return next;
+      });
+    } else if (drag.type === 'mic') {
+      // drag.id = source whose mic is in hand; target = the source key of the
+      // input it was dropped on. Swapping two mics at the sub-snake trades both
+      // which input slot they sit in (micIn) AND the box channel they land on
+      // (cables) — the mic follows its conductor. This is how "the kick mic is
+      // in the snare input, so kick comes up on the snare channel" gets built.
+      const a = drag.id, b = target;
+      if (a === b) return;
+      setState(s => {
+        const micIn = { ...(s.micIn || {}) };
+        const cables = { ...s.cables };
+        const ma = micIn[a], mb = micIn[b]; micIn[a] = mb; micIn[b] = ma;
+        const ca = cables[a], cb = cables[b]; cables[a] = cb; cables[b] = ca;
+        return { ...s, micIn, cables };
       });
     }
   };
@@ -5569,8 +5610,10 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           inst: { out: ac(instHeadOutRef), midX: fanX - 58, block: null,              list: [], size: 4 },
           down: { out: ac(downHeadOutRef), midX: fanX - 76, block: null,              list: [], size: 4, edge: true },
         };
+        // Conductor a source rides = the sub-snake input SLOT its mic is in
+        // (state.micIn). Tail colour is that slot's colour; default is natural.
         const localIdx = {};
-        for (const g of ['up', 'inst', 'down']) { let i = 0; for (const k of sourceKeys) if (window.SOURCES[k] && window.SOURCES[k].snake === g) localIdx[k] = ++i; }
+        for (const g of ['up', 'inst', 'down']) { let i = 0; for (const k of sourceKeys) if (window.SOURCES[k] && window.SOURCES[k].snake === g) { i++; localIdx[k] = (state.micIn && state.micIn[k]) || i; } }
         for (const k of sourceKeys) {
           const sk = window.SOURCES[k] && window.SOURCES[k].snake;
           if (!groups[sk]) continue;
@@ -5983,8 +6026,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             // patchable end is the sub-snake TAIL at the box (see patchTails).
             // So an xlr cable never follows the cursor, but it stays bright (not
             // dimmed) while its own tail is being repatched.
-            const isMine = dragState && dragState.type === 'source' && dragState.id === c.src;
-            const isDragged = isMine && !c.xlr;
+            const isMine = dragState && (dragState.type === 'source' || dragState.type === 'mic') && dragState.id === c.src;
+            const isDragged = dragState && dragState.type === 'source' && dragState.id === c.src && !c.xlr;  // 8-ch box end follows cursor
+            const isMicDrag = dragState && dragState.type === 'mic' && dragState.id === c.src;               // 16-ch mic end follows cursor
             const someOtherDragged = dragState && !isMine;
             // Stage cables are all one neutral gray, like real stage cabling —
             // no color to lean on. Hovering a cable brightens just that one so
@@ -6000,13 +6044,16 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             // cursor and draw a direct bezier instead of the rail-routed
             // path (the cable is in the engineer's hand, not on the rail).
             const portEnd = isDragged ? dragState.cursor : c.to;
+            const micEnd = isMicDrag ? dragState.cursor : c.to;
             // A cable in the engineer's hand shows the loose curve; once patched it
             // snaps to a clean right-angle run (a shared rail), like the outputs.
             const d = isDragged
               ? window._cableCurve(c.from, portEnd)
-              : (c.drumPts
-                  ? window._polyRound(c.drumPts, 6)          // down into the lane, along it, straight down into the jack
-                  : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY));
+              : (isMicDrag
+                  ? window._cableCurve(c.from, micEnd)       // mic in hand: source card → cursor
+                  : (c.drumPts
+                      ? window._polyRound(c.drumPts, 6)          // down into the lane, along it, straight down into the jack
+                      : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY)));
             const opacity = someOtherDragged ? 0.18 : (hovered ? 1 : 0.95);
             // No "unplugged" badge: the loose cable dangling from the source
             // is enough to read that it needs patching.
@@ -6019,7 +6066,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                     onPointerEnter={() => setHoverCable('src:' + c.src)} onPointerLeave={() => setHoverCable(null)}/>
                 )}
                 <circle cx={c.from.x} cy={c.from.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
-                {!isDragged && (
+                {!isDragged && !c.xlr && (
                   <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
                 )}
                 {/* DRAG HANDLE — port-end of the cable. Larger invisible hit
@@ -6036,10 +6083,16 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                     <circle cx={portEnd.x} cy={portEnd.y} r="2" fill="#0a0a0c" pointerEvents="none"/>
                   </g>
                 )}
-                {/* 16-channel XLR: a fixed plug at the sub-snake jack (patching is
-                    not draggable yet — static-first). */}
+                {/* 16-ch MIC end: grab the plug at the sub-snake input and drop
+                    it on another input on the same sub-snake to move / swap the
+                    mic. The plug follows the cursor while it's in hand. */}
                 {c.xlr && !someOtherDragged && (
-                  <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={color} stroke="#0a0a0c" strokeWidth="0.8"/>
+                  <g style={{ pointerEvents: 'auto' }}>
+                    <circle className="cable-hit" cx={micEnd.x} cy={micEnd.y} r="9" fill="transparent"
+                      onPointerDown={(e) => startDrag(e, { type: 'mic', id: c.src })}/>
+                    <circle cx={micEnd.x} cy={micEnd.y} r={isMicDrag ? 5 : 2.5} fill={color} stroke="#0a0a0c" strokeWidth={isMicDrag ? 1.2 : 0.8} pointerEvents="none"
+                      style={isMicDrag ? { filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.7))' } : undefined}/>
+                  </g>
                 )}
               </g>
             );
@@ -6057,6 +6110,20 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                 fill="rgba(74,222,128,0.18)"
                 stroke="var(--green)" strokeWidth={isSnapped ? 2.5 : 1.5}
                 style={{ filter: isSnapped ? 'drop-shadow(0 0 8px rgba(74,222,128,0.6))' : 'none' }}/>
+            </g>
+          );
+        })}
+
+        {/* Drop-target highlights for a MIC drag — the other input jacks on the
+            same sub-snake glow; the snapped one grows. */}
+        {dragState && dragState.type === 'mic' && getDropTargets(dragState).map(t => {
+          const isSnapped = dragState.valid === t.payload;
+          return (
+            <g key={`micdrop-${t.key}`} style={{ pointerEvents: 'none' }}>
+              <circle cx={t.x} cy={t.y} r={isSnapped ? 12 : 9}
+                fill="rgba(74,222,128,0.18)"
+                stroke="var(--green)" strokeWidth={isSnapped ? 2.2 : 1.4}
+                style={{ filter: isSnapped ? 'drop-shadow(0 0 7px rgba(74,222,128,0.6))' : 'none' }}/>
             </g>
           );
         })}
