@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=111"></script>
+<script src="content-staging.js?v=112"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4727,7 +4727,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 vocal mics drop down through that gap into it; its multicore runs
                 up and over to the main box on the LEFT of the stage, clear of
                 Wedge 4's return on the right. */}
-            <div data-zoomable data-zoom-key="vocal" style={{ position: 'absolute', top: 780, left: '36%', transform: 'translateX(-50%)' }}>
+            <div data-zoomable data-zoom-key="vocal" style={{ position: 'absolute', top: 742, left: '36%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="VOCAL SUB-SNAKE" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
@@ -5550,6 +5550,19 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       // Loose input cables SPREAD OUT in the open space ABOVE the stage box,
       // two staggered rows across its width, so each one is easy to pick out
       // and grab (they used to stack in one vertical line).
+      // Backline cable lanes: rank the amps by how FAR their cable travels to
+      // the sub-snake. The farthest one sits on the lane CLOSEST to the jack row
+      // so the nearer amps' drops nest above it and no drop crosses another amp's
+      // horizontal lane (this is what fixes the bass / electric-guitar cross).
+      const instRank = {};
+      if (state.big16) {
+        sourceKeys.filter(x => window.SOURCES[x] && window.SOURCES[x].snake === 'inst').map(k => {
+          const s2 = sourceRefs.current[k], jk = subJackRefs.current[k];
+          const sx = s2 ? anchorPos(s2, 'bottom').x : 0;
+          const jx = jk ? anchorPos(jk, 'center').x : 0;
+          return { k, span: Math.abs(sx - jx) };
+        }).sort((a, b) => b.span - a.span).forEach((o, i) => { instRank[o.k] = i; });
+      }
       const stageCables = sourceKeys.map(k => {
         const src = sourceRefs.current[k];
         if (!src) return null;
@@ -5605,7 +5618,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           const grpList = sourceKeys.filter(x => window.SOURCES[x] && window.SOURCES[x].snake === sk);
           const li = grpList.indexOf(k);
           const midY = (sk === 'inst')
-            ? jc.y - 63 + li * 9                                   // lane above the backline box; wide gaps so amps' cables never stack
+            ? jc.y - 36 - (instRank[k] || 0) * 9                   // farthest amp on the lane closest to the jacks, so drops nest and never cross
             : jc.y - 181 + li * 11;                                // vocal lanes: a clean band well ABOVE the wedge tops, 11px pitch so the 3 conductors read as separate cables with air around them
           return { src: k, from, to: jc, port, unplugged: !(port >= 1), xlr: true, midY };
         }
