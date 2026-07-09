@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=103"></script>
+<script src="content-staging.js?v=104"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -3453,7 +3453,7 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
           {kind === 'condenser' ? 'Condenser · +48V' : kind === 'dynamic' ? 'Dynamic' : kind === 'di' ? (diActive ? 'Active DI · +48V' : 'Passive DI') : 'Line level'}
         </div>
         )}
-        <div style={{ display: 'flex', gap: 4, marginTop: compact ? 2 : 4 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: compact ? 2 : 4 }}>
           <div
             onClick={(e) => { e.stopPropagation(); onPatch(); }}
             className="mono ui-no-select"
@@ -4512,6 +4512,20 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
       <ZoneHeader label="Stage" sublabel="band, sources, PA + wedges · downstage ↓ audience" badge="LIVE AREA" badgeColor="var(--green)"/>
 
       <div style={{ position: 'relative', minHeight: big16 ? 860 : 480 }}>
+        {/* DRUM RISER — a labelled platform outline around the whole kit cluster
+            (kick, snare, toms, overheads), the drummer's vocal mic (VOX 4) and
+            the drummer's monitor (Wedge 4). Renders first so it paints UNDER the
+            tiles and cables; pointerEvents none so clicks pass through to the
+            mics on top. Teaches that the kit + the drummer's mic and wedge are
+            one physical zone on the stage. */}
+        {big16 && (
+          <div style={{ position: 'absolute', left: '30%', width: '40%', top: 16, height: 230,
+            border: '1.5px dashed #4a4a52', borderRadius: 10,
+            background: 'rgba(255,255,255,0.03)', pointerEvents: 'none', zIndex: 0 }}>
+            <div className="mono" style={{ position: 'absolute', top: 6, left: 12, fontSize: 8,
+              letterSpacing: 1.6, fontWeight: 700, color: '#8a8792' }}>DRUM RISER</div>
+          </div>
+        )}
         {/* Downstage row — PA L, Wedge 1, Wedge 2, PA R, evenly spaced along
             the front of the stage. Each one's cable comes out of its bottom
             edge and runs along the front rail back to the stage box. */}
