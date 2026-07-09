@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=127"></script>
+<script src="content-staging.js?v=128"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4712,7 +4712,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
           </div>
         )}
 
-        <div ref={paRRef} data-walk="out-pa-r" style={{ position: 'absolute', bottom: big16 ? 48 : 40, left: big16 ? '89%' : '82%', transform: 'translateX(-50%)' }}>
+        <div ref={paRRef} data-walk="out-pa-r" style={{ position: 'absolute', bottom: big16 ? 48 : 40, left: big16 ? '89%' : '73%', transform: 'translateX(-50%)' }}>
           <PASpeaker side="R" showPower={!isPassive}
             on={isPassive ? paShowsOn : state.outputs.pa_r.on} mute={state.outputs.pa_r.mute} volume={state.outputs.pa_r.volume} level={audio.outputs.pa_r}
             signalArriving={(audio.speakerInput?.pa_r || 0) > 0.04}
@@ -4865,6 +4865,11 @@ function ConsolePanel({ state, setState, audio, channelRefs, masterLRef, masterR
       position: 'relative',
       flex: 1, alignSelf: 'stretch',
     }}>
+      {/* Invisible bounding region for the SNAKE FAN-OUT zoom — frames the snake
+          terminus, the fanning tails, and the input-port chips at the top of the
+          channels. Picked up by the stage measurement effect ([data-zoomable]);
+          renders a zoom button on the console for both the MX-8 and MX-16 desks. */}
+      <div data-zoomable data-zoom-key="fanout" style={{ position: 'absolute', top: 34, left: 8, right: 8, height: 208, pointerEvents: 'none', zIndex: 0 }}/>
       <ZoneHeader
         label="Console (FOH)"
         sublabel="the mix desk"
@@ -6654,9 +6659,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                     // The lanes stay parallel and only meet at the downstage floor.
                     : window._polyRound([
                         c.from,
-                        { x: 762 + c.portId * 8, y: c.from.y },              // step left to this return's own vertical lane
-                        { x: 762 + c.portId * 8, y: 498 + c.portId * 3 },    // straight down, parallel to its neighbours
-                        { x: c.to.x, y: 498 + c.portId * 3 },                // along the floor to the speaker
+                        { x: 656 + c.portId * 33, y: c.from.y },             // step left to this return's own widely-spaced lane
+                        { x: 656 + c.portId * 33, y: 490 + c.portId * 7 },   // straight down, well clear of its neighbours
+                        { x: c.to.x, y: 490 + c.portId * 7 },                // along the floor to the speaker
                         c.to,                                                 // up into the speaker bottom
                       ], 8)));
           const live = !c.unplugged && !isDragged && retLive(c.portId);
