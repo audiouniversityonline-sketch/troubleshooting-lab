@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=117"></script>
+<script src="content-staging.js?v=118"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1714,7 +1714,13 @@ function detectFeedback(s, audio) {
   }
   if (!rings.length) return null;
   const primary = rings.reduce((a, b) => (b.risk > a.risk ? b : a));
-  return { channelIdx: primary.channelIdx, riskAmount: primary.risk, ringWedge: primary.wedge, ringBand: primary.band, rings };
+  // wedgeRing: is any hot loop an actual WEDGE ring — a band that glows and can be
+  // cut on the Monitor EQ? The mains loop rings with wedge:null (a 2 kHz howl with
+  // no glowing band), which a gain-too-hot fault trips as a side effect. That is a
+  // gain problem, not a ring-out, so it must NOT open the Monitor EQ. Only a
+  // wedge ring is a real ring-out. The win still blocks on ANY ring (noFeedback).
+  const wedgeRing = rings.some((r) => r.wedge);
+  return { channelIdx: primary.channelIdx, riskAmount: primary.risk, ringWedge: primary.wedge, ringBand: primary.band, rings, wedgeRing };
 }
 window.detectFeedback = detectFeedback;
 // Per-wedge FEEDBACK MARGIN: how much louder (dB) the hottest mic->wedge loop
@@ -8913,10 +8919,13 @@ function App() {
   feedbackRingsRef.current = (feedback && feedback.rings ? feedback.rings : [])
     .map(r => ({ hzIndex: FULL_EQ_HZ.indexOf(r.hz), risk: r.risk }))
     .filter(r => r.hzIndex >= 0);
-  // Auto-open the Monitor EQ panel the moment a wedge starts ringing, so the
+  // Auto-open the Monitor EQ panel the moment a WEDGE starts ringing, so the
   // engineer is taken right to the ring-out (the band is glowing). Only on the
-  // no-feedback -> feedback transition, so closing it by hand mid-ring sticks.
-  uE(() => { if (feedback) setEqPanelOpen(true); }, [!!feedback]);
+  // no-ring -> ring transition, so closing it by hand mid-ring sticks. A mains
+  // howl (gain too hot, no glowing band) is deliberately excluded — it points at
+  // the gain, not the monitor EQ, so opening the panel there only misleads.
+  const wedgeRinging = !!(feedback && feedback.wedgeRing);
+  uE(() => { if (wedgeRinging) setEqPanelOpen(true); }, [wedgeRinging]);
 
   // Fault warning modal. Pops, distortion, and PA imbalance announce
   // themselves in a centered dismissible modal instead of stacking text into
@@ -8926,7 +8935,10 @@ function App() {
   // engineer fixes it (or it clears on its own).
   const [warnOpen, setWarnOpen] = uS(false);
   const warnDismissedSigRef = uR(null);
-  const faultSig = feedback ? null
+  // Suppress the warning modal only for a real wedge ring (it has its own ring-out
+  // flow above). A mains-only howl still falls through to the clip/distortion
+  // warning, which is what actually points at the too-hot gain.
+  const faultSig = wedgeRinging ? null
                 : state.phantomPop ? ('pop:' + state.phantomPop.at)
                 : (clipsStable && clipsStable.length) ? 'clip'
                 : paBalanceIssue ? 'bal'
@@ -10707,7 +10719,7 @@ function App() {
         solved={solved} audioOn={audioOn} setAudioOn={setAudioOn}
         onRestart={restart} onPrev={prev} onNext={next} onPick={pickLevel}
         completed={completed}
-        eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={!!feedback}
+        eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={wedgeRinging}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
         stageHidden={effStageHidden}
         onToggleStage={state.big16 ? (() => setStage16Open(v => !v)) : ((stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null)}
@@ -11524,7 +11536,9 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
     const audienceLive = ((audio?.outputs?.pa_l || 0) + (audio?.outputs?.pa_r || 0)) > 0.05;
     const clipPillText = audienceLive ? '⚠ DISTORTING' : '⚠ PEAKING';
     const balancing = !!paBalanceIssue;
-    const ringing = !!feedback;
+    // Only a real wedge ring reads as RINGING. A mains howl (gain too hot) shows
+    // its true colors as DISTORTING/PEAKING via the clip pill, pointing at the gain.
+    const ringing = !!(feedback && feedback.wedgeRing);
     const popPillText = phantomPop && phantomPop.cause === 'amp_loud' ? '⚠ TOO LOUD' : '⚠ POPPED';
     const pillText = phantomPop ? popPillText
                   : ringing ? '⚠ RINGING'
