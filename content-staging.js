@@ -134,7 +134,7 @@ window.LEVELS = [
     //   2. INPUT TAILS - the FOH fan-out tails 1-4 onto their console
     //      channels, matched by color.
     //   3. RETURN TAILS - the console outputs into snake returns 1-6 at FOH
-    //      (MAIN L -> 1, MAIN R -> 2, AUX 1 -> 3, AUX 2 -> 4, AUX 3 -> 5, AUX 4 -> 6).
+    //      (MAIN L -> 1, MAIN R -> 2, AUX 1 -> 3, AUX 2 -> 4).
     //   4. SPEAKER LINES - each speaker's line into its numbered out port
     //      at the stage box (PA L <- 5, PA R <- 6, W1 <- 7, W2 <- 8).
     // EVERYTHING starts disconnected (a brand-new system is unconnected,
@@ -151,8 +151,8 @@ window.LEVELS = [
     hints: [
       { title: 'Patch the inputs', target: null, teach: 'Patching is just following the paperwork. Open the Input List in the top bar and wire what it tells you, starting at the stage.', text: 'Inputs first: drag each source cable onto its numbered stage-box port. Drop on a taken spot to swap.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
       { title: 'Land the snake at the console', target: null, teach: 'The snake carries those inputs from the stage back to you at front of house. Each tail lands on its own channel.', text: 'Drop snake tails 1-4 onto their matching console channels.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[1] && ctx.patchStatus[1].pass },
-      { title: 'Send the outputs down the snake', target: null, teach: 'The same snake carries your mix back out on its own return side, counted from 1: channels 1 to 6.', text: 'Console outs into snake 1-6: L to 1, R to 2, AUX 1 to 3, AUX 2 to 4, AUX 3 to 5, AUX 4 to 6.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
-      { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'out-wedge3', 'out-wedge4'], teach: 'Last, the speakers pick up those same return channels at the stage end. Match each speaker to the output feeding it.', text: 'Each speaker line to its out port: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4, Wedge 3 to 5, Wedge 4 to 6.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
+      { title: 'Send the outputs down the snake', target: null, teach: 'The same snake carries your mix back out on its own return side, counted from 1: channels 1 to 4.', text: 'Console outs into snake 1-4: L to 1, R to 2, AUX 1 to 3, AUX 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
+      { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'Last, the speakers pick up those same return channels at the stage end. Match each speaker to the output feeding it.', text: 'Each speaker line to its out port: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
     ],
     sabotage: (s) => {
       // Load-in state: nothing connected anywhere. Input cables loose above
@@ -200,11 +200,11 @@ window.LEVELS = [
     // down (the zeroed console start). Without it, deriveInvolves defaults to
     // [1] to avoid an accidentally-dead desk, which would leave channel 1 live.
     involves: [],
-    symptom: 'Everything is connected and the console is zeroed: every channel is back at its starting position. Power the system up in the right order: console first, then both PA speakers and all four wedges. The wrong order pops the speakers.',
+    symptom: 'Everything is connected and the console is zeroed: every channel is back at its starting position. Power the system up in the right order: console first, then both PA speakers and both wedges. The wrong order pops the speakers.',
     hint: 'Power on the console first, then the powered speakers last. If you turn a PA speaker or wedge on first and then switch the console on, the console sends a pop to the speakers. So: console first, then the wedges and the PA speakers.',
     hints: [
       { title: 'Console on first', target: 'mixer-power', teach: 'Power up from the source outward. The console goes on first, so its switch-on thump has no live speaker to play it.', text: 'Turn the console on first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
-      { title: 'Then the speakers', target: null, teach: 'With the console already on and settled, the speakers come up last. Nothing pops, because the thump already passed.', text: 'Now bring up the rest: both PA speakers and all four wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
+      { title: 'Then the speakers', target: null, teach: 'With the console already on and settled, the speakers come up last. Nothing pops, because the thump already passed.', text: 'Now bring up the rest: both PA speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
     ],
     conditions: [],
     // Active speakers: powered PA boxes with their own on/off, no power amp.
@@ -279,7 +279,7 @@ window.LEVELS = [
     title: 'Test the Wedges',
     // The monitor wedges, on their own. The PA was already set in Set the Input
     // Level, so we don't re-check it here. This introduces the wedges and which
-    // aux feeds which: AUX 1 -> Wedge 1 through AUX 4 -> Wedge 4. The student sends
+    // aux feeds which: AUX 1 -> Wedge 1, AUX 2 -> Wedge 2. The student sends
     // the reference out each aux and brings up each wedge volume until it plays.
     // verifyEach latches each wedge once it gets signal. The PA, gain and faders
     // stay as set in Level 2. The wedge volumes the student sets here are kept
@@ -289,17 +289,13 @@ window.LEVELS = [
     verifyEach: [
       { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 plays' },
       { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 plays' },
-      { source: 'playback', dest: 'wedge3', min: 0.25, label: 'Wedge 3 plays' },
-      { source: 'playback', dest: 'wedge4', min: 0.25, label: 'Wedge 4 plays' },
     ],
     conditions: [],
-    symptom: 'The PA is set. Now bring up all four monitor wedges. AUX 1 feeds Wedge 1, AUX 2 Wedge 2, AUX 3 Wedge 3, AUX 4 Wedge 4. Each wedge checks off once it plays and stays checked.',
-    hint: 'Turn up each AUX send on the playback channel and bring up that wedge on stage until it plays: AUX 1 for Wedge 1, AUX 2 for Wedge 2, AUX 3 for Wedge 3, AUX 4 for Wedge 4.',
+    symptom: 'The PA is set. Now bring up both monitor wedges. AUX 1 feeds Wedge 1, AUX 2 feeds Wedge 2. Each wedge checks off once it plays and stays checked.',
+    hint: 'Turn up each AUX send on the playback channel and bring up that wedge on stage until it plays: AUX 1 for Wedge 1, AUX 2 for Wedge 2.',
     hints: [
       { title: 'Wedge 1', target: 'ch7-aux', teach: 'A wedge only plays what you send it. AUX 1 is the feed to Wedge 1, and the wedge has its own volume on stage.', text: 'Wedge 1: turn up AUX 1 on the playback, then raise the Wedge 1 volume until it plays.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
       { title: 'Wedge 2', target: 'ch7-aux', teach: 'Same idea on the next monitor: AUX 2 feeds Wedge 2.', text: 'Wedge 2: AUX 2 on the playback, then raise the Wedge 2 volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
-      { title: 'Wedge 3', target: 'ch7-aux', teach: 'AUX 3 feeds Wedge 3, the bass wedge.', text: 'Wedge 3: AUX 3 on the playback, then raise the Wedge 3 volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge3 },
-      { title: 'Wedge 4', target: 'ch7-aux', teach: 'AUX 4 feeds Wedge 4, the keys wedge.', text: 'Wedge 4: AUX 4 on the playback, then raise the Wedge 4 volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge4 },
     ],
     sabotage: (s) => {
       // Carried from Set the Input Level: good input, faders at unity, PA set.
@@ -308,16 +304,16 @@ window.LEVELS = [
       s.channels[6].mute = false;
       s.channels[6].gain = window.HEALTHY_GAIN_BY_CH[6];
       s.channels[6].fader = 0.75;
-      s.channels[6].aux1 = 0; s.channels[6].aux2 = 0; s.channels[6].aux3 = 0; s.channels[6].aux4 = 0;
+      s.channels[6].aux1 = 0; s.channels[6].aux2 = 0;
       s.master.fader = 0.75; s.master.mute = false;
       s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
       s.outputs.wedge.on = true; s.outputs.wedge.volume = 0; s.outputs.wedge.mute = false;
       s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0; s.outputs.wedge2.mute = false;
-      s.outputs.wedge3.on = true; s.outputs.wedge3.volume = 0; s.outputs.wedge3.mute = false;
-      s.outputs.wedge4.on = true; s.outputs.wedge4.volume = 0; s.outputs.wedge4.mute = false;
+      s.outputs.wedge3.on = false; s.outputs.wedge3.volume = 0;
+      s.outputs.wedge4.on = false; s.outputs.wedge4.volume = 0;
       return s;
     },
-    solution: 'Open AUX 1 through AUX 4 on the playback and bring up each wedge volume on stage until all four play.',
+    solution: 'Open AUX 1 and AUX 2 on the playback and bring up each wedge volume on stage until both play.',
     defaultInspect: 'wedge',
   },
   {
@@ -506,8 +502,6 @@ window.LEVELS = [
       { source: 'playback', dest: 'pa',     min: 0.30, label: 'PA tested with playback' },
       { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 tested with playback' },
       { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 tested with playback' },
-      { source: 'playback', dest: 'wedge3', min: 0.25, label: 'Wedge 3 tested with playback' },
-      { source: 'playback', dest: 'wedge4', min: 0.25, label: 'Wedge 4 tested with playback' },
     ],
     conditions: [
       { source: 'vocal',  dest: 'pa', min: 0.25 },
@@ -518,10 +512,10 @@ window.LEVELS = [
     ],
     topology: { paRig: 'powered' },
     symptom: 'Final exam. Nothing is powered on yet. Run the whole job in order: power on, test every speaker with playback, then bring the band in. Keep it clean the whole way.',
-    hint: 'Everything you have already done, in order. Console on first, then the speakers. PFL the playback, set its gain, and send it to the PA and all four wedges: each speaker checks off once it plays and stays checked, so you can turn the playback back down afterward. Then the band: PFL each input, set its gain, and bring it up with the fader at unity. Turn on +48V for the condenser and the active DI while the channel is muted and before you PFL it. Open AUX 1 on Vocal 1 to send it to Wedge 1.',
+    hint: 'Everything you have already done, in order. Console on first, then the speakers. PFL the playback, set its gain, and send it to the PA and both wedges: each speaker checks off once it plays and stays checked, so you can turn the playback back down afterward. Then the band: PFL each input, set its gain, and bring it up with the fader at unity. Turn on +48V for the condenser and the active DI while the channel is muted and before you PFL it. Open AUX 1 on Vocal 1 to send it to Wedge 1.',
     hints: [
-      { title: 'Power up in order', target: 'mixer-power', teach: 'Same as you practiced: source outward. Console first so its thump has nowhere to go, then the speakers.', text: 'Power on in order: console first, then both PA speakers and all four wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
-      { title: 'Prove every speaker', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'out-wedge3', 'out-wedge4'], teach: 'Before a single mic matters, send playback to each speaker and confirm it plays. Catch a dead box now, not during the first song.', text: 'Test every speaker with playback: send it to the PA and all four wedges.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.pa && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2 && ctx.verifyStatus.wedge3 && ctx.verifyStatus.wedge4 },
+      { title: 'Power up in order', target: 'mixer-power', teach: 'Same as you practiced: source outward. Console first so its thump has nowhere to go, then the speakers.', text: 'Power on in order: console first, then both PA speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
+      { title: 'Prove every speaker', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'Before a single mic matters, send playback to each speaker and confirm it plays. Catch a dead box now, not during the first song.', text: 'Test every speaker with playback: send it to the PA and both wedges.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.pa && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2 },
       { title: 'Power what needs it', target: ['ch2-phantom', 'ch3-phantom'], teach: 'The condenser and the active DI both need +48V. Switch them on while their channels are muted.', text: 'Turn +48V on (while muted) for the condenser (ch 2) and active DI (ch 3).', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom && ctx.state.channels[2] && ctx.state.channels[2].phantom },
       { title: 'Check every input', target: null, teach: 'Walk the band one channel at a time. PFL each input and meter it before you ever bring it into the room.', text: 'Check every input in PFL before you bring it up: the four band channels and the playback.', done: (ctx) => ctx.pflChannels && [1, 2, 3, 4, 7].every((ch) => ctx.pflChannels[ch]) },
       { title: 'Bring the band up', target: null, teach: 'Now open them into the room, faders at unity, levels already set with the gain. The whole band, clean in the PA.', text: 'Bring the band up clean, faders at unity: vocals, bass, and keys in the PA.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.25) && hintReaches(ctx, 'vocal2', 'pa', 0.25) && hintReaches(ctx, 'guitar', 'pa', 0.25) && hintReaches(ctx, 'laptop', 'pa', 0.25) },
@@ -600,8 +594,8 @@ window.LEVELS = [
       s.outputs.pa_r = { ...s.outputs.pa_r, on: true, volume: 0.6, mute: false };
       s.outputs.wedge = { ...s.outputs.wedge, on: true, volume: 0.6, mute: false };
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, volume: 0.6, mute: false };
-      s.outputs.wedge3 = { ...s.outputs.wedge3, on: true, volume: 0.6, mute: false };
-      s.outputs.wedge4 = { ...s.outputs.wedge4, on: true, volume: 0.6, mute: false };
+      s.outputs.wedge3 = { ...s.outputs.wedge3, on: false, volume: 0, mute: false };
+      s.outputs.wedge4 = { ...s.outputs.wedge4, on: false, volume: 0, mute: false };
       return s;
     },
     solution: 'Console zeroed, master down and muted, speakers off, console off last. The next engineer powers on into a predictable console.',
@@ -1037,27 +1031,25 @@ window.PRACTICE_GOALS = [
     key: 'speaker-check', label: 'Check the speakers', par: 3,
     apply: (s) => {
       // Quiet stage before the band: use the playback to prove every speaker is
-      // passing signal, the PA and all four wedges, one at a time. This checks the
+      // passing signal, the PA and both wedges, one at a time. This checks the
       // OUTPUTS — it is NOT a line check (a line check verifies the inputs).
       for (let i = 0; i < 4; i++) { s.channels[i].mute = true; }
-      s.channels[6].mute = false; s.channels[6].gain = window.HEALTHY_GAIN_BY_CH[6]; s.channels[6].fader = 0.75; s.channels[6].aux1 = 0; s.channels[6].aux2 = 0; s.channels[6].aux3 = 0; s.channels[6].aux4 = 0;
+      s.channels[6].mute = false; s.channels[6].gain = window.HEALTHY_GAIN_BY_CH[6]; s.channels[6].fader = 0.75; s.channels[6].aux1 = 0; s.channels[6].aux2 = 0;
       s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.6 };
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, mute: false, volume: 0.6 };
-      s.outputs.wedge3 = { ...s.outputs.wedge3, on: true, mute: false, volume: 0.6 };
-      s.outputs.wedge4 = { ...s.outputs.wedge4, on: true, mute: false, volume: 0.6 };
+      s.outputs.wedge3 = { ...s.outputs.wedge3, on: false, volume: 0 };
+      s.outputs.wedge4 = { ...s.outputs.wedge4, on: false, volume: 0 };
       return {
         conditions: [],
         verifyEach: [
           { source: 'playback', dest: 'pa',     min: 0.30, label: 'PA passes signal' },
           { source: 'playback', dest: 'wedge',  min: 0.25, label: 'Wedge 1 passes signal' },
           { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 passes signal' },
-          { source: 'playback', dest: 'wedge3', min: 0.25, label: 'Wedge 3 passes signal' },
-          { source: 'playback', dest: 'wedge4', min: 0.25, label: 'Wedge 4 passes signal' },
         ],
-        symptom: 'Confirm every speaker is passing signal: the PA and all four wedges. Send the playback to each one. They check off as they play.',
+        symptom: 'Confirm every speaker is passing signal: the PA and both wedges. Send the playback to each one. They check off as they play.',
         title: 'Check the Speakers',
-        hint: 'Send the playback to the PA on its fader, then open AUX 1 through AUX 4, one per wedge. Each speaker checks off once it plays, so you can move on.',
-        solution: 'Playback sent to the PA and all four wedges: every speaker proven to pass signal, before a single input matters.',
+        hint: 'Send the playback to the PA on its fader, then open AUX 1 and AUX 2, one per wedge. Each speaker checks off once it plays, so you can move on.',
+        solution: 'Playback sent to the PA and both wedges: every speaker proven to pass signal, before a single input matters.',
       };
     },
   },
@@ -1095,15 +1087,21 @@ window.MONITOR_RING = {
       const vocs = pbMics(s).filter((i) => /^(vx\d|vocal)/.test(window.sourceFor(s, i) || ''));
       ci = pbPick(vocs.length ? vocs : pbMics(s), r);
       if (ci < 0) ci = 0;
-      const opts = [['aux1', 'wedge', 'Wedge 1'], ['aux2', 'wedge2', 'Wedge 2'], ['aux3', 'wedge3', 'Wedge 3'], ['aux4', 'wedge4', 'Wedge 4']];
-      const o = opts[Math.floor(r() * opts.length)];
-      auxKey = o[0]; wedgeKey = o[1]; wedgeLabel = o[2];
-    } else if (r() < 0.5) {
-      ci = 0; auxKey = 'aux1'; wedgeKey = 'wedge'; wedgeLabel = 'Wedge 1';
     } else {
-      ci = 1; auxKey = 'aux2'; wedgeKey = 'wedge2'; wedgeLabel = 'Wedge 2';
+      // MX-8: Vocal 1 (ch0) or Vocal 2 (ch1).
+      ci = r() < 0.5 ? 0 : 1;
     }
     const src = window.sourceFor(s, ci);
+    // A singer only ever asks for more in THEIR OWN wedge — nobody asks for more
+    // of themselves in another performer's monitor. Pair the picked vocalist with
+    // their own wedge: vocal N -> aux N -> wedge N (perf 0..3 = wedge 1..4; the
+    // MX-8 vocals map 1:1 too). This is the mono-monitor convention the whole
+    // stage is built on (vocal 1 hears wedge 1, ... vocal 4 hears wedge 4).
+    const perf = window.SOURCES[src] && window.SOURCES[src].perf != null ? window.SOURCES[src].perf : ci;
+    const wn = Math.min(4, Math.max(1, perf + 1));
+    auxKey = 'aux' + wn;
+    wedgeKey = wn === 1 ? 'wedge' : 'wedge' + wn;
+    wedgeLabel = 'Wedge ' + wn;
     const chLabel = (s.channels[ci] && s.channels[ci].label) || 'the vocal';
     // Latent: the singer has a little monitor, well under the ring point. The
     // wedge is live so raising the send climbs straight toward feedback.
@@ -1111,7 +1109,7 @@ window.MONITOR_RING = {
     if (s.outputs[wedgeKey]) { s.outputs[wedgeKey].on = true; s.outputs[wedgeKey].mute = false; s.outputs[wedgeKey].volume = 0.78; }
     return {
       conditions: [{ source: src, dest: wedgeKey, min: 0.69 }],
-      symptom: 'The singer on ' + chLabel + ' wants more in ' + wedgeLabel + '. Bring that monitor up to a strong level. As you push the send, the wedge starts to ring. Find the glowing band on ' + wedgeLabel + '\'s Monitor EQ, cut it a touch to stop the ring, and leave the level up.',
+      symptom: 'The singer on ' + chLabel + ' wants more of themselves in their monitor, ' + wedgeLabel + '. Bring that send up to a strong level. As you push it, the wedge starts to ring. Find the glowing band on ' + wedgeLabel + '\'s Monitor EQ, cut it a touch to stop the ring, and leave the level up.',
       title: 'Give the Monitor More',
       hint: 'Raise the ' + auxKey.toUpperCase() + ' send on ' + chLabel + ' toward a strong level. When it rings, open ' + wedgeLabel + '\'s Monitor EQ, find the glowing band, and pull it down a few dB, just enough to stop the ring. Keep the level up, do not pull the send back down.',
       solution: 'The monitor on ' + chLabel + ' brought up to a strong level with the ring cut out on the wedge EQ. Pulling the send back down would lose the singer the monitor; ringing out the one glowing band keeps the level and kills the feedback.',
@@ -1390,15 +1388,15 @@ window.SCENARIO_LIBRARY = [
 // and meant to be playtested.
 // ============================================================
 function mwBoard(s) {
-  // A healthy, fully patched show: PA up, all FOUR wedges on and powered, every
+  // A healthy, fully patched show: PA up, both wedges on and powered, every
   // aux send zeroed so the student builds each monitor mix from nothing. The
   // bass DI is active, so it needs phantom on to be live.
   s.master.fader = 0.75; s.master.mute = false;
   s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
   s.outputs.wedge.on  = true; s.outputs.wedge.volume  = 0.6; s.outputs.wedge.mute  = false;
   s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
-  s.outputs.wedge3.on = true; s.outputs.wedge3.volume = 0.6; s.outputs.wedge3.mute = false;
-  s.outputs.wedge4.on = true; s.outputs.wedge4.volume = 0.6; s.outputs.wedge4.mute = false;
+  s.outputs.wedge3.on = false; s.outputs.wedge3.volume = 0;
+  s.outputs.wedge4.on = false; s.outputs.wedge4.volume = 0;
   s.channels[1].phantom = true; // condenser (Vocal 2) needs phantom for the show
   s.channels[2].phantom = true; // bass is an active DI; power it for the show
   s.channels.forEach((c) => { c.aux1 = 0; c.aux2 = 0; c.aux3 = 0; c.aux4 = 0; });
@@ -1467,25 +1465,24 @@ window.MONITOR_WORLD = [
   },
   {
     id: 'mw4',
-    title: 'The band gets monitors',
+    title: 'Both vocal monitors',
     task: true,
-    symptom: 'Now the instrument wedges. Wedge 3 (AUX 3) is the bass wedge; Wedge 4 (AUX 4) is the keys wedge. Each one gets its own instrument up, with the vocals underneath.',
-    hint: 'Wedge 3 on AUX 3: bass up, a bit of the lead vocal. Wedge 4 on AUX 4: keys up, a bit of the lead vocal. The instrument is loudest in its own wedge.',
+    symptom: 'Both vocal monitors at once. Wedge 1 is Vocal 1\'s monitor; Wedge 2 is Vocal 2\'s. Get each singer up in their own wedge.',
+    hint: 'Wedge 1 runs off AUX 1, Wedge 2 off AUX 2. Bring Vocal 1 up on AUX 1 for their wedge, and Vocal 2 up on AUX 2 for theirs. Each singer is loudest in their own monitor.',
     hints: [
-      { title: 'The bass wedge', target: 'ch3-aux', teach: 'Wedge 3 is the bass wedge, on AUX 3. The bass is loudest, with a little Vocal 1 underneath.', text: 'Bass wedge (Wedge 3): AUX 3 on the Bass channel, plus a little Vocal 1 on AUX 3.', done: (ctx) => hintReaches(ctx, 'guitar', 'wedge3', 0.35) && hintReaches(ctx, 'vocal', 'wedge3', 0.18) },
-      { title: 'The keys wedge', target: 'ch4-aux', teach: 'Same for the keys wedge: Wedge 4 on AUX 4, keys up, a little Vocal 1 underneath.', text: 'Keys wedge (Wedge 4): AUX 4 on the Keyboard channel, plus a little Vocal 1 on AUX 4.', done: (ctx) => hintReaches(ctx, 'laptop', 'wedge4', 0.35) && hintReaches(ctx, 'vocal', 'wedge4', 0.18) },
+      { title: 'Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'Each singer hears their own monitor. Vocal 1 is loudest in Wedge 1, on AUX 1.', text: 'Vocal 1 in Wedge 1: AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
+      { title: 'Vocal 2 in Wedge 2', target: 'ch2-aux', teach: 'Same on the other monitor: Vocal 2 is loudest in Wedge 2, on AUX 2.', text: 'Vocal 2 in Wedge 2: AUX 2 on the Vocal 2 channel.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge2', 0.35) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
-      { source: 'guitar', dest: 'pa', min: 0.3 },
-      { source: 'guitar', dest: 'wedge3', min: 0.35 },
-      { source: 'vocal', dest: 'wedge3', min: 0.18 },
-      { source: 'laptop', dest: 'wedge4', min: 0.35 },
-      { source: 'vocal', dest: 'wedge4', min: 0.18 },
+      { source: 'vocal', dest: 'pa', min: 0.3 },
+      { source: 'vocal', dest: 'wedge', min: 0.35 },
+      { source: 'vocal2', dest: 'pa', min: 0.3 },
+      { source: 'vocal2', dest: 'wedge2', min: 0.35 },
     ],
     sabotage: (s) => mwBoard(s),
-    solution: 'Four wedges. Each one has its own source loudest, with the vocals tucked under.',
-    defaultInspect: 'wedge3',
+    solution: 'Two wedges, two singers. Vocal 1 up in Wedge 1, Vocal 2 up in Wedge 2. Each performer hears their own monitor.',
+    defaultInspect: 'wedge',
   },
   {
     id: 'mw5',
