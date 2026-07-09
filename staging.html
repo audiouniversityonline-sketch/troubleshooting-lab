@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=120"></script>
+<script src="content-staging.js?v=121"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4657,7 +4657,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
           </div>
         )}
 
-        <div ref={paRRef} data-walk="out-pa-r" style={{ position: 'absolute', bottom: big16 ? 48 : 80, left: big16 ? '89%' : '78%', transform: 'translateX(-50%)' }}>
+        <div ref={paRRef} data-walk="out-pa-r" style={{ position: 'absolute', bottom: big16 ? 48 : 80, left: big16 ? '89%' : '70%', transform: 'translateX(-50%)' }}>
           <PASpeaker side="R" showPower={!isPassive}
             on={isPassive ? paShowsOn : state.outputs.pa_r.on} mute={state.outputs.pa_r.mute} volume={state.outputs.pa_r.volume} level={audio.outputs.pa_r}
             signalArriving={(audio.speakerInput?.pa_r || 0) > 0.04}
@@ -5884,8 +5884,12 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         // 8-ch: the stage box sits ABOVE the front speakers, so their returns run
         // out along a rail from the box and drop DOWN into the speaker TOP. The
         // 16-ch W4 already top-connects; everything else bottom-connects.
-        const eightFront = !state.big16 && ['pa_l', 'pa_r', 'wedge', 'wedge2'].indexOf(spk) !== -1;
-        const to = anchorPos(sref.current, ((spk === 'wedge4' && state.big16) || eightFront) ? 'top' : 'bottom');
+        // Native (MX-8): front speakers (PA L/R, W1/W2) connect at the BOTTOM so
+        // their returns come up off the floor rail; the two upstage wedges (W3/W4)
+        // connect at the TOP and hug the upstage edge back to the box. 16-ch keeps
+        // its own rule (only W4 top-connects, by the drum riser).
+        const nativeUp = !state.big16 && (spk === 'wedge3' || spk === 'wedge4');
+        const to = anchorPos(sref.current, ((spk === 'wedge4' && state.big16) || nativeUp) ? 'top' : 'bottom');
         const portId = patch[spk];
         // Returns leave the OUT jack on the box's LEFT face, then drop to the
         // front rail and run it to each speaker (see the router below).
@@ -6573,18 +6577,23 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                         c.to,                         // down into the wedge (top-connected)
                       ], 8)
                     : (c.to.y > 250
-                        // 8-ch FRONT returns: run OUT along a per-port rail just
-                        // below the box (parallel, so they never cross up top),
-                        // then drop straight DOWN into the speaker top — the rails
-                        // cross each other only here, at the bottom.
+                        // 8-ch FRONT returns (bottom-connected): leave the box,
+                        // drop down the clear right-side corridor (just right of
+                        // Wedge 4, clear now PA R sits at 70%), run the floor rail
+                        // BELOW every speaker, then come straight UP into each
+                        // speaker's bottom. The runs only stack on the floor, never
+                        // crossing a device — one comb along the downstage lip.
                         ? window._polyRound([
                             c.from,
-                            { x: c.from.x, y: 214 + (c.portId - 1) * 7 },
-                            { x: c.to.x, y: 214 + (c.portId - 1) * 7 },
-                            c.to,
+                            { x: 700 + c.portId * 2, y: c.from.y },              // to the right-side descent corridor
+                            { x: 700 + c.portId * 2, y: 406 + c.portId * 4 },    // down to its floor lane
+                            { x: c.to.x, y: 406 + c.portId * 4 },                // along the floor to the speaker
+                            c.to,                                                 // up into the speaker bottom
                           ], 8)
-                        // 8-ch UPSTAGE wedges (W3/W4) keep the compact route.
-                        : window._polyRound([c.from, { x: c.from.x - 20, y: c.from.y }, { x: c.from.x - 20, y: 452 }, { x: c.to.x, y: 452 }, c.to], 8))));
+                        // 8-ch UPSTAGE wedges (W3/W4, top-connected): hug the
+                        // upstage edge — up out of the box to the back lane, along
+                        // it to the wedge, then straight down into the wedge top.
+                        : window._polyRound([c.from, { x: c.from.x, y: 124 }, { x: c.to.x, y: 124 }, c.to], 8))));
           const live = !c.unplugged && !isDragged && retLive(c.portId);
           const hovered = hoverCable === 'out:' + c.spk;
           const color = hovered ? '#eae7e0' : '#7d7a72';
