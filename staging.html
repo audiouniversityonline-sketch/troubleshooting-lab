@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=110"></script>
+<script src="content-staging.js?v=111"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4041,13 +4041,15 @@ function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive, nPor
   // the input ports 1-4. Which SPEAKER hears which signal is decided by the
   // patch (state.outPatch) — these are jacks, not destinations.
   // Out ports wear the resistor-code colors of their return channel (1 brown,
-  // 2 red, 3 orange, 4 yellow, 5 green, 6 blue). What signal rides each channel
-  // is decided at the FOH end (outFan); `active` lights when it carries signal.
-  // Default fan-out: 1-2 carry Main L/R, 3-6 carry Aux 1-4 (one per wedge).
-  const outs = [1, 2, 3, 4, 5, 6].map(ch => ({
+  // 2 red, 3 orange, 4 yellow, 5 green, 6 blue, 7 violet, 8 grey). What signal
+  // rides each channel is decided at the FOH end (outFan); `active` lights when
+  // it carries signal. Default fan-out: 1-2 carry Main L/R, 3-6 carry Aux 1-4
+  // (one per wedge); 7-8 are spare. A snake return is a standard 8-channel loom,
+  // so the box shows all eight jacks even though only six carry a feed today.
+  const outs = [1, 2, 3, 4, 5, 6, 7, 8].map(ch => ({
     key: ch,
     label: String(ch),
-    color: (window.SNAKE_COLORS || [])[ch - 1] || '#4a4a52',
+    color: (window.SNAKE_COLORS || [])[(ch - 1) % 8] || '#4a4a52',
     active: !!(retActive && retActive[ch]),
   }));
   return (
@@ -5245,7 +5247,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         targets.push({ key: `ch-${ch}`, x, y, payload: ch });
       }
     } else if (drag.type === 'outpatch') {
-      for (const portId of [1, 2, 3, 4, 5, 6]) {
+      for (const portId of [1, 2, 3, 4, 5, 6, 7, 8]) {
         const el = outRefs.current[portId];
         if (!el) continue;
         const { x, y } = local(el);
@@ -5990,6 +5992,64 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
     </>
   );
 
+  // The snake RETURN fan-out at FOH — the console's output buses (Main L/R,
+  // Aux 1-4) fan into the snake's return channels, which carry them back to the
+  // stage-box OUT ports and on to the speakers. Extracted like fanOutEls so the
+  // 16-channel MIXER view can render the same interactive return tails (the desk
+  // outputs need connections to the snake, matching the snake head on stage).
+  const outFanEls = (
+    <>
+      {(paths.outFanCables || []).map(c => {
+        const portKey = 'of' + c.ch;
+        const isDragged = dragState && dragState.type === 'outfan' && dragState.id === String(c.ch);
+        const someOtherDragged = dragState && !isDragged;
+        const chipEnd = isDragged ? dragState.cursor : c.to;
+        const midY = (c.from.y + chipEnd.y) / 2 - 6;
+        const d = `M ${c.from.x} ${c.from.y} C ${c.from.x} ${midY}, ${chipEnd.x} ${midY}, ${chipEnd.x} ${chipEnd.y}`;
+        const live = !c.unplugged && !isDragged && busActiveFor(c.outKey);
+        const opacity = someOtherDragged ? 0.18 : (c.unplugged ? 0.6 : 0.95);
+        return (
+          <g key={portKey} style={{ pointerEvents: 'none' }}>
+            <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round"/>
+            <path d={d} stroke={c.color} strokeWidth={isDragged ? 4 : 3} fill="none" opacity={opacity} strokeLinecap="round"/>
+            <circle cx={c.from.x} cy={c.from.y} r="2" fill={c.color} stroke="#0a0a0c" strokeWidth="0.5" opacity={someOtherDragged ? 0.3 : 1}/>
+            {c.unplugged && !isDragged && !someOtherDragged && (
+              <text x={chipEnd.x} y={chipEnd.y + 17} textAnchor="middle" fill="#e9e6df"
+                stroke="#0a0a0c" strokeWidth="2.5" paintOrder="stroke"
+                fontFamily="Geist Mono" fontSize="9" fontWeight="700">{c.ch}</text>
+            )}
+            {live && (
+              <path d={d} stroke="#fff" strokeWidth="1.2" fill="none" strokeDasharray="3 6" strokeLinecap="round" opacity="0.7">
+                <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.6s" repeatCount="indefinite"/>
+              </path>
+            )}
+            {!someOtherDragged && (
+              <g style={{ pointerEvents: 'auto' }}>
+                <circle className="cable-hit" cx={chipEnd.x} cy={chipEnd.y} r="11" fill="transparent"
+                  onPointerDown={(e) => startDrag(e, { type: 'outfan', id: String(c.ch) })}/>
+                <circle className="cable-handle" cx={chipEnd.x} cy={chipEnd.y} r={isDragged ? 6 : 5}
+                  fill={c.color} stroke="#0a0a0c" strokeWidth="1.2" pointerEvents="none"/>
+                <circle cx={chipEnd.x} cy={chipEnd.y} r="2" fill="#0a0a0c" pointerEvents="none"/>
+              </g>
+            )}
+          </g>
+        );
+      })}
+
+      {dragState && dragState.type === 'outfan' && getDropTargets(dragState).map(t => {
+        const isSnapped = dragState.valid === t.payload;
+        return (
+          <g key={`drop-${t.key}`} style={{ pointerEvents: 'none' }}>
+            <circle cx={t.x} cy={t.y} r={isSnapped ? 18 : 14}
+              fill="rgba(74,222,128,0.18)"
+              stroke="var(--green)" strokeWidth={isSnapped ? 2.5 : 1.5}
+              style={{ filter: isSnapped ? 'drop-shadow(0 0 8px rgba(74,222,128,0.6))' : 'none' }}/>
+          </g>
+        );
+      })}
+    </>
+  );
+
   return (
     <div ref={containerRef} style={{
       position: 'relative', width: '100%',
@@ -6387,61 +6447,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             16-channel MIXER view can render the same interactive fan-out). */}
         {fanOutEls}
 
-        {/* RETURN TAILS — snake return channels 1-6 from the fan-out down to
-            the console's output chips (MAIN L/R, AUX 1-4). Same
-            drag model as the input tails: the chip-end is the handle, drop
-            it on a different output chip to repatch (swap semantics). Loose
-            tails dangle to the right of the snake wearing their number. */}
-        {(paths.outFanCables || []).map(c => {
-          const portKey = 'of' + c.ch;
-          const isDragged = dragState && dragState.type === 'outfan' && dragState.id === String(c.ch);
-          const someOtherDragged = dragState && !isDragged;
-          const chipEnd = isDragged ? dragState.cursor : c.to;
-          const midY = (c.from.y + chipEnd.y) / 2 - 6;
-          const d = `M ${c.from.x} ${c.from.y} C ${c.from.x} ${midY}, ${chipEnd.x} ${midY}, ${chipEnd.x} ${chipEnd.y}`;
-          const live = !c.unplugged && !isDragged && busActiveFor(c.outKey);
-          const opacity = someOtherDragged ? 0.18 : (c.unplugged ? 0.6 : 0.95);
-          return (
-            <g key={portKey} style={{ pointerEvents: 'none' }}>
-              <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round"/>
-              <path d={d} stroke={c.color} strokeWidth={isDragged ? 4 : 3} fill="none" opacity={opacity} strokeLinecap="round"/>
-              <circle cx={c.from.x} cy={c.from.y} r="2" fill={c.color} stroke="#0a0a0c" strokeWidth="0.5" opacity={someOtherDragged ? 0.3 : 1}/>
-              {c.unplugged && !isDragged && !someOtherDragged && (
-                <text x={chipEnd.x} y={chipEnd.y + 17} textAnchor="middle" fill="#e9e6df"
-                  stroke="#0a0a0c" strokeWidth="2.5" paintOrder="stroke"
-                  fontFamily="Geist Mono" fontSize="9" fontWeight="700">{c.ch}</text>
-              )}
-              {live && (
-                <path d={d} stroke="#fff" strokeWidth="1.2" fill="none" strokeDasharray="3 6" strokeLinecap="round" opacity="0.7">
-                  <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.6s" repeatCount="indefinite"/>
-                </path>
-              )}
-              {!someOtherDragged && (
-                <g style={{ pointerEvents: 'auto' }}>
-                  <circle className="cable-hit" cx={chipEnd.x} cy={chipEnd.y} r="11" fill="transparent"
-                    onPointerDown={(e) => startDrag(e, { type: 'outfan', id: String(c.ch) })}/>
-                  <circle className="cable-handle" cx={chipEnd.x} cy={chipEnd.y} r={isDragged ? 6 : 5}
-                    fill={c.color} stroke="#0a0a0c" strokeWidth="1.2" pointerEvents="none"/>
-                  <circle cx={chipEnd.x} cy={chipEnd.y} r="2" fill="#0a0a0c" pointerEvents="none"/>
-                </g>
-              )}
-            </g>
-          );
-        })}
-
-        {/* Drop-target highlights for a RETURN-TAIL drag — the four console
-            output chips glow. */}
-        {dragState && dragState.type === 'outfan' && getDropTargets(dragState).map(t => {
-          const isSnapped = dragState.valid === t.payload;
-          return (
-            <g key={`drop-${t.key}`} style={{ pointerEvents: 'none' }}>
-              <circle cx={t.x} cy={t.y} r={isSnapped ? 18 : 14}
-                fill="rgba(74,222,128,0.18)"
-                stroke="var(--green)" strokeWidth={isSnapped ? 2.5 : 1.5}
-                style={{ filter: isSnapped ? 'drop-shadow(0 0 8px rgba(74,222,128,0.6))' : 'none' }}/>
-            </g>
-          );
-        })}
+        {/* RETURN TAILS + their drop targets (extracted to outFanEls so the
+            16-channel MIXER view renders the same interactive return fan-out). */}
+        {outFanEls}
 
         {/* Speaker cables → their PATCHED stage-box out ports, along the
             FRONT RAIL. Rail order from TOP to BOTTOM: Wedge 1, Wedge 2,
@@ -6543,6 +6551,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       {state.big16 && !stageOnly && (
         <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', zIndex: 5 }}>
           {fanOutEls}
+          {outFanEls}
         </svg>
       )}
 
