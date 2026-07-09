@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=104"></script>
+<script src="content-staging.js?v=105"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5700,7 +5700,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       const fanOutCables = [];
       const fanOutOrigin = fanOutRef.current ? anchorPos(fanOutRef.current, 'bottom') : null;
       if (fanOutOrigin) {
-        for (let port = 1; port <= 4; port++) {
+        // One tail per snake channel: 4 on the MX-8's small snake, 14 on the
+        // band's 16-ch multicore (channels 15/16 are the FOH stereo line, not a
+        // snake return). Looping the fan-out map's own length keeps this
+        // board-agnostic, so the console fan-out is a live crosspatch point on
+        // both boards — the snake lands at FOH and you patch it into the desk.
+        const nFan = state.fanOut ? state.fanOut.length : 4;
+        for (let port = 1; port <= nFan; port++) {
           const ch = state.fanOut ? state.fanOut[port - 1] : port;
           const chEl = ch >= 1 ? channelRefs.current[ch] : null;
           let to = chEl ? anchorPos(chEl, 'top') : null;
