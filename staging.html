@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=108"></script>
+<script src="content-staging.js?v=109"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -10743,10 +10743,13 @@ function App() {
       <div ref={fitViewportRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
         <window.FitScaleContext.Provider value={appliedScale}>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: zoom ? 'flex-start' : 'center', justifyContent: zoom ? 'flex-start' : 'center', overflow: 'hidden' }}>
+            {/* No CSS transition on this transform: the cable overlay measures
+                element positions and divides by the scale to draw the cables, so
+                an animating scale would be sampled mid-flight and every cable
+                would land in the wrong place. The zoom snaps instead. */}
             <div ref={designRef} style={{ width: designW, flexShrink: 0,
                  transform: zoom ? `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.scale})` : `scale(${fitScale})`,
-                 transformOrigin: zoom ? '0 0' : 'center center',
-                 transition: 'transform 0.28s ease' }}>
+                 transformOrigin: zoom ? '0 0' : 'center center' }}>
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={appliedScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
                 onZoomTo={onZoomTo} zoomActive={!!zoom}
