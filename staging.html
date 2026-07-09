@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=119"></script>
+<script src="content-staging.js?v=120"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -3480,7 +3480,11 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
               borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5,
             }}
           >{patchTarget ? `→ PORT ${patchTarget}` : 'PATCH'}</div>
-          {!compact && onOpenPlacement && (kind === 'dynamic' || kind === 'condenser') && (
+          {/* Placement (aiming the mic to fight feedback) only drives the feedback
+              loop, so it's shown only on mics that can actually feed back — vocals
+              and drum overheads. On a close mic like the guitar amp mic it would do
+              nothing, so it's hidden. */}
+          {!compact && onOpenPlacement && SOURCES[srcKey] && SOURCES[srcKey].canFeedback && (
             <div onClick={(e) => { e.stopPropagation(); onOpenPlacement(srcKey); }} className="mono ui-no-select"
               style={{ fontSize: 8, padding: '2px 6px', background: '#0a0a0c', color: 'var(--accent)', border: '1px solid #38383e', borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>PLACEMENT</div>
           )}
