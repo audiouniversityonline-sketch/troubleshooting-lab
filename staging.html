@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=115"></script>
+<script src="content-staging.js?v=116"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5745,7 +5745,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           const paRrect = (paRRef && paRRef.current) ? paRRef.current.getBoundingClientRect() : null;
           const paRleft = paRrect ? (paRrect.left - cb.left) / S : (fanX - 46);
           const edgeRoute = (grp.edge && grp.out)
-            ? { riserX: Math.min(fanX - 46, paRleft - 26), laneY: grp.out.y }
+            ? { riserX: Math.min(fanX - 46, paRleft - 52), laneY: grp.out.y }
             : null;
           subSnakes.push({ from: grp.out, to: fp, endH: true, midX: grp.midX, overTopY: grp.overTopY, edgeRoute });
         }
