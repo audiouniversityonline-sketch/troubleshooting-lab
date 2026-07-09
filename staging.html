@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=125"></script>
+<script src="content-staging.js?v=126"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -254,8 +254,8 @@ const DESTINATIONS = {
   pa:     { label: 'Main PA',         short: 'PA',      stereo: true,  description: 'House speakers. What the audience hears.' },
   wedge:  { label: 'Wedge 1',         short: 'WEDGE 1', stereo: false, description: 'Floor wedge for the lead singer (Vocal 1).' },
   wedge2: { label: 'Wedge 2',         short: 'WEDGE 2', stereo: false, description: 'Floor wedge for the second singer (Vocal 2).' },
-  wedge3: { label: 'Wedge 3',         short: 'WEDGE 3', stereo: false, description: 'Floor wedge for the bass player.' },
-  wedge4: { label: 'Wedge 4',         short: 'WEDGE 4', stereo: false, description: 'Floor wedge for the keys player.' },
+  wedge3: { label: 'Wedge 3',         short: 'WEDGE 3', stereo: false, description: 'Floor wedge for the keys player.' },
+  wedge4: { label: 'Wedge 4',         short: 'WEDGE 4', stereo: false, description: 'Floor wedge for the drummer.' },
 };
 
 // Snake channel colors — the US color-coding standard for multichannel snakes
@@ -819,8 +819,9 @@ function computeAudio(s, envelope) {
   const wedge2Mix = Math.sqrt(aux2.reduce((a, b) => a + b * b, 0)) * aux2MasterGain * (mixerOn ? 1 : 0);
   const w2 = o.wedge2 || { on: true, mute: false, volume: 0 };
 
-  // AUX 3 / AUX 4 — the bass player's and keys player's monitor sends. Same
-  // pre-fader, power-summed, mixer-gated math as aux 1/2.
+  // AUX 3 / AUX 4 — on the 16-ch board these are the keys player's and drummer's
+  // monitor sends (spare/unpatched on the MX-8). Same pre-fader, power-summed,
+  // mixer-gated math as aux 1/2.
   const aux3 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
     return chanIn[i].level * knobGain(ch.aux3 || 0);
@@ -2461,11 +2462,11 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
         <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="AUX1" size={26} color="var(--aux)"
           tip="How much of this channel goes to Wedge 1, the lead singer's monitor. Doesn't change the PA." />
         <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={26} color="var(--cool)"
-          tip="How much of this channel goes to Wedge 2, the second singer's monitor. Doesn't change the PA." />
-        <K value={ch.aux3 || 0} onChange={(v) => { set({ aux3: v }); insp('wedge3'); }} label="AUX3" size={26} color="var(--green)"
-          tip="How much of this channel goes to Wedge 3, the bass player's monitor. Doesn't change the PA." />
-        <K value={ch.aux4 || 0} onChange={(v) => { set({ aux4: v }); insp('wedge4'); }} label="AUX4" size={26} color="var(--amber)"
-          tip="How much of this channel goes to Wedge 4, the keys player's monitor. Doesn't change the PA." />
+          tip={big16 ? "How much of this channel goes to Wedge 2, the bass player's monitor. Doesn't change the PA." : "How much of this channel goes to Wedge 2, the second singer's monitor. Doesn't change the PA."} />
+        <K value={ch.aux3 || 0} onChange={(v) => { set({ aux3: v }); if (big16) insp('wedge3'); }} label="AUX3" size={26} color="var(--green)"
+          tip={big16 ? "How much of this channel goes to Wedge 3, the keys player's monitor. Doesn't change the PA." : "AUX 3 send. Spare on this board — it isn't patched to a wedge."} />
+        <K value={ch.aux4 || 0} onChange={(v) => { set({ aux4: v }); if (big16) insp('wedge4'); }} label="AUX4" size={26} color="var(--amber)"
+          tip={big16 ? "How much of this channel goes to Wedge 4, the drummer's monitor. Doesn't change the PA." : "AUX 4 send. Spare on this board — it isn't patched to a wedge."} />
       </div>
 
       {walk('pan', <K value={ch.pan} onChange={(v) => set({ pan: v })} label={ch.stereo ? 'BAL' : 'PAN'} size={32} color="var(--ink)" detentAt={0.5}
@@ -2860,11 +2861,11 @@ function DigitalChannelEditor({ ch, idx, srcLabel, pflLevel, onChange, onPhantom
             <K value={ch.aux1} onChange={(v) => { set({ aux1: v }); insp('wedge'); }} label="WEDGE 1" size={32} color="var(--aux)"
               tip="How much of this channel goes to Wedge 1, the lead singer's monitor. Does not change the PA." />
             <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="WEDGE 2" size={32} color="var(--cool)"
-              tip="How much of this channel goes to Wedge 2, the second singer's monitor. Does not change the PA." />
+              tip={big16 ? 'How much of this channel goes to Wedge 2, the bass player\'s monitor. Does not change the PA.' : 'How much of this channel goes to Wedge 2, the second singer\'s monitor. Does not change the PA.'} />
             <K value={ch.aux3 || 0} onChange={(v) => { set({ aux3: v }); if (big16) insp('wedge3'); }} label={big16 ? 'WEDGE 3' : 'AUX 3'} size={32} color="var(--green)"
-              tip={big16 ? 'How much of this channel goes to Wedge 3, the bass player\'s monitor. Does not change the PA.' : 'AUX 3 send. Spare on this board — it isn\'t patched to a wedge.'} />
+              tip={big16 ? 'How much of this channel goes to Wedge 3, the keys player\'s monitor. Does not change the PA.' : 'AUX 3 send. Spare on this board — it isn\'t patched to a wedge.'} />
             <K value={ch.aux4 || 0} onChange={(v) => { set({ aux4: v }); if (big16) insp('wedge4'); }} label={big16 ? 'WEDGE 4' : 'AUX 4'} size={32} color="var(--amber)"
-              tip={big16 ? 'How much of this channel goes to Wedge 4, the keys player\'s monitor. Does not change the PA.' : 'AUX 4 send. Spare on this board — it isn\'t patched to a wedge.'} />
+              tip={big16 ? 'How much of this channel goes to Wedge 4, the drummer\'s monitor. Does not change the PA.' : 'AUX 4 send. Spare on this board — it isn\'t patched to a wedge.'} />
           </div>
         </div>
 
@@ -4607,15 +4608,15 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     vx2:   { top: 476, left: '46%' },              // Vocal 2 — centre
     vx3:   { top: 476, left: '66%' },              // Vocal 3 — stage-right
   } : {
-    // MX-8 stage plot (audience at the bottom). Two backline DIs upstage and the
-    // two singers downstage over their own wedge, spread wide across the deck.
-    // Bass upstage-right, keys upstage-left; Vocal 1 downstage-right (over
-    // Wedge 1), Vocal 2 downstage-left (over Wedge 2). Everything feeds the
+    // MX-8 stage plot (audience at the bottom, screen = FOH view). Two mirrored
+    // columns so the vocal channels read left-to-right from FOH: Vocal 1 on the
+    // LEFT with the bass rig behind it and Wedge 1 under it; Vocal 2 on the RIGHT
+    // with the keys rig behind it and Wedge 2 under it. Everything feeds the
     // stage box on the right edge.
-    laptop: { top: 44,  left: '18%', marginLeft: -(SRC_W / 2) },            // keys DI — upstage left
-    guitar: { top: 44,  left: '62%', marginLeft: -(SRC_W / 2) },            // bass DI — upstage right
-    vocal2: { top: 206, left: '26%', marginLeft: -(SRC_W / 2) },            // vocal 2 — downstage left, over Wedge 2
-    vocal:  { top: 206, left: '52%', marginLeft: -(SRC_W / 2) },            // vocal 1 — downstage right, over Wedge 1
+    guitar: { top: 44,  left: '24%', marginLeft: -(SRC_W / 2) },            // bass DI — upstage left, behind Vocal 1
+    laptop: { top: 44,  left: '58%', marginLeft: -(SRC_W / 2) },            // keys DI — upstage right, behind Vocal 2
+    vocal:  { top: 206, left: '28%', marginLeft: -(SRC_W / 2) },            // vocal 1 — downstage left, over Wedge 1
+    vocal2: { top: 206, left: '54%', marginLeft: -(SRC_W / 2) },            // vocal 2 — downstage right, over Wedge 2
   };
 
   return (
@@ -4657,7 +4658,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         </div>
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '26%' : '58%', transform: 'translateX(-50%)' }}>
+          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '26%' : '28%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 1" on={state.outputs.wedge.on} mute={state.outputs.wedge.mute} volume={state.outputs.wedge.volume} level={audio.outputs.wedge}
               onTogglePower={() => setOut('wedge', { on: !state.outputs.wedge.on })}
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
@@ -4670,7 +4671,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '46%' : '25%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '46%' : '54%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 2" accent="var(--cool)" on={state.outputs.wedge2.on} mute={state.outputs.wedge2.mute} volume={state.outputs.wedge2.volume} level={audio.outputs.wedge2}
               onTogglePower={() => setOut('wedge2', { on: !state.outputs.wedge2.on })}
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
@@ -8279,13 +8280,18 @@ function IoListPanel({ open, onClose, state }) {
   // each output still shows its home return channel — Main L on return 1, etc.
   const liveOutFan = s.outFan && Object.values(s.outFan).some(Boolean) ? s.outFan : (window.DEFAULT_OUT_FAN || {});
   const portFor = (busKey) => { const p = Object.keys(liveOutFan).find((pp) => liveOutFan[pp] === busKey); return p ? +p : null; };
+  // The MX-8 runs two wedges (Vocal 1, Vocal 2); the 16-ch board runs four,
+  // one per performer (Vocal 1, bass, keys, drummer). Only list the wedges the
+  // board actually has, with the right owner.
   const outputDefs = [
     { bus: 'mainL', label: 'Main L', to: 'The left PA speaker (the room)' },
     { bus: 'mainR', label: 'Main R', to: 'The right PA speaker (the room)' },
-    { bus: 'aux1', label: 'Aux 1', to: "Wedge 1 (the singer's monitor)" },
-    { bus: 'aux2', label: 'Aux 2', to: 'Wedge 2' },
-    { bus: 'aux3', label: 'Aux 3', to: 'Wedge 3' },
-    { bus: 'aux4', label: 'Aux 4', to: 'Wedge 4' },
+    { bus: 'aux1', label: 'Aux 1', to: "Wedge 1 (Vocal 1's monitor)" },
+    { bus: 'aux2', label: 'Aux 2', to: s.big16 ? "Wedge 2 (the bass player's monitor)" : "Wedge 2 (Vocal 2's monitor)" },
+    ...(s.big16 ? [
+      { bus: 'aux3', label: 'Aux 3', to: "Wedge 3 (the keys player's monitor)" },
+      { bus: 'aux4', label: 'Aux 4', to: "Wedge 4 (the drummer's monitor)" },
+    ] : []),
   ];
   return (
     <div onClick={onClose} style={{
