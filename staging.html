@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=96"></script>
+<script src="content-staging.js?v=97"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5670,10 +5670,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       const patch = state.outPatch || window.DEFAULT_OUT_PATCH;
       const outCables = OUT_SPEAKERS.map(({ spk, sref, name, rail }, idx) => {
         if (!sref.current) return null;
-        // W4 sits upstage by the drummer; connect its feed at the TOP so the
-        // cable runs off the BACK of the wedge and hugs the upstage edge to the
-        // box (a real drum-riser monitor feed), instead of dropping into the field.
-        const to = anchorPos(sref.current, spk === 'wedge4' ? 'top' : 'bottom');
+        // In the 16-ch band stage, W4 sits upstage by the drummer; connect its
+        // feed at the TOP so the cable runs off the BACK of the wedge and hugs
+        // the upstage edge to the box (a real drum-riser monitor feed). Other
+        // boards (the small MX-8 stage) keep the bottom connection.
+        const to = anchorPos(sref.current, (spk === 'wedge4' && state.big16) ? 'top' : 'bottom');
         const portId = patch[spk];
         // Returns leave the OUT jack on the box's LEFT face, then drop to the
         // front rail and run it to each speaker (see the router below).
@@ -5691,7 +5692,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         // Each return leaves the box face on its own perpendicular lead (spaced
         // per port) so they don't stack, then bends to the speaker.
         const lead = 12 + idx * 9;
-        return (from && to) ? { spk, name, from, to, color, rail, unplugged, portId, lead } : null;
+        return (from && to) ? { spk, name, from, to, color, rail, unplugged, portId, lead, big16: !!state.big16 } : null;
       }).filter(Boolean);
 
       // Two horizontal rails:
@@ -6239,18 +6240,22 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             ? window._cableCurve(portEnd, c.to)
             : (c.to.y > 480
                 ? `M ${c.from.x} ${c.from.y} L ${leadX} ${c.from.y} L ${leadX} ${railY} L ${c.to.x} ${railY} L ${c.to.x} ${c.to.y}`
-                // upstage wedge (W4, up by the drummer): don't cross the field —
-                // run the perimeter. Out of the box, LEFT along the OUT lane to a
-                // clear vertical corridor (the OH R / Acoustic gap), UP that
-                // corridor to the upstage (back) edge, then along the back edge
-                // and down into the wedge top. Keeps the middle of the stage clear.
-                : window._polyRound([
-                    c.from,
-                    { x: 1311, y: c.from.y },   // left to the OH R / Acoustic corridor
-                    { x: 1311, y: 86 },          // up the corridor to the upstage edge
-                    { x: c.to.x, y: 86 },        // along the back edge to the drummer's wedge
-                    c.to,                         // down into the wedge (top-connected)
-                  ], 8));
+                // upstage wedge, up by the drummer. In the 16-ch band stage (big16)
+                // don't cross the field — run the perimeter: out of the box, LEFT
+                // along the OUT lane to a clear vertical corridor (the OH R /
+                // Acoustic gap), UP that corridor to the upstage (back) edge, then
+                // along the back edge and down into the wedge top. The small MX-8
+                // stage has its own compact geometry, so it keeps the original
+                // out-and-across route.
+                : (c.big16
+                    ? window._polyRound([
+                        c.from,
+                        { x: 1311, y: c.from.y },   // left to the OH R / Acoustic corridor
+                        { x: 1311, y: 86 },          // up the corridor to the upstage edge
+                        { x: c.to.x, y: 86 },        // along the back edge to the drummer's wedge
+                        c.to,                         // down into the wedge (top-connected)
+                      ], 8)
+                    : window._polyRound([c.from, { x: c.from.x - 20, y: c.from.y }, { x: c.from.x - 20, y: 452 }, { x: c.to.x, y: 452 }, c.to], 8)));
           const live = !c.unplugged && !isDragged && retLive(c.portId);
           const hovered = hoverCable === 'out:' + c.spk;
           const color = hovered ? '#eae7e0' : '#7d7a72';
