@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=116"></script>
+<script src="content-staging.js?v=117"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5669,9 +5669,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         // face and fanning to its inputs. Tail colour = that snake's LOCAL channel
         // (the standard code), so it can differ from the box jack it lands on.
         const groups = {
-          up:   { out: ac(upHeadOutRef),   midX: fanX - 40, block: (o) => o.ch <= 6, list: [], size: 8 },
-          inst: { out: ac(instHeadOutRef), midX: fanX - 58, block: null,              list: [], size: 4 },
-          down: { out: ac(downHeadOutRef), midX: fanX - 76, block: null,              list: [], size: 4, edge: true },
+          up:   { out: ac(upHeadOutRef),   midX: fanX - 40,  block: (o) => o.ch <= 6, list: [], size: 8 },
+          // Backline pivots to its fan height WELL left of the box (and left of
+          // the vocal multicore's right-side riser) so it climbs to ch 7-10 before
+          // the vocal trunk climbs to ch 11-14 — the two arrive stacked and
+          // parallel at the box instead of running on top of each other.
+          inst: { out: ac(instHeadOutRef), midX: fanX - 175, block: null,             list: [], size: 4 },
+          down: { out: ac(downHeadOutRef), midX: fanX - 76,  block: null,             list: [], size: 4, edge: true },
         };
         // Conductor a source rides = the sub-snake input SLOT its mic is in
         // (state.micIn). Tail colour is that slot's colour; default is natural.
@@ -5871,8 +5875,14 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       // both the box exit AND the PA-R corner. Upstage wedges (W4, big16) route
       // the perimeter and keep their own lead.
       {
-        const front = outCables.filter(c => c.to && c.to.y > 480).sort((a, b) => b.to.x - a.to.x);
-        front.forEach((c, r) => { c.lead = 14 + r * 11; });
+        // Order the vertical lanes by OUT PORT (1..5 = PA L, PA R, W1, W2, W3),
+        // NOT by speaker position. The box OUT ports are stacked top-to-bottom,
+        // so a port-ordered lane set lets every cable drop straight into its own
+        // lane without crossing a neighbour right after leaving the box (PA R on
+        // port 2 no longer cuts across the wedge cables). Port 1 gets the widest
+        // lead so it sits leftmost; the runs cross only later, down at the floor.
+        const front = outCables.filter(c => c.to && c.to.y > 480).sort((a, b) => a.portId - b.portId);
+        front.forEach((c, r) => { c.lead = 14 + (front.length - 1 - r) * 11; });
       }
 
       // Two horizontal rails:
