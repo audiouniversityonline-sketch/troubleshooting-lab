@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=113"></script>
+<script src="content-staging.js?v=114"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4727,7 +4727,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 vocal mics drop down through that gap into it; its multicore runs
                 up and over to the main box on the LEFT of the stage, clear of
                 Wedge 4's return on the right. */}
-            <div data-zoomable data-zoom-key="vocal" style={{ position: 'absolute', top: 742, left: '36%', transform: 'translateX(-50%)' }}>
+            <div data-zoomable data-zoom-key="vocal" style={{ position: 'absolute', top: 760, left: '36%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="VOCAL SUB-SNAKE" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
@@ -5737,8 +5737,12 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           // left of the box, then run along the downstage floor lane to the
           // vocal sub-snake. Keeps the whole middle clear and lands the trunk
           // cleanly on the box (no diagonal, no gap).
+          // Curve up to the box BEFORE reaching PA R so the trunk never runs
+          // across the PA speaker; the short leg into the fan point rides well
+          // above it. Falls back to just-left-of-box if PA R isn't measured yet.
+          const paRx = (paRRef && paRRef.current) ? anchorPos(paRRef.current, 'center').x : (fanX - 46);
           const edgeRoute = (grp.edge && grp.out)
-            ? { riserX: fanX - 46, laneY: grp.out.y }
+            ? { riserX: Math.min(fanX - 46, paRx - 44), laneY: grp.out.y }
             : null;
           subSnakes.push({ from: grp.out, to: fp, endH: true, midX: grp.midX, overTopY: grp.overTopY, edgeRoute });
         }
