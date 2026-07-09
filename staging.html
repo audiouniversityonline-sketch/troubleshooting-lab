@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=126"></script>
+<script src="content-staging.js?v=127"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6646,17 +6646,18 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                         { x: c.to.x, y: 86 },        // along the back edge to the drummer's wedge
                         c.to,                         // down into the wedge (top-connected)
                       ], 8)
-                    // 8-ch returns (all bottom-connected): leave the OUT jack,
-                    // step left into the clear corridor between PA R and the box,
-                    // drop down to the floor rail BELOW every speaker, run the
-                    // floor to each speaker, and come straight UP into its bottom.
-                    // One comb along the downstage lip, no device crossed.
+                    // 8-ch returns (all bottom-connected): each leaves its OUT jack
+                    // and drops in its OWN parallel lane in the gap between PA R and
+                    // the box (ordered top-jack -> leftmost lane so the short
+                    // step-ins nest and never cross a neighbour's descent), then runs
+                    // the floor rail BELOW every speaker and comes UP into its bottom.
+                    // The lanes stay parallel and only meet at the downstage floor.
                     : window._polyRound([
                         c.from,
-                        { x: 763, y: c.from.y },                 // step left to the corridor beside the box
-                        { x: 763, y: 498 + c.portId * 3 },       // down to its own floor lane
-                        { x: c.to.x, y: 498 + c.portId * 3 },    // along the floor to the speaker
-                        c.to,                                     // up into the speaker bottom
+                        { x: 762 + c.portId * 8, y: c.from.y },              // step left to this return's own vertical lane
+                        { x: 762 + c.portId * 8, y: 498 + c.portId * 3 },    // straight down, parallel to its neighbours
+                        { x: c.to.x, y: 498 + c.portId * 3 },                // along the floor to the speaker
+                        c.to,                                                 // up into the speaker bottom
                       ], 8)));
           const live = !c.unplugged && !isDragged && retLive(c.portId);
           const hovered = hoverCable === 'out:' + c.spk;
