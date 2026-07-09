@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=102"></script>
+<script src="content-staging.js?v=103"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8895,7 +8895,9 @@ function App() {
     // listed ports, snake tails on their numbered channels, console outputs
     // into snake 1-6, speaker lines on their planned ports. A pro's patch
     // matches the paperwork (the Input List).
-    const patchOk = !level.requirePatch || state.big16 || (() => {
+    const patchOk = !level.requirePatch || (state.big16
+      ? (window.big16PatchOk ? window.big16PatchOk(state) : true)   // 16-ch: cables + mic inputs must match the input list
+      : (() => {
       const c = state.cables || {};
       const cablesOk = c.vocal === 1 && c.vocal2 === 2 && c.guitar === 3 && c.laptop === 4;
       const fo = state.fanOut || [1, 2, 3, 4];
@@ -8905,7 +8907,7 @@ function App() {
       const op = state.outPatch || window.DEFAULT_OUT_PATCH;
       const outOk = op.pa_l === 1 && op.pa_r === 2 && op.wedge === 3 && op.wedge2 === 4 && op.wedge3 === 5 && op.wedge4 === 6;
       return cablesOk && fanOutOk && outFanOk && outOk;
-    })();
+    })());
     const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk;
     // Mirror the live, truly-winnable state so the sign-off button can tell a
     // correct "system is healthy" call from a premature one.
@@ -10395,6 +10397,11 @@ function App() {
           { label: 'Console outputs into snake 1-6', pass: outFanOk },
           { label: 'Speaker lines on snake 1-6', pass: outOk },
         ];
+  } else if (level.requirePatch && state.big16) {
+    // 16-ch: one combined row — every mic in its listed input and every input
+    // on its listed channel. The visible miss is what a crosspatch / wrong-input
+    // fault reads as.
+    patchStatus = [{ label: 'Patched per the input list', pass: window.big16PatchOk ? window.big16PatchOk(state) : true }];
   }
 
   // Practice extra conditions (attached by the rolled fault) merge into the

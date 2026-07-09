@@ -739,6 +739,49 @@ function crosspatchBad(s) {
   return false;
 }
 
+// 16-channel patch correctness: a pro's patch matches the input list, so every
+// mic sits in its listed sub-snake input (micIn) AND every input lands on its
+// listed console channel (cables). Used both to gate the Practice win and to
+// show the "Patched per the input list" row, so a crosspatch / wrong-input /
+// unplugged fault can't hide even when the source stays audible on a wrong
+// channel. The correct mapping IS the natural default: channel = order in
+// BAND_KEYS, slot = order within the sub-snake.
+window.big16PatchOk = function (s) {
+  const keys = window.BAND_KEYS || [];
+  const SRC = window.SOURCES || {};
+  const cnt = {};
+  for (const k of keys) {
+    if ((s.cables[k] || 0) !== keys.indexOf(k) + 1) return false;
+    const sn = (SRC[k] || {}).snake;
+    if (!sn) continue;
+    cnt[sn] = (cnt[sn] || 0) + 1;
+    const naturalSlot = cnt[sn];
+    if (((s.micIn && s.micIn[k]) || naturalSlot) !== naturalSlot) return false;
+  }
+  return true;
+};
+// Reject a 16-ch crosspatch that overloads a channel (a source slammed onto a
+// much hotter channel reads as a distortion fault, not a crosspatch). Mirrors
+// the MX-8 crosspatchBad clip guard over the whole desk.
+function big16CrosspatchBad(s) {
+  const a = window.computeAudio ? window.computeAudio(s) : null;
+  if (a && a.chanInBaseline) {
+    for (let i = 0; i < a.chanInBaseline.length; i++) { if (a.chanInBaseline[i] > 6) return true; }
+  }
+  return false;
+}
+// Ensure micIn exists (natural slots) so a wrong-input fault has something to
+// swap even if the start state predates the micIn field.
+function ensureMicIn16(s) {
+  if (s.micIn) return s.micIn;
+  const keys = window.BAND_KEYS || [];
+  const SRC = window.SOURCES || {};
+  const cnt = {};
+  s.micIn = {};
+  for (const k of keys) { const sn = (SRC[k] || {}).snake; if (!sn) continue; cnt[sn] = (cnt[sn] || 0) + 1; s.micIn[k] = cnt[sn]; }
+  return s.micIn;
+}
+
 // The fault pool. Each entry is ONE thing that can go wrong, applied on top
 // of the bandUp() start state. `apply` places the fault with the seeded rng.
 // `par` is the move count of the systematic fix — inspecting and listening
@@ -862,6 +905,45 @@ window.PRACTICE_FAULTS = [
       const u = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = u; // undo, retry
     }
     const t = s.fanOut[2]; s.fanOut[2] = s.fanOut[3]; s.fanOut[3] = t;
+  } },
+  // 16-CHANNEL crosspatch faults — enabled by the band stage's patch UI.
+  // Stage-box version: two inputs land on each other's console channel (the
+  // mics stay in their inputs; the tails are swapped at the box). Fix at the
+  // box: drag a tail back onto its listed channel. Par 3 — patching a live
+  // channel pops, so the safe fix is master down -> swap -> master up.
+  { key: 'crosspatch-box-16', label: 'Crosspatch at the stage box', blurb: 'Two inputs are landing on each other\'s channel at the stage box.', par: 3, big16only: true, apply: (s, rng) => {
+    const keys = window.BAND_KEYS || [];
+    for (let tries = 0; tries < 24; tries++) {
+      const i = Math.floor(rng() * keys.length);
+      let j = Math.floor(rng() * (keys.length - 1)); if (j >= i) j += 1;
+      const a = keys[i], b = keys[j];
+      const t = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = t;
+      if (!big16CrosspatchBad(s)) return;
+      const u = s.cables[a]; s.cables[a] = s.cables[b]; s.cables[b] = u; // undo, retry
+    }
+  } },
+  // Mic in the wrong input: a mic is plugged into another input on the SAME
+  // sub-snake, so it comes up on that input's channel. The sub-snake slot shows
+  // the wrong instrument. Fix at the STAGE: drag the mic back to its listed
+  // input (that swaps both mics' inputs and channels back).
+  { key: 'mic-wrong-input-16', label: 'Mic in the wrong input', blurb: 'A mic is plugged into the wrong sub-snake input, so it comes up on the wrong channel.', par: 3, big16only: true, apply: (s, rng) => {
+    const keys = window.BAND_KEYS || [];
+    const SRC = window.SOURCES || {};
+    const bySnake = {};
+    for (const k of keys) { const sn = (SRC[k] || {}).snake; if (!sn) continue; (bySnake[sn] = bySnake[sn] || []).push(k); }
+    const snakes = Object.keys(bySnake).filter((sn) => bySnake[sn].length >= 2);
+    if (!snakes.length) return;
+    ensureMicIn16(s);
+    for (let tries = 0; tries < 24; tries++) {
+      const grp = bySnake[snakes[Math.floor(rng() * snakes.length)]];
+      const i = Math.floor(rng() * grp.length);
+      let j = Math.floor(rng() * (grp.length - 1)); if (j >= i) j += 1;
+      const a = grp[i], b = grp[j];
+      const ma = s.micIn[a], mb = s.micIn[b]; s.micIn[a] = mb; s.micIn[b] = ma;
+      const ca = s.cables[a], cb = s.cables[b]; s.cables[a] = cb; s.cables[b] = ca;
+      if (!big16CrosspatchBad(s)) return;
+      s.micIn[a] = ma; s.micIn[b] = mb; s.cables[a] = ca; s.cables[b] = cb; // undo, retry
+    }
   } },
 ];
 
@@ -1101,9 +1183,11 @@ window.PRACTICE = {
       // analog (or before it's set), these are skipped so a player is never
       // handed a fault they have no way to reach.
       if (f.digital && window.PRACTICE_SURFACE !== 'digital') continue;
-      // Crosspatch faults need the input-patch UI, which the 16-channel board
-      // does not have yet, so skip them there (they'd be unfixable).
+      // The MX-8 crosspatch faults use the 4-input model, so skip on the band;
+      // the band has its own crosspatch/wrong-input faults (big16only), which in
+      // turn only make sense on the 16-ch board with its stage patch UI.
       if (f.big8only && s.big16) continue;
+      if (f.big16only && !s.big16) continue;
       // "Practice what needs it" biases the draw toward the fault types the
       // member is rusty on (window.PRACTICE_FOCUS, set by the app from the
       // freshness ledger). Unset = an even draw across the pool.
