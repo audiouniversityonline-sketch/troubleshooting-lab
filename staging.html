@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=112"></script>
+<script src="content-staging.js?v=113"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5732,8 +5732,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           // column and the FOH/side-box cluster), then climbs that edge to the
           // box fan point. Keeps the whole middle of the stage clear — the real
           // upstage-path / downstage-path rule.
+          // Vocal multicore: leave the box fan point PERPENDICULAR (a short
+          // horizontal leg), drop straight down the stage-right corridor just
+          // left of the box, then run along the downstage floor lane to the
+          // vocal sub-snake. Keeps the whole middle clear and lands the trunk
+          // cleanly on the box (no diagonal, no gap).
           const edgeRoute = (grp.edge && grp.out)
-            ? { railY: grp.out.y + 42, riserX: fanX - 195 }
+            ? { riserX: fanX - 46, laneY: grp.out.y }
             : null;
           subSnakes.push({ from: grp.out, to: fp, endH: true, midX: grp.midX, overTopY: grp.overTopY, edgeRoute });
         }
@@ -5848,6 +5853,16 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         const lead = 12 + idx * 9;
         return (from && to) ? { spk, name, from, to, color, rail, unplugged, portId, lead, big16: !!state.big16 } : null;
       }).filter(Boolean);
+      // Front-of-house returns: order the rails by the SPEAKER's left-right
+      // position (rightmost peels up first, nearest the box). The cables then
+      // sort ONCE as they leave the stacked box ports and run PARALLEL to their
+      // speakers, so the front row crosses a single time instead of cascading at
+      // both the box exit AND the PA-R corner. Upstage wedges (W4, big16) route
+      // the perimeter and keep their own lead.
+      {
+        const front = outCables.filter(c => c.to && c.to.y > 480).sort((a, b) => b.to.x - a.to.x);
+        front.forEach((c, r) => { c.lead = 14 + r * 11; });
+      }
 
       // Two horizontal rails:
       //   backRailY  — for source cables. Sits ABOVE every source card so the
@@ -6371,11 +6386,10 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           // over the very top edge first (clears the drum box), then drops in.
           const d = s.edgeRoute
             ? window._polyRound([
-                { x: s.from.x, y: s.from.y },
-                { x: s.from.x, y: s.edgeRoute.railY },     // drop to the downstage floor lane
-                { x: s.edgeRoute.riserX, y: s.edgeRoute.railY }, // run the front edge to the stage-right corridor
-                { x: s.edgeRoute.riserX, y: s.to.y },      // climb the edge to fan height
-                { x: s.to.x, y: s.to.y },                  // short leg into the fan point
+                { x: s.from.x, y: s.edgeRoute.laneY },     // start at the sub-snake head (floor lane)
+                { x: s.edgeRoute.riserX, y: s.edgeRoute.laneY }, // run the downstage floor lane to the stage-right corridor
+                { x: s.edgeRoute.riserX, y: s.to.y },      // climb the corridor just left of the box to fan height
+                { x: s.to.x, y: s.to.y },                  // short PERPENDICULAR leg into the box fan point
               ], 8)
             : (s.overTopY != null
                 ? `M ${s.from.x} ${s.from.y} L ${s.from.x} ${s.overTopY} L ${s.midX} ${s.overTopY} L ${s.midX} ${s.to.y} L ${s.to.x} ${s.to.y}`
