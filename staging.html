@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=129"></script>
+<script src="content-staging.js?v=130"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -10659,14 +10659,14 @@ function App() {
     if (!zoomScale) return;
     const vp = fitViewportRef.current, dr = designRef.current;
     if (!vp || !dr) return;
-    const scaledW = zoomScale * dr.offsetWidth, scaledH = zoomScale * dr.offsetHeight;
+    const scaledW = zoomScale * dr.offsetWidth;
     const onMove = (e) => {
       const r = vp.getBoundingClientRect();
       const nx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-      const ny = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
       const txMin = Math.min(0, r.width - scaledW);   // 0 (no pan) when the content fits
-      const tyMin = Math.min(0, r.height - scaledH);
-      setZoom(z => (z ? { ...z, tx: nx * txMin, ty: ny * tyMin } : z));
+      // Horizontal only: the fan-out fills the height, so panning is side-to-side.
+      // Keep the vertical position the zoom set (centred on the fan-out).
+      setZoom(z => (z ? { ...z, tx: nx * txMin } : z));
     };
     vp.addEventListener('mousemove', onMove);
     return () => vp.removeEventListener('mousemove', onMove);
