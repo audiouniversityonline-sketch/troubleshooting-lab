@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=107"></script>
+<script src="content-staging.js?v=108"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4359,7 +4359,27 @@ function ZoneHeader({ label, sublabel, badge, accent, badgeColor }) {
   );
 }
 
-function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef, upHeadOutRef, instHeadOutRef, downHeadOutRef, sideInUpRef, sideInDownRef, subJackRefs, stageBoxChRefs, wedgeMargins, onOpenPlacement }) {
+// A little magnifier pinned to a zoomable region's corner. Clicking it zooms
+// the whole board in on that region (App folds the zoom into the fit transform).
+// Hidden while already zoomed — the FIT button is the way back out.
+function ZoomBtn({ onZoomTo, hidden }) {
+  if (hidden || !onZoomTo) return null;
+  return (
+    <div onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); const region = e.currentTarget.closest('[data-zoomable]'); if (region) onZoomTo(region); }}
+      className="ui-no-select" title="Zoom in"
+      style={{ position: 'absolute', top: -9, right: -9, zIndex: 8, width: 20, height: 20, borderRadius: '50%',
+        background: '#141417', border: '1px solid var(--accent)', color: 'var(--accent)', pointerEvents: 'auto',
+        display: 'grid', placeItems: 'center', cursor: 'zoom-in', boxShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="5" cy="5" r="3.2"/><line x1="7.4" y1="7.4" x2="10.6" y2="10.6"/>
+        <line x1="5" y1="3.5" x2="5" y2="6.5"/><line x1="3.5" y1="5" x2="6.5" y2="5"/>
+      </svg>
+    </div>
+  );
+}
+
+function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, snakeOutRef, outRefs, wedgeOnStageRef, wedge2OnStageRef, wedge3OnStageRef, wedge4OnStageRef, paLRef, paRRef, stageBoxRef, upHeadOutRef, instHeadOutRef, downHeadOutRef, sideInUpRef, sideInDownRef, subJackRefs, stageBoxChRefs, wedgeMargins, onOpenPlacement, onZoomTo, zoomActive }) {
   const topo = state.topology || {};
   const isPassive = topo.paRig === 'amp+passive';
   // In passive mode the cabinets are dumb — the external amp powers them, so a
@@ -4681,14 +4701,16 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 between the kit and the box: the drum mic cables run DOWN into
                 that lane, along it, then straight down into their channels —
                 no cable crosses a drum card. */}
-            <div style={{ position: 'absolute', top: 256, left: '50%', transform: 'translateX(-50%)' }}>
+            <div data-zoomable style={{ position: 'absolute', top: 256, left: '50%', transform: 'translateX(-50%)' }}>
+              <ZoomBtn onZoomTo={onZoomTo} hidden={zoomActive}/>
               <SubSnakeHead label="DRUM SUB-SNAKE" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
             </div>
             {/* Backline sub-snake — centred just downstage of the two sub-snake
                 boxes, with an open lane above it: the flanking bass, guitars and
                 keys drop DOWN off the backline row into that lane and in to their
                 channels. */}
-            <div style={{ position: 'absolute', top: 356, left: '46%', transform: 'translateX(-50%)' }}>
+            <div data-zoomable style={{ position: 'absolute', top: 356, left: '46%', transform: 'translateX(-50%)' }}>
+              <ZoomBtn onZoomTo={onZoomTo} hidden={zoomActive}/>
               <SubSnakeHead label="BACKLINE SUB-SNAKE" items={instItems} subJackRefs={subJackRefs} outRef={instHeadOutRef}/>
             </div>
             {/* Vocal sub-snake box — pushed downstage BELOW the wedge line, in
@@ -4697,14 +4719,16 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 vocal mics drop down through that gap into it; its multicore runs
                 up and over to the main box on the LEFT of the stage, clear of
                 Wedge 4's return on the right. */}
-            <div style={{ position: 'absolute', top: 780, left: '36%', transform: 'translateX(-50%)' }}>
+            <div data-zoomable style={{ position: 'absolute', top: 780, left: '36%', transform: 'translateX(-50%)' }}>
+              <ZoomBtn onZoomTo={onZoomTo} hidden={zoomActive}/>
               <SubSnakeHead label="VOCAL SUB-SNAKE" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
                 edge. The drum snake fans into IN 1-6 (+ the drummer's vocal
                 cross-patched to 14), the downstage snake into 7-13; the main
                 snake leaves the right edge for FOH. */}
-            <div ref={stageBoxRef} style={{ position: 'absolute', top: 196, right: 6 }}>
+            <div ref={stageBoxRef} data-zoomable style={{ position: 'absolute', top: 196, right: 6 }}>
+              <ZoomBtn onZoomTo={onZoomTo} hidden={zoomActive}/>
               <SideStageBox inChannels={inChannels} stageChRefs={stageBoxChRefs} outRefs={outRefs} snakeOutRef={snakeOutRef} retActive={retActive}/>
             </div>
           </>
@@ -5079,7 +5103,7 @@ function Stage16({ state, setState, audio }) {
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, stageHidden, stage16Open, briefBelow = false }) {
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, onZoomTo, zoomActive, stageHidden, stage16Open, briefBelow = false }) {
   // The stage's source list follows the board: the four MX-8 inputs, or the full
   // 14-input band on the big desk. This is what makes the cable system, the
   // stage box, and the fan-out draw every band input.
@@ -5991,7 +6015,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                   wedge3OnStageRef={wedge3OnStageRef} wedge4OnStageRef={wedge4OnStageRef}
                   paLRef={paLRef} paRRef={paRRef} stageBoxRef={stageBoxRef}
                   upHeadOutRef={upHeadOutRef} instHeadOutRef={instHeadOutRef} downHeadOutRef={downHeadOutRef} sideInUpRef={sideInUpRef} sideInDownRef={sideInDownRef} subJackRefs={subJackRefs} stageBoxChRefs={stageBoxChRefs}
-                  wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement}/>
+                  wedgeMargins={wedgeMargins} onOpenPlacement={onOpenPlacement} onZoomTo={onZoomTo} zoomActive={zoomActive}/>
               </div>
             )}
             {sidebarContent}
@@ -10308,6 +10332,12 @@ function App() {
   const fitViewportRef = uR(null);
   const designRef = uR(null);
   const [designH, setDesignH] = uS(760);
+  // Click-to-zoom (legibility on big monitors): null = fit-to-screen (normal),
+  // else { scale, tx, ty } — a bigger scale plus a translate that centres the
+  // clicked region in the viewport. The zoom is folded into the SAME transform
+  // the fit uses and the combined scale is passed down as fitScale, so the cable
+  // overlay (which divides screen deltas by fitScale) stays pixel-accurate.
+  const [zoom, setZoom] = uS(null);
   // Hiding the stage narrows the canvas to the console, so fit-to-screen scales
   // it up. Height still measured live (designH), width switches with the pref.
   // Guided lessons and the walkthrough teach ON the stage (patching, power-up,
@@ -10345,6 +10375,37 @@ function App() {
   const baseW = briefBelow ? DESIGN_W_CONSOLE_ONLY : (effStageHidden ? DESIGN_W_STAGE_HIDDEN : DESIGN_W);
   const designW = baseW + stripsOver * STRIP_UNIT;
   const fitScale = useFitScale(fitViewportRef, designW, designH, !isMobile);
+  // Effective scale = the zoom scale when zoomed in, the fit scale otherwise.
+  const appliedScale = zoom ? zoom.scale : fitScale;
+  // Zoom INTO a region: measure its centre in the design canvas's own unscaled
+  // coordinates (offset chain up to designRef, transform-independent), then pick
+  // a scale ~2.2x the current fit (capped at 3) and a translate that lands that
+  // centre at the viewport middle. translate-before-scale about origin 0 0 gives
+  // screen(p) = translate + scale*p, so tx = W/2 - s*cx, ty = H/2 - s*cy.
+  const onZoomTo = React.useCallback((el) => {
+    const vp = fitViewportRef.current, dr = designRef.current;
+    if (!vp || !dr || !el) return;
+    const drRect = dr.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    // Current rendered scale, read straight from the DOM (robust to any child
+    // transforms like the sub-snakes' translateX(-50%)). The region centre in
+    // the design canvas's unscaled coordinates then follows directly.
+    const curScale = (drRect.width / designW) || 1;
+    const cx = (elRect.left + elRect.width / 2 - drRect.left) / curScale;
+    const cy = (elRect.top + elRect.height / 2 - drRect.top) / curScale;
+    const s = Math.min(3, (fitScale || 1) * 2.2);
+    setZoom({ scale: s, tx: vp.clientWidth / 2 - s * cx, ty: vp.clientHeight / 2 - s * cy });
+  }, [fitScale, designW]);
+  const onZoomReset = React.useCallback(() => setZoom(null), []);
+  // Drop the zoom whenever the view, level, or board changes, and on Escape, so
+  // a stale pan/scale never lingers over a screen it wasn't computed for.
+  React.useEffect(() => { setZoom(null); }, [stage16Open, levelIdx, state.big16, effStageHidden]);
+  React.useEffect(() => {
+    if (!zoom) return;
+    const onKey = (e) => { if (e.key === 'Escape') setZoom(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [!!zoom]);
 
   // Keep the rendered channel count in step with the selected desk size. Padding
   // only ever adds or removes UNUSED strips (real channels are untouched), so
@@ -10680,11 +10741,15 @@ function App() {
           never overlap regardless of window size; we only ever change the zoom.
           overflow:hidden because scaling guarantees fit (no stray scrollbars). */}
       <div ref={fitViewportRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
-        <window.FitScaleContext.Provider value={fitScale}>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            <div ref={designRef} style={{ width: designW, flexShrink: 0, transform: `scale(${fitScale})`, transformOrigin: 'center center' }}>
+        <window.FitScaleContext.Provider value={appliedScale}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: zoom ? 'flex-start' : 'center', justifyContent: zoom ? 'flex-start' : 'center', overflow: 'hidden' }}>
+            <div ref={designRef} style={{ width: designW, flexShrink: 0,
+                 transform: zoom ? `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.scale})` : `scale(${fitScale})`,
+                 transformOrigin: zoom ? '0 0' : 'center center',
+                 transition: 'transform 0.28s ease' }}>
               <window.Chain
-                state={state} setState={setState} audio={audio} fitScale={fitScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
+                state={state} setState={setState} audio={audio} fitScale={appliedScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
+                onZoomTo={onZoomTo} zoomActive={!!zoom}
                 surface={(level.isWalkthrough || level.isLesson || state.big16) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital && !state.big16}
                 surfaceLocked={level.isWalkthrough || level.isLesson || !!state.big16} stageHidden={effStageHidden} stage16Open={stage16Open} briefBelow={briefBelow}
                 sidebarContent={
@@ -10727,6 +10792,18 @@ function App() {
             </div>
           </div>
         </window.FitScaleContext.Provider>
+        {/* Zoom-out control — sits OUTSIDE the scaled canvas so it stays pinned
+            at a fixed size while the board underneath is magnified. */}
+        {zoom && (
+          <button onClick={onZoomReset} className="mono ui-no-select" title="Zoom back out (Esc)"
+            style={{ position: 'absolute', top: 10, right: 12, zIndex: 30,
+              padding: '6px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 1,
+              color: '#0a0a0c', background: 'var(--accent)', border: 'none', borderRadius: 5,
+              boxShadow: '0 2px 10px rgba(0,0,0,0.55)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 12, lineHeight: 1 }}>⤢</span> FIT
+          </button>
+        )}
       </div>
 
       {/* Audience SPL bar lives in its own row at the bottom of the app, OUTSIDE
