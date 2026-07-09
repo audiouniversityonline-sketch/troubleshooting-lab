@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=94"></script>
+<script src="content-staging.js?v=95"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5547,7 +5547,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         const groups = {
           up:   { out: ac(upHeadOutRef),   midX: fanX - 40, block: (o) => o.ch <= 6, list: [], size: 8 },
           inst: { out: ac(instHeadOutRef), midX: fanX - 58, block: null,              list: [], size: 4 },
-          down: { out: ac(downHeadOutRef), midX: fanX - 76, block: null,              list: [], size: 4, overTopY: 430 },
+          down: { out: ac(downHeadOutRef), midX: fanX - 76, block: null,              list: [], size: 4, edge: true },
         };
         const localIdx = {};
         for (const g of ['up', 'inst', 'down']) { let i = 0; for (const k of sourceKeys) if (window.SOURCES[k] && window.SOURCES[k].snake === g) localIdx[k] = ++i; }
@@ -5577,7 +5577,17 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           for (let e = 0; e < empties; e++) {
             patchTails.push({ fromX: fp.x, fromY: fp.y, x: fp.x - 12, y: maxY + 16 + e * 11, color: codeCol(grp.list.length + e + 1), dangling: true, srcKey: g + '-x' + e });
           }
-          subSnakes.push({ from: grp.out, to: fp, endH: true, midX: grp.midX, overTopY: grp.overTopY });
+          // Vocal (downstage) multicore hugs the PERIMETER instead of cutting up
+          // through the open centre of the stage: it drops to a downstage floor
+          // lane (below every wedge + return), runs along the front edge to a
+          // clear corridor on the far stage-right (between the last performer
+          // column and the FOH/side-box cluster), then climbs that edge to the
+          // box fan point. Keeps the whole middle of the stage clear — the real
+          // upstage-path / downstage-path rule.
+          const edgeRoute = (grp.edge && grp.out)
+            ? { railY: grp.out.y + 42, riserX: fanX - 195 }
+            : null;
+          subSnakes.push({ from: grp.out, to: fp, endH: true, midX: grp.midX, overTopY: grp.overTopY, edgeRoute });
         }
       }
 
@@ -6029,9 +6039,17 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           // jack stack) — midX sits just left of the fan point so the fan tails
           // continue rightward into the jacks. A trunk with overTopY runs up and
           // over the very top edge first (clears the drum box), then drops in.
-          const d = s.overTopY != null
-            ? `M ${s.from.x} ${s.from.y} L ${s.from.x} ${s.overTopY} L ${s.midX} ${s.overTopY} L ${s.midX} ${s.to.y} L ${s.to.x} ${s.to.y}`
-            : window._cornerHV(s.from, s.to, s.midX != null ? s.midX : s.to.x);
+          const d = s.edgeRoute
+            ? window._polyRound([
+                { x: s.from.x, y: s.from.y },
+                { x: s.from.x, y: s.edgeRoute.railY },     // drop to the downstage floor lane
+                { x: s.edgeRoute.riserX, y: s.edgeRoute.railY }, // run the front edge to the stage-right corridor
+                { x: s.edgeRoute.riserX, y: s.to.y },      // climb the edge to fan height
+                { x: s.to.x, y: s.to.y },                  // short leg into the fan point
+              ], 8)
+            : (s.overTopY != null
+                ? `M ${s.from.x} ${s.from.y} L ${s.from.x} ${s.overTopY} L ${s.midX} ${s.overTopY} L ${s.midX} ${s.to.y} L ${s.to.x} ${s.to.y}`
+                : window._cornerHV(s.from, s.to, s.midX != null ? s.midX : s.to.x));
           return (
             <g key={'subsnake-' + i}>
               <path d={d} stroke="#1a1a1d" strokeWidth="9" fill="none" opacity="0.95" strokeLinecap="round" strokeLinejoin="round"/>
