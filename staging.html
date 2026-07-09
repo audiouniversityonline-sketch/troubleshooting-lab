@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=122"></script>
+<script src="content-staging.js?v=123"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4164,6 +4164,48 @@ function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive, nPor
   );
 }
 
+// The MX-8 stage box as a VERTICAL rack on the stage-right edge — the same
+// shape and signal-flow read as the 16-channel SideStageBox, sized for the
+// four native inputs. The four IN jacks stack at the top (each registers
+// portRefs[p] so the source→port cable draws and can be dragged), the eight
+// return jacks stack below, and the main snake leaves the right edge for FOH.
+// Jacks live on the LEFT face so every source cable plugs in from the stage
+// side and every return leaves toward the speakers.
+function NativeSnakeBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive }) {
+  const outs = [1, 2, 3, 4, 5, 6, 7, 8].map(ch => ({ key: ch, color: (window.SNAKE_COLORS || [])[(ch - 1) % 8] || '#4a4a52', active: !!(retActive && retActive[ch]) }));
+  const jack = (color, flowing, dotColor) => (
+    <div style={{ width: 11, height: 11, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + color, display: 'grid', placeItems: 'center', boxShadow: flowing ? `0 0 4px ${dotColor}` : 'inset 0 0 2px #000', flex: '0 0 auto' }}>
+      <div style={{ width: 3, height: 3, borderRadius: '50%', background: dotColor }}/>
+    </div>
+  );
+  return (
+    <div className="ui-no-select" style={{ background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)', border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 7px 6px', position: 'relative', width: 80, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)' }}>
+      <div className="mono" style={{ fontSize: 6.5, color: 'var(--cool)', letterSpacing: 0.8, fontWeight: 700, textAlign: 'center' }}>STAGE BOX</div>
+      <div className="mono" style={{ fontSize: 5, color: 'var(--ink-3)', fontWeight: 700, letterSpacing: 0.3, marginTop: 2, marginBottom: 1 }}>IN → FOH</div>
+      {[1, 2, 3, 4].map(p => {
+        const active = (activePorts || []).find(a => a.port === p);
+        const flowing = active && active.flowing;
+        const chColor = (window.SNAKE_COLORS || [])[(p - 1) % 8] || '#38383e';
+        return (
+          <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 3, height: 13 }}>
+            <div ref={el => portRefs.current[p] = el} style={{ flex: '0 0 auto' }}>{jack(chColor, flowing, active ? active.color : '#222')}</div>
+            <div className="mono" style={{ fontSize: 6.5, color: '#e9e6df', fontWeight: 700, width: 9, textAlign: 'right' }}>{p}</div>
+          </div>
+        );
+      })}
+      <div style={{ height: 1, background: '#38383e', margin: '4px 0 3px' }}/>
+      <div className="mono" style={{ fontSize: 5, color: 'var(--ink-3)', fontWeight: 700, letterSpacing: 0.3, marginBottom: 1 }}>OUT · returns</div>
+      {outs.map(o => (
+        <div key={o.key} style={{ display: 'flex', alignItems: 'center', gap: 3, height: 13 }}>
+          <div ref={el => outRefs.current[o.key] = el} style={{ flex: '0 0 auto' }}>{jack(o.color, o.active, o.active ? o.color : o.color)}</div>
+          <div className="mono" style={{ fontSize: 6.5, color: '#e9e6df', fontWeight: 700, width: 9, textAlign: 'right' }}>{o.key}</div>
+        </div>
+      ))}
+      <div ref={snakeOutRef} style={{ position: 'absolute', right: -2, top: '42%', width: 8, height: 8, pointerEvents: 'none' }}/>
+    </div>
+  );
+}
+
 // One sub-snake head on the 16-channel stage: a small box that its group's
 // inputs plug into (each port registers portRefs[port] so the source→port cable
 // still draws), with an out anchor on the right for the sub-snake bundle that
@@ -4559,10 +4601,14 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     vx2:   { top: 476, left: '46%' },              // Vocal 2 — centre
     vx3:   { top: 476, left: '66%' },              // Vocal 3 — stage-right
   } : {
-    vocal:  { top: 180, left: '31%', marginLeft: -(SRC_W / 2) },            // vocal 1 — directly above Wedge 1, on the first third
-    vocal2: { top: 180, left: '55%', marginLeft: -(SRC_W / 2) },            // vocal 2 — directly above Wedge 2, on the second third
-    guitar: { top: 50,  left: '14%', marginLeft: -(SRC_W / 2) },            // bass DI — upstage left (mirror of Keys)
-    laptop: { top: 50,  left: '72%', marginLeft: -(SRC_W / 2) },            // keys DI — upstage right
+    // MX-8 stage plot (audience at the bottom). Backline DIs upstage, the two
+    // singers mid-stage each over their own wedge, everything feeding the
+    // stage box on the right edge. Signal reads left-to-right into the snake
+    // head and top-to-bottom down to the monitors and mains.
+    guitar: { top: 44,  left: '16%', marginLeft: -(SRC_W / 2) },            // bass DI — upstage left
+    laptop: { top: 44,  left: '44%', marginLeft: -(SRC_W / 2) },            // keys DI — upstage centre
+    vocal:  { top: 182, left: '19%', marginLeft: -(SRC_W / 2) },            // vocal 1 — mid-stage over Wedge 1
+    vocal2: { top: 182, left: '38%', marginLeft: -(SRC_W / 2) },            // vocal 2 — mid-stage over Wedge 2
   };
 
   return (
@@ -4592,7 +4638,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         {/* Downstage row — PA L, Wedge 1, Wedge 2, PA R, evenly spaced along
             the front of the stage. Each one's cable comes out of its bottom
             edge and runs along the front rail back to the stage box. */}
-        <div ref={paLRef} data-walk="out-pa-l" style={{ position: 'absolute', bottom: big16 ? 48 : 80, left: big16 ? '11%' : '8%', transform: 'translateX(-50%)' }}>
+        <div ref={paLRef} data-walk="out-pa-l" style={{ position: 'absolute', bottom: big16 ? 48 : 40, left: big16 ? '11%' : '7%', transform: 'translateX(-50%)' }}>
           <PASpeaker side="L" showPower={!isPassive}
             on={isPassive ? paShowsOn : state.outputs.pa_l.on} mute={state.outputs.pa_l.mute} volume={state.outputs.pa_l.volume} level={audio.outputs.pa_l}
             signalArriving={(audio.speakerInput?.pa_l || 0) > 0.04}
@@ -4604,7 +4650,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         </div>
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '26%' : '31%', transform: 'translateX(-50%)' }}>
+          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '26%' : '19%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 1" on={state.outputs.wedge.on} mute={state.outputs.wedge.mute} volume={state.outputs.wedge.volume} level={audio.outputs.wedge}
               onTogglePower={() => setOut('wedge', { on: !state.outputs.wedge.on })}
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
@@ -4617,7 +4663,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '46%' : '55%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '46%' : '38%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 2" accent="var(--cool)" on={state.outputs.wedge2.on} mute={state.outputs.wedge2.mute} volume={state.outputs.wedge2.volume} level={audio.outputs.wedge2}
               onTogglePower={() => setOut('wedge2', { on: !state.outputs.wedge2.on })}
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
@@ -4632,7 +4678,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         {/* Wedge 3 sits downstage in front of Vocal 3 (1-2-3 left to right);
             Wedge 4 sits up by the kit next to the drummer (Vocal 4). */}
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', ...(big16 ? { bottom: 96, left: '66%' } : { top: 132, left: '14%' }), transform: 'translateX(-50%)' }}>
+          <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', ...(big16 ? { bottom: 96, left: '66%' } : { bottom: 96, left: '54%' }), transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 3" accent="var(--green)" on={state.outputs.wedge3.on} mute={state.outputs.wedge3.mute} volume={state.outputs.wedge3.volume} level={audio.outputs.wedge3}
               onTogglePower={() => setOut('wedge3', { on: !state.outputs.wedge3.on })}
               onToggleMute={() => setOut('wedge3', { mute: !state.outputs.wedge3.mute })}
@@ -4645,7 +4691,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', ...(big16 ? { top: 44, left: '60%' } : { top: 132, left: '72%' }), transform: 'translateX(-50%)' }}>
+          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', ...(big16 ? { top: 44, left: '60%' } : { bottom: 96, left: '68%' }), transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 4" accent="var(--amber)" on={state.outputs.wedge4.on} mute={state.outputs.wedge4.mute} volume={state.outputs.wedge4.volume} level={audio.outputs.wedge4}
               onTogglePower={() => setOut('wedge4', { on: !state.outputs.wedge4.on })}
               onToggleMute={() => setOut('wedge4', { mute: !state.outputs.wedge4.mute })}
@@ -4657,7 +4703,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
           </div>
         )}
 
-        <div ref={paRRef} data-walk="out-pa-r" style={{ position: 'absolute', bottom: big16 ? 48 : 80, left: big16 ? '89%' : '70%', transform: 'translateX(-50%)' }}>
+        <div ref={paRRef} data-walk="out-pa-r" style={{ position: 'absolute', bottom: big16 ? 48 : 40, left: big16 ? '89%' : '84%', transform: 'translateX(-50%)' }}>
           <PASpeaker side="R" showPower={!isPassive}
             on={isPassive ? paShowsOn : state.outputs.pa_r.on} mute={state.outputs.pa_r.mute} volume={state.outputs.pa_r.volume} level={audio.outputs.pa_r}
             signalArriving={(audio.speakerInput?.pa_r || 0) > 0.04}
@@ -4776,12 +4822,11 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             </div>
           </>
         ) : (
-          <div ref={stageBoxRef} style={{ position: 'absolute', top: 130, right: 8 }}>
-            <StageBox
+          <div ref={stageBoxRef} data-zoomable data-zoom-key="stagebox" style={{ position: 'absolute', top: 150, right: 6 }}>
+            <NativeSnakeBox
               portRefs={portRefs}
               outRefs={outRefs}
               activePorts={activePorts}
-              nPorts={nPorts}
               snakeOutRef={snakeOutRef}
               /* Out-port LEDs reflect what's riding each snake return channel
                  (pre-speaker): the desk output patched to that channel at FOH
@@ -5659,16 +5704,21 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             : jc.y - 181 + li * 11;                                // vocal lanes: a clean band well ABOVE the wedge tops, 11px pitch so the 3 conductors read as separate cables with air around them
           return { src: k, from, to: jc, port, unplugged: !(port >= 1), xlr: true, midY };
         }
-        const from = anchorPos(src, 'top');
+        // MX-8 vertical stage box: DIs sit upstage so their cable leaves the
+        // BOTTOM and drops into the gather trunk; the vocal mics sit downstage of
+        // the trunk so theirs leaves the TOP and rises to it. The trunk runs
+        // right into the box's left-face IN jack.
+        const isDI = window.SOURCES[k] && window.SOURCES[k].kind === 'di';
+        const from = anchorPos(src, isDI ? 'bottom' : 'top');
         const portEl = port >= 1 ? portRefs.current[port] : null;
-        let to = portTopAnchor(portEl);
+        let to = portEl ? anchorPos(portEl, 'left') : null;
         let unplugged = false;
         if (!to && sbRect) {
           unplugged = true;
           const idx = sourceKeys.indexOf(k);
           to = {
-            x: (sbRect.left - cb.left) / S + 14 + idx * 44,
-            y: (sbRect.top  - cb.top) / S - 24 - (idx % 2) * 18,
+            x: (sbRect.left - cb.left) / S - 12,
+            y: (sbRect.top  - cb.top) / S + 26 + idx * 15,
           };
         }
         return { src: k, from, to, port, unplugged };
@@ -5884,12 +5934,10 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         // 8-ch: the stage box sits ABOVE the front speakers, so their returns run
         // out along a rail from the box and drop DOWN into the speaker TOP. The
         // 16-ch W4 already top-connects; everything else bottom-connects.
-        // Native (MX-8): front speakers (PA L/R, W1/W2) connect at the BOTTOM so
-        // their returns come up off the floor rail; the two upstage wedges (W3/W4)
-        // connect at the TOP and hug the upstage edge back to the box. 16-ch keeps
-        // its own rule (only W4 top-connects, by the drum riser).
-        const nativeUp = !state.big16 && (spk === 'wedge3' || spk === 'wedge4');
-        const to = anchorPos(sref.current, ((spk === 'wedge4' && state.big16) || nativeUp) ? 'top' : 'bottom');
+        // Native (MX-8): every speaker sits in the downstage row, so all returns
+        // connect at the BOTTOM and come up off the floor rail. 16-ch keeps its
+        // own rule (only W4 top-connects, up by the drum riser).
+        const to = anchorPos(sref.current, (spk === 'wedge4' && state.big16) ? 'top' : 'bottom');
         const portId = patch[spk];
         // Returns leave the OUT jack on the box's LEFT face, then drop to the
         // front rail and run it to each speaker (see the router below).
@@ -6334,6 +6382,12 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             // path (the cable is in the engineer's hand, not on the rail).
             const portEnd = isDragged ? dragState.cursor : c.to;
             const micEnd = isMicDrag ? dragState.cursor : c.to;
+            // MX-8 inputs gather into a horizontal trunk in the clear band between
+            // the DI row and the vocal mics, run right to the stage box, and fan
+            // into the IN jack on its left face. Each cable rides its own lane
+            // (port-ordered, a few px apart) so they read as a parallel loom.
+            const nativeInput = !state.big16 && !c.xlr && !c.drumPts;
+            const laneY = 210 + ((c.port || 1) - 1) * 5;
             // A cable in the engineer's hand shows the loose curve; once patched it
             // snaps to a clean right-angle run (a shared rail), like the outputs.
             const d = isDragged
@@ -6342,7 +6396,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                   ? window._cableCurve(c.from, micEnd)       // mic in hand: source card → cursor
                   : (c.drumPts
                       ? window._polyRound(c.drumPts, 6)          // down into the lane, along it, straight down into the jack
-                      : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY)));
+                      : (nativeInput
+                          ? window._polyRound([c.from, { x: c.from.x, y: laneY }, { x: c.to.x, y: laneY }, c.to], 8)
+                          : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY))));
             const opacity = someOtherDragged ? 0.18 : (hovered ? 1 : 0.95);
             // No "unplugged" badge: the loose cable dangling from the source
             // is enough to read that it needs patching.
@@ -6576,25 +6632,18 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                         { x: c.to.x, y: 86 },        // along the back edge to the drummer's wedge
                         c.to,                         // down into the wedge (top-connected)
                       ], 8)
-                    : (c.to.y > 250
-                        // 8-ch FRONT returns (bottom-connected): leave the box,
-                        // drop down the clear right-side corridor (just right of
-                        // Wedge 4, clear now PA R sits at 70%), run the floor rail
-                        // BELOW every speaker, then come straight UP into each
-                        // speaker's bottom. The runs only stack on the floor, never
-                        // crossing a device — one comb along the downstage lip.
-                        ? window._polyRound([
-                            c.from,
-                            { x: 700 + c.portId * 2, y: c.from.y },              // to the right-side descent corridor
-                            { x: 700 + c.portId * 2, y: 464 + c.portId * 3 },    // down to its floor lane (below every speaker)
-                            { x: c.to.x, y: 464 + c.portId * 3 },                // along the floor to the speaker
-                            c.to,                                                 // up into the speaker bottom
-                          ], 8)
-                        // 8-ch UPSTAGE wedges (W3/W4, top-connected): hug the
-                        // upstage edge — up out of the box into the clear lane
-                        // between the DI row and the wedge tops, along it to the
-                        // wedge, then straight down into the wedge top.
-                        : window._polyRound([c.from, { x: c.from.x, y: c.spk === 'wedge3' ? 178 : 184 }, { x: c.to.x, y: c.spk === 'wedge3' ? 178 : 184 }, c.to], 8))));
+                    // 8-ch returns (all bottom-connected): leave the OUT jack,
+                    // step left into the clear corridor between PA R and the box,
+                    // drop down to the floor rail BELOW every speaker, run the
+                    // floor to each speaker, and come straight UP into its bottom.
+                    // One comb along the downstage lip, no device crossed.
+                    : window._polyRound([
+                        c.from,
+                        { x: 763, y: c.from.y },                 // step left to the corridor beside the box
+                        { x: 763, y: 498 + c.portId * 3 },       // down to its own floor lane
+                        { x: c.to.x, y: 498 + c.portId * 3 },    // along the floor to the speaker
+                        c.to,                                     // up into the speaker bottom
+                      ], 8)));
           const live = !c.unplugged && !isDragged && retLive(c.portId);
           const hovered = hoverCable === 'out:' + c.spk;
           const color = hovered ? '#eae7e0' : '#7d7a72';
