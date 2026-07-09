@@ -758,6 +758,12 @@ window.big16PatchOk = function (s) {
     const naturalSlot = cnt[sn];
     if (((s.micIn && s.micIn[k]) || naturalSlot) !== naturalSlot) return false;
   }
+  // FOH fan-out must be 1:1 too: snake channel i lands on console channel i. A
+  // crosspatch at the console fan-out (fanOut non-identity) keeps every source
+  // audible but on the wrong channel, so check it here or it would hide behind
+  // a passing signal-flow win. Missing fanOut reads as identity (legacy states).
+  const fan = s.fanOut || [];
+  for (let i = 0; i < keys.length; i++) { if ((fan[i] || i + 1) !== i + 1) return false; }
   return true;
 };
 // Reject a 16-ch crosspatch that overloads a channel (a source slammed onto a
@@ -943,6 +949,23 @@ window.PRACTICE_FAULTS = [
       const ca = s.cables[a], cb = s.cables[b]; s.cables[a] = cb; s.cables[b] = ca;
       if (!big16CrosspatchBad(s)) return;
       s.micIn[a] = ma; s.micIn[b] = mb; s.cables[a] = ca; s.cables[b] = cb; // undo, retry
+    }
+  } },
+  // Crossed at the CONSOLE fan-out: two snake tails land on each other's channel
+  // at FOH (the fan-out map, not the stage box). Both sources stay audible but on
+  // swapped channels; the console INPUT chip shows the port/CH mismatch and the
+  // fan-out tails cross on the MIXER view. Fix at the CONSOLE (drag a fan-out
+  // tail back), not the stage box — that's the distinct skill from the stage-box
+  // crosspatch. Par 3: patching a live channel pops, so master down first.
+  { key: 'crosspatch-fanout-16', label: 'Crossed at the console fan-out', blurb: 'Two snake tails are landing on each other\'s channel at the console fan-out.', par: 3, big16only: true, apply: (s, rng) => {
+    if (!s.fanOut || !s.fanOut.length) return;
+    const n = s.fanOut.length;
+    for (let tries = 0; tries < 24; tries++) {
+      const i = Math.floor(rng() * n);
+      let j = Math.floor(rng() * (n - 1)); if (j >= i) j += 1;
+      const t = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = t;
+      if (!big16CrosspatchBad(s)) return;
+      const u = s.fanOut[i]; s.fanOut[i] = s.fanOut[j]; s.fanOut[j] = u; // undo, retry
     }
   } },
 ];
