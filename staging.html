@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=91"></script>
+<script src="content-staging.js?v=92"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4475,10 +4475,11 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     egtr:  { top: 150, left: '24%' },              // electric gtr, left of the kit
     agtr:  { top: 150, left: '76%' },              // acoustic gtr, right of the kit
     keys:  { top: 150, left: '88%' },              // keys rig, far stage-right
-    // The three singers across the downstage line, over the vocal sub-snake.
-    vx2:   { top: 476, left: '26%' },              // Vocal 2 (bassist)
-    vx1:   { top: 476, left: '46%' },              // Vocal 1 (guitarist, lead)
-    vx3:   { top: 476, left: '66%' },              // Vocal 3 (keys player)
+    // The three singers across the downstage line, numbered 1-2-3 left to right
+    // so each lines up over its own wedge below.
+    vx1:   { top: 476, left: '26%' },              // Vocal 1 — stage-left
+    vx2:   { top: 476, left: '46%' },              // Vocal 2 — centre
+    vx3:   { top: 476, left: '66%' },              // Vocal 3 — stage-right
   } : {
     vocal:  { top: 180, left: '31%', marginLeft: -(SRC_W / 2) },            // vocal 1 — directly above Wedge 1, on the first third
     vocal2: { top: 180, left: '55%', marginLeft: -(SRC_W / 2) },            // vocal 2 — directly above Wedge 2, on the second third
@@ -4511,7 +4512,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         </div>
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '46%' : '31%', transform: 'translateX(-50%)' }}>
+          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '26%' : '31%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 1" on={state.outputs.wedge.on} mute={state.outputs.wedge.mute} volume={state.outputs.wedge.volume} level={audio.outputs.wedge}
               onTogglePower={() => setOut('wedge', { on: !state.outputs.wedge.on })}
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
@@ -4524,7 +4525,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '26%' : '55%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '46%' : '55%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 2" accent="var(--cool)" on={state.outputs.wedge2.on} mute={state.outputs.wedge2.mute} volume={state.outputs.wedge2.volume} level={audio.outputs.wedge2}
               onTogglePower={() => setOut('wedge2', { on: !state.outputs.wedge2.on })}
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
@@ -4536,8 +4537,8 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
           </div>
         )}
 
-        {/* Wedge 3 + 4 sit upstage at the bass and keys players' feet, in front
-            of each instrument (bass upstage-left, keys upstage-right). */}
+        {/* Wedge 3 sits downstage in front of Vocal 3 (1-2-3 left to right);
+            Wedge 4 sits up by the kit next to the drummer (Vocal 4). */}
         {topo.wedgeLocation === 'stage' && (
           <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', ...(big16 ? { bottom: 96, left: '66%' } : { top: 132, left: '14%' }), transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 3" accent="var(--green)" on={state.outputs.wedge3.on} mute={state.outputs.wedge3.mute} volume={state.outputs.wedge3.volume} level={audio.outputs.wedge3}
@@ -4552,7 +4553,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', ...(big16 ? { top: 62, left: '72%' } : { top: 132, left: '72%' }), transform: 'translateX(-50%)' }}>
+          <div ref={wedge4OnStageRef} data-walk="out-wedge4" style={{ position: 'absolute', ...(big16 ? { top: 44, left: '60%' } : { top: 132, left: '72%' }), transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 4" accent="var(--amber)" on={state.outputs.wedge4.on} mute={state.outputs.wedge4.mute} volume={state.outputs.wedge4.volume} level={audio.outputs.wedge4}
               onTogglePower={() => setOut('wedge4', { on: !state.outputs.wedge4.on })}
               onToggleMute={() => setOut('wedge4', { mute: !state.outputs.wedge4.mute })}
@@ -4658,12 +4659,15 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 boxes, with an open lane above it: the flanking bass, guitars and
                 keys drop DOWN off the backline row into that lane and in to their
                 channels. */}
-            <div style={{ position: 'absolute', top: 345, left: '46%', transform: 'translateX(-50%)' }}>
+            <div style={{ position: 'absolute', top: 356, left: '46%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="BACKLINE SUB-SNAKE" items={instItems} subJackRefs={subJackRefs} outRef={instHeadOutRef}/>
             </div>
-            {/* Vocal sub-snake box — below the three singers; only Vocal 1/2/3
-                plug in here (channel 4 spare). Its multicore runs over to the box. */}
-            <div style={{ position: 'absolute', top: 584, left: '46%', transform: 'translateX(-50%)' }}>
+            {/* Vocal sub-snake box — pushed downstage BELOW the wedge line, in
+                the gap between Wedge 2 and Wedge 3, so nothing sits between each
+                singer and their wedge (the pairing reads cleanly). The three
+                vocal mics drop down through that gap into it; its multicore runs
+                up and over to the main box. */}
+            <div style={{ position: 'absolute', top: 780, left: '56%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="VOCAL SUB-SNAKE" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
@@ -5489,8 +5493,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           const grpList = sourceKeys.filter(x => window.SOURCES[x] && window.SOURCES[x].snake === sk);
           const li = grpList.indexOf(k);
           const midY = (sk === 'inst')
-            ? jc.y - 48 + li * 3                                   // lane just above the backline box
-            : (from.y + jc.y) / 2 + (li - (grpList.length - 1) / 2) * 6;
+            ? jc.y - 63 + li * 9                                   // lane above the backline box; wide gaps so amps' cables never stack
+            : (from.y + jc.y) / 2 + (li - (grpList.length - 1) / 2) * 8;
           return { src: k, from, to: jc, port, unplugged: !(port >= 1), xlr: true, midY };
         }
         const from = anchorPos(src, 'top');
@@ -5542,7 +5546,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         const groups = {
           up:   { out: ac(upHeadOutRef),   midX: fanX - 40, block: (o) => o.ch <= 6, list: [], size: 8 },
           inst: { out: ac(instHeadOutRef), midX: fanX - 58, block: null,              list: [], size: 4 },
-          down: { out: ac(downHeadOutRef), midX: fanX - 76, block: null,              list: [], size: 4 },
+          down: { out: ac(downHeadOutRef), midX: fanX - 76, block: null,              list: [], size: 4, overTopY: 430 },
         };
         const localIdx = {};
         for (const g of ['up', 'inst', 'down']) { let i = 0; for (const k of sourceKeys) if (window.SOURCES[k] && window.SOURCES[k].snake === g) localIdx[k] = ++i; }
@@ -6213,9 +6217,10 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             ? window._cableCurve(portEnd, c.to)
             : (c.to.y > 480
                 ? `M ${c.from.x} ${c.from.y} L ${leadX} ${c.from.y} L ${leadX} ${railY} L ${c.to.x} ${railY} L ${c.to.x} ${c.to.y}`
-                // upstage wedge (W4): drop the cable just below the wedge, then run
-                // across to the box — so it comes "straight down, then over."
-                : window._routedCable(c.from, c.to, c.to.y + 24));
+                // upstage wedge (W4, up by the drummer): come OUT of the box, up a
+                // little, then run across the open midstage and straight up into
+                // the wedge — so it's easy to trace and never hugs the stage box.
+                : window._polyRound([c.from, { x: c.from.x - 20, y: c.from.y }, { x: c.from.x - 20, y: 452 }, { x: c.to.x, y: 452 }, c.to], 8));
           const live = !c.unplugged && !isDragged && retLive(c.portId);
           const hovered = hoverCable === 'out:' + c.spk;
           const color = hovered ? '#eae7e0' : '#7d7a72';
