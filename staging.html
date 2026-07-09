@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=118"></script>
+<script src="content-staging.js?v=119"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -130,7 +130,7 @@
 // band (Phase 3+) will add group/snake/perf fields for stage clustering,
 // sub-snake routing, and which of the four performers owns the input.
 const SOURCES = {
-  vocal:  { label: 'Vocal Mic 1', short: 'VOCAL 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25,
+  vocal:  { label: 'Vocal Mic 1', short: 'VOCAL 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, canFeedback: true,
             env: { syllableRate: 5.0, syllableDepth: 0.06, phraseRate: 0.7, phraseDepth: 0.03, burstRate: 0.30, burstDur: 0.05, burstAmp: 0.15, syllablePhase: 0.0, burstSeed: 0.10 } },
   // Bass DI is ACTIVE (buffered electronics, needs +48V phantom like a
   // condenser). Keyboard DI is PASSIVE (transformer, no power). The diActive
@@ -141,7 +141,7 @@ const SOURCES = {
             env: { syllableRate: 2.5, syllableDepth: 0.04, phraseRate: 0.4, phraseDepth: 0.02, burstRate: 0.15, burstDur: 0.05, burstAmp: 0.08, syllablePhase: 2.3, burstSeed: 0.40 } },
   laptop: { label: 'Keyboard DI', short: 'KEYS',    kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -10,
             env: { syllableRate: 1.2, syllableDepth: 0.03, phraseRate: 0.3, phraseDepth: 0.02, burstRate: 0.10, burstDur: 0.10, burstAmp: 0.05, syllablePhase: 3.1, burstSeed: 0.90 } },
-  vocal2: { label: 'Vocal Mic 2', short: 'VOCAL 2', kind: 'condenser', icon: 'mic', color: '#ff8e4a', dbu: -21,
+  vocal2: { label: 'Vocal Mic 2', short: 'VOCAL 2', kind: 'condenser', icon: 'mic', color: '#ff8e4a', dbu: -21, canFeedback: true,
             env: { syllableRate: 4.5, syllableDepth: 0.05, phraseRate: 0.6, phraseDepth: 0.03, burstRate: 0.25, burstDur: 0.04, burstAmp: 0.13, syllablePhase: 1.7, burstSeed: 0.60 } },
   // Front-of-house stereo playback (a media player at the desk, not on stage).
   // A line input on a dedicated 5/6 channel used to test the system with music.
@@ -159,8 +159,12 @@ const SOURCES = {
   hat:   { label: 'Hi-hat',       short: 'HI-HAT',kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -38, group: 'drums', snake: 'up',   perf: 3 },
   rack:  { label: 'Rack tom',     short: 'RACK',  kind: 'dynamic',   icon: 'mic', color: '#c084fc', dbu: -30, group: 'drums', snake: 'up',   perf: 3 },
   floor: { label: 'Floor tom',    short: 'FLOOR', kind: 'dynamic',   icon: 'mic', color: '#c084fc', dbu: -28, group: 'drums', snake: 'up',   perf: 3 },
-  ohl:   { label: 'Overhead L',   short: 'OH L',  kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -42, group: 'drums', snake: 'up',   perf: 3 },
-  ohr:   { label: 'Overhead R',   short: 'OH R',  kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -42, group: 'drums', snake: 'up',   perf: 3 },
+  // canFeedback: only the two mics that realistically ring in a live rig — a
+  // sensitive drum OVERHEAD placed well off the source. The close drum mics
+  // (kick/snare/toms) and the hi-hat spot mic sit right on the source, need
+  // little gain, and don't feed back, so they carry no flag.
+  ohl:   { label: 'Overhead L',   short: 'OH L',  kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -42, group: 'drums', snake: 'up',   perf: 3, canFeedback: true },
+  ohr:   { label: 'Overhead R',   short: 'OH R',  kind: 'condenser', icon: 'mic', color: '#c084fc', dbu: -42, group: 'drums', snake: 'up',   perf: 3, canFeedback: true },
   // Backline instruments (bass, both guitars, keys) run to their OWN sub-snake,
   // set upstage stage-right — snake 'inst'. The vocals (below) run to the
   // downstage vocal sub-snake, snake 'down'. Drums + drum vocal are snake 'up'.
@@ -172,10 +176,10 @@ const SOURCES = {
   keys:  { label: 'Keys',         short: 'KEYS',  kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -12, group: 'keys',  snake: 'inst', perf: 2 },
   keysl: { label: 'Keys L',       short: 'KEYS L',kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -12, group: 'keys',  snake: 'inst', perf: 2 },
   keysr: { label: 'Keys R',       short: 'KEYS R',kind: 'di',        icon: 'di',  color: '#4ade80', dbu: -12, group: 'keys',  snake: 'inst', perf: 2 },
-  vx1:   { label: 'Vocal 1',      short: 'VOX 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 0 },
-  vx2:   { label: 'Vocal 2',      short: 'VOX 2', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 1 },
-  vx3:   { label: 'Vocal 3',      short: 'VOX 3', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 2 },
-  vx4:   { label: 'Vocal 4',      short: 'VOX 4', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'up',   perf: 3 },
+  vx1:   { label: 'Vocal 1',      short: 'VOX 1', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 0, canFeedback: true },
+  vx2:   { label: 'Vocal 2',      short: 'VOX 2', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 1, canFeedback: true },
+  vx3:   { label: 'Vocal 3',      short: 'VOX 3', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'down', perf: 2, canFeedback: true },
+  vx4:   { label: 'Vocal 4',      short: 'VOX 4', kind: 'dynamic',   icon: 'mic', color: '#ff4630', dbu: -25, group: 'vox',   snake: 'up',   perf: 3, canFeedback: true },
 };
 
 // Per-source amplitude envelope. Real instruments and voices have dynamics:
@@ -1684,9 +1688,12 @@ function detectFeedback(s, audio) {
     const srcKey = sourceFor(s, i);
     if (!srcKey) continue;
     const srcDef = SOURCES[srcKey];
-    // Only live mics are acoustically coupled to the stage. DIs and line
-    // inputs (bass DI, keyboard DI) can't feed back. Condensers need phantom.
-    if (!srcDef || (srcDef.kind !== 'dynamic' && srcDef.kind !== 'condenser')) continue;
+    // Only mics that realistically ring feed back: vocal mics and drum
+    // overheads (canFeedback). DIs (bass, acoustic gtr, keys) can't feed back at
+    // all, and close mics (kick/snare/toms/hi-hat, guitar amp mic) sit right on
+    // the source and never get gained hot enough to ring. A condenser still
+    // needs phantom to pass any signal, so no +48V means no ring either.
+    if (!srcDef || !srcDef.canFeedback) continue;
     if (srcDef.kind === 'condenser' && !ch.phantom) continue;
     const c = audio.contributions[srcKey];
     if (!c) continue;
@@ -1754,7 +1761,9 @@ function feedbackMargins(s, audio) {
     const ch = s.channels[i]; if (ch.mute) continue;
     const srcKey = sourceFor(s, i); if (!srcKey) continue;
     const srcDef = SOURCES[srcKey];
-    if (!srcDef || (srcDef.kind !== 'dynamic' && srcDef.kind !== 'condenser')) continue;
+    // Same rule as detectFeedback: only vocal mics and drum overheads can ring,
+    // so the wedge margin readout only tracks a channel that could actually feed back.
+    if (!srcDef || !srcDef.canFeedback) continue;
     if (srcDef.kind === 'condenser' && !ch.phantom) continue;
     const c = audio.contributions[srcKey]; if (!c) continue;
     const rej = micRejection3D(s.micSetup && s.micSetup[srcKey]);
@@ -3640,7 +3649,7 @@ function EqStrip({ eq, onChange, ringBands, accent, height, width }) {
 // Exposable "Monitor EQ" panel — the graphic EQs for the two aux/monitor sends,
 // the way they'd sit at FOH (outboard rack, or a screen on a digital desk). It
 // auto-opens when a wedge starts ringing and can be toggled by hand otherwise.
-function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandChange, ringWedge, ringBand, rings, toneGate, byEar, severity }) {
+function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandChange, ringWedge, ringBand, rings, toneGate, byEar, onSetByEar, severity }) {
   if (!open) return null;
   const ringsFor = (key) => (rings || []).filter(r => r.wedge === key).map(r => r.band);
   const col = (key, w, label, accent) => {
@@ -3680,7 +3689,25 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
             <div className="display" style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.5 }}>Monitor EQ</div>
             <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>graphic EQ on the monitor sends · pull a band down to cut that frequency</div>
           </div>
-          <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* By-ear difficulty, right here on the monitor window as a second
+                way to reach it. Reads and writes the SAME feedbackByEar setting
+                the Feedback Mode toggle uses, so the two always stay in sync. */}
+            {onSetByEar && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div className="mono" title="Guided glows the ringing band. By ear hides it: find the ringing frequency by listening." style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>RING-OUT</div>
+                {[{ v: false, l: 'GUIDED' }, { v: true, l: 'BY EAR' }].map(opt => (
+                  <button key={opt.l} onClick={() => onSetByEar(opt.v)} className="mono ui-no-select" style={{
+                    padding: '5px 9px', fontSize: 9, fontWeight: 800, letterSpacing: 0.5, borderRadius: 4, cursor: 'pointer',
+                    background: byEar === opt.v ? 'linear-gradient(180deg, var(--cool), #2c5d9e)' : '#1a1a1d',
+                    color: byEar === opt.v ? '#0a0a0c' : 'var(--ink-2)',
+                    border: '1px solid ' + (byEar === opt.v ? '#2c5d9e' : '#38383e'),
+                  }}>{opt.l}</button>
+                ))}
+              </div>
+            )}
+            <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
+          </div>
         </div>
         {/* Always-present guidance line. Rendered whether or not a band is
             ringing so the panel keeps a stable height (it used to grow and
@@ -10785,7 +10812,8 @@ function App() {
         ringBand={feedback ? feedback.ringBand : null}
         rings={feedback ? feedback.rings : []}
         toneGate={level.toneGate}
-        byEar={feedbackByEar && level.isFeedbackMode}
+        byEar={feedbackByEar}
+        onSetByEar={setFeedbackByEar}
         severity={fbSeverity}
       />
 
