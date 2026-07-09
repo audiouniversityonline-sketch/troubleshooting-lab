@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=92"></script>
+<script src="content-staging.js?v=93"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4663,11 +4663,12 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               <SubSnakeHead label="BACKLINE SUB-SNAKE" items={instItems} subJackRefs={subJackRefs} outRef={instHeadOutRef}/>
             </div>
             {/* Vocal sub-snake box — pushed downstage BELOW the wedge line, in
-                the gap between Wedge 2 and Wedge 3, so nothing sits between each
+                the gap between Wedge 1 and Wedge 2, so nothing sits between each
                 singer and their wedge (the pairing reads cleanly). The three
                 vocal mics drop down through that gap into it; its multicore runs
-                up and over to the main box. */}
-            <div style={{ position: 'absolute', top: 780, left: '56%', transform: 'translateX(-50%)' }}>
+                up and over to the main box on the LEFT of the stage, clear of
+                Wedge 4's return on the right. */}
+            <div style={{ position: 'absolute', top: 780, left: '36%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="VOCAL SUB-SNAKE" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
