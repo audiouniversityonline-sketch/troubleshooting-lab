@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=109"></script>
+<script src="content-staging.js?v=110"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4359,21 +4359,25 @@ function ZoneHeader({ label, sublabel, badge, accent, badgeColor }) {
   );
 }
 
-// A little magnifier pinned to a zoomable region's corner. Clicking it zooms
-// the whole board in on that region (App folds the zoom into the fit transform).
-// Hidden while already zoomed — the FIT button is the way back out.
-function ZoomBtn({ onZoomTo, hidden }) {
-  if (hidden || !onZoomTo) return null;
+// A little magnifier for a zoomable region. Rendered in a layer ABOVE the cable
+// overlay (so cables never cover it) and counter-scaled to a constant size. It
+// toggles: a "+" magnifier zooms in on the region; once zoomed, it flips to a
+// filled "-" magnifier that takes you back to the fit view (in addition to the
+// FIT button top-right), and it stays put in the same spot on each region.
+function ZoomBtn({ zoomed, onClick }) {
   return (
     <div onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => { e.stopPropagation(); const region = e.currentTarget.closest('[data-zoomable]'); if (region) onZoomTo(region); }}
-      className="ui-no-select" title="Zoom in"
-      style={{ position: 'absolute', top: -9, right: -9, zIndex: 8, width: 20, height: 20, borderRadius: '50%',
-        background: '#141417', border: '1px solid var(--accent)', color: 'var(--accent)', pointerEvents: 'auto',
-        display: 'grid', placeItems: 'center', cursor: 'zoom-in', boxShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
-      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+      onClick={(e) => { e.stopPropagation(); onClick && onClick(); }}
+      className="ui-no-select" title={zoomed ? 'Back to the fit view' : 'Zoom in on this section'}
+      style={{ width: 22, height: 22, borderRadius: '50%',
+        background: zoomed ? 'var(--accent)' : '#141417',
+        border: '1px solid var(--accent)', color: zoomed ? '#0a0a0c' : 'var(--accent)',
+        display: 'grid', placeItems: 'center', cursor: zoomed ? 'zoom-out' : 'zoom-in',
+        boxShadow: '0 1px 5px rgba(0,0,0,0.6)' }}>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6">
         <circle cx="5" cy="5" r="3.2"/><line x1="7.4" y1="7.4" x2="10.6" y2="10.6"/>
-        <line x1="5" y1="3.5" x2="5" y2="6.5"/><line x1="3.5" y1="5" x2="6.5" y2="5"/>
+        <line x1="3.5" y1="5" x2="6.5" y2="5"/>
+        {!zoomed && <line x1="5" y1="3.5" x2="5" y2="6.5"/>}
       </svg>
     </div>
   );
@@ -4701,16 +4705,18 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 between the kit and the box: the drum mic cables run DOWN into
                 that lane, along it, then straight down into their channels —
                 no cable crosses a drum card. */}
-            <div data-zoomable style={{ position: 'absolute', top: 256, left: '50%', transform: 'translateX(-50%)' }}>
-              <ZoomBtn onZoomTo={onZoomTo} hidden={zoomActive}/>
+            {/* Invisible bounding region for the drum-group zoom: spans the drum
+                riser (the mics) down through the drum sub-snake, so zooming here
+                frames the whole kit-to-snake patch and the runs stay traceable. */}
+            <div data-zoomable data-zoom-key="drum" style={{ position: 'absolute', left: '29%', width: '42%', top: 14, height: 300, pointerEvents: 'none' }}/>
+            <div style={{ position: 'absolute', top: 256, left: '50%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="DRUM SUB-SNAKE" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
             </div>
             {/* Backline sub-snake — centred just downstage of the two sub-snake
                 boxes, with an open lane above it: the flanking bass, guitars and
                 keys drop DOWN off the backline row into that lane and in to their
                 channels. */}
-            <div data-zoomable style={{ position: 'absolute', top: 356, left: '46%', transform: 'translateX(-50%)' }}>
-              <ZoomBtn onZoomTo={onZoomTo} hidden={zoomActive}/>
+            <div data-zoomable data-zoom-key="backline" style={{ position: 'absolute', top: 356, left: '46%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="BACKLINE SUB-SNAKE" items={instItems} subJackRefs={subJackRefs} outRef={instHeadOutRef}/>
             </div>
             {/* Vocal sub-snake box — pushed downstage BELOW the wedge line, in
@@ -4719,16 +4725,14 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 vocal mics drop down through that gap into it; its multicore runs
                 up and over to the main box on the LEFT of the stage, clear of
                 Wedge 4's return on the right. */}
-            <div data-zoomable style={{ position: 'absolute', top: 780, left: '36%', transform: 'translateX(-50%)' }}>
-              <ZoomBtn onZoomTo={onZoomTo} hidden={zoomActive}/>
+            <div data-zoomable data-zoom-key="vocal" style={{ position: 'absolute', top: 780, left: '36%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="VOCAL SUB-SNAKE" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
                 edge. The drum snake fans into IN 1-6 (+ the drummer's vocal
                 cross-patched to 14), the downstage snake into 7-13; the main
                 snake leaves the right edge for FOH. */}
-            <div ref={stageBoxRef} data-zoomable style={{ position: 'absolute', top: 196, right: 6 }}>
-              <ZoomBtn onZoomTo={onZoomTo} hidden={zoomActive}/>
+            <div ref={stageBoxRef} data-zoomable data-zoom-key="stagebox" style={{ position: 'absolute', top: 196, right: 6 }}>
               <SideStageBox inChannels={inChannels} stageChRefs={stageBoxChRefs} outRefs={outRefs} snakeOutRef={snakeOutRef} retActive={retActive}/>
             </div>
           </>
@@ -4871,7 +4875,7 @@ function ChannelAnchors({ state, setState, channelRefs, masterLRef, masterRRef, 
     // yellow 4 left to right. The FOH line input keeps its source color.
     const color = srcKey === 'playback'
       ? (src ? src.color : '#4a4a52')
-      : (inputPort != null ? ((window.SNAKE_COLORS || [])[inputPort - 1] || '#4a4a52') : '#4a4a52');
+      : (inputPort != null ? ((window.SNAKE_COLORS || [])[(inputPort - 1) % 8] || '#4a4a52') : '#4a4a52');
     // Playback is a FOH line input plugged into the desk, not a snake port, so
     // it's labelled LINE IN rather than getting a (nonexistent) INPUT number.
     const label = srcKey === 'playback' ? 'LINE IN' : (inputPort != null ? `INPUT ${inputPort}` : 'INPUT —');
@@ -5103,7 +5107,7 @@ function Stage16({ state, setState, audio }) {
   );
 }
 
-function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, onZoomTo, zoomActive, stageHidden, stage16Open, briefBelow = false }) {
+function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, onZoomTo, onZoomReset, zoomActive, stageHidden, stage16Open, briefBelow = false }) {
   // The stage's source list follows the board: the four MX-8 inputs, or the full
   // 14-input band on the big desk. This is what makes the cable system, the
   // stage box, and the fan-out draw every band input.
@@ -5146,7 +5150,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   const stageBoxChRefs = useR2({});
   const [paths, setPaths] = useS2({
     stageCables: [], snake: null, subSnakes: [], fanOutCables: [], outCables: [], outFanCables: [],
-    backRailY: 0, frontRailY: 0, snakeMidX: 0,
+    backRailY: 0, frontRailY: 0, snakeMidX: 0, zoomRegions: [],
   });
 
   // CABLE DRAG STATE
@@ -5751,7 +5755,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           // plugged source's. On a real multicore, the tail's color tells
           // you the channel number — that's the standard the patch lesson
           // teaches (1 brown, 2 red, 3 orange, 4 yellow).
-          const color = (window.SNAKE_COLORS || [])[port - 1] || '#4a4a52';
+          const color = (window.SNAKE_COLORS || [])[(port - 1) % 8] || '#4a4a52';
           // NOTE: the live "flowing" glow is NOT computed here. Geometry must not
           // depend on per-frame audio (that made this whole measurement effect
           // re-run 60x/sec and piled up at mount). The flow animation is decided
@@ -5850,7 +5854,20 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       const stageZoneRect = stageZoneRef.current ? stageZoneRef.current.getBoundingClientRect() : null;
       const snakeMidX = stageZoneRect ? (stageZoneRect.right - cb.left) / S + 6 : 0;
 
-      setPaths({ stageCables, snake, subSnakes, breakoutRails, patchTails, fanOutCables, outCables, outFanCables, backRailY, frontRailY, snakeMidX });
+      // Zoom-button anchors — one per [data-zoomable] region, placed at the
+      // region's top-right corner in the canvas's own (unscaled) coordinates.
+      // Rendered in a layer ABOVE the cable overlay so no cable can cover them.
+      // `el` is kept so the button can zoom-to-fit that exact region on click.
+      const zoomRegions = [];
+      cont.querySelectorAll('[data-zoomable]').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        zoomRegions.push({
+          key: el.getAttribute('data-zoom-key') || ('zr' + zoomRegions.length),
+          bx: (r.right - cb.left) / S, by: (r.top - cb.top) / S, el,
+        });
+      });
+
+      setPaths({ stageCables, snake, subSnakes, breakoutRails, patchTails, fanOutCables, outCables, outFanCables, backRailY, frontRailY, snakeMidX, zoomRegions });
     }
     compute();
     const t = setTimeout(compute, 60);
@@ -6527,6 +6544,21 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', zIndex: 5 }}>
           {fanOutEls}
         </svg>
+      )}
+
+      {/* Zoom-button layer — sits ABOVE the cable overlay (zIndex 6 > 5) so a
+          cable can never cover a button. One per zoomable region, pinned to the
+          region's top-right corner and counter-scaled to a constant size. It
+          persists while zoomed as a second, in-place way back to the fit view. */}
+      {paths.zoomRegions && paths.zoomRegions.length > 0 && (onZoomTo || onZoomReset) && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 6, pointerEvents: 'none' }}>
+          {paths.zoomRegions.map((r) => (
+            <div key={r.key} style={{ position: 'absolute', left: r.bx, top: r.by,
+              transform: `translate(-50%, -50%) scale(${1 / (fitScale || 1)})`, pointerEvents: 'auto' }}>
+              <ZoomBtn zoomed={zoomActive} onClick={() => (zoomActive ? (onZoomReset && onZoomReset()) : (onZoomTo && onZoomTo(r.el)))}/>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -8003,7 +8035,7 @@ function IoListPanel({ open, onClose, state }) {
   const sc = window.SNAKE_COLORS || [];
   const dot = (ch) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: sc[ch - 1] || '#4a4a52', display: 'inline-block', flexShrink: 0 }}/>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: sc[(ch - 1) % 8] || '#4a4a52', display: 'inline-block', flexShrink: 0 }}/>
       {ch}
     </span>
   );
@@ -8017,7 +8049,7 @@ function IoListPanel({ open, onClose, state }) {
   // means it plugs straight in with no snake cable (the playback line).
   const chCell = (snakeIdx, label) => (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-      <span style={{ width: 9, height: 9, borderRadius: '50%', background: snakeIdx ? (sc[snakeIdx - 1] || '#4a4a52') : '#4a4a52', display: 'inline-block', flexShrink: 0, opacity: snakeIdx ? 1 : 0.35 }}/>
+      <span style={{ width: 9, height: 9, borderRadius: '50%', background: snakeIdx ? (sc[(snakeIdx - 1) % 8] || '#4a4a52') : '#4a4a52', display: 'inline-block', flexShrink: 0, opacity: snakeIdx ? 1 : 0.35 }}/>
       {label}
     </span>
   );
@@ -10391,9 +10423,16 @@ function App() {
     // transforms like the sub-snakes' translateX(-50%)). The region centre in
     // the design canvas's unscaled coordinates then follows directly.
     const curScale = (drRect.width / designW) || 1;
+    const rw = elRect.width / curScale, rh = elRect.height / curScale;
     const cx = (elRect.left + elRect.width / 2 - drRect.left) / curScale;
     const cy = (elRect.top + elRect.height / 2 - drRect.top) / curScale;
-    const s = Math.min(3, (fitScale || 1) * 2.2);
+    // Scale so the region fills ~80% of the viewport (a margin all around),
+    // never smaller than the fit scale, capped at 3x so a tiny box (a single
+    // sub-snake) doesn't over-zoom. A big region (the whole drum riser + its
+    // sub-snake) lands at a lower scale so both fit and the runs stay traceable.
+    const margin = 1.25;
+    const fit = Math.min(vp.clientWidth / (rw * margin), vp.clientHeight / (rh * margin));
+    const s = Math.max(fitScale || 1, Math.min(3, fit));
     setZoom({ scale: s, tx: vp.clientWidth / 2 - s * cx, ty: vp.clientHeight / 2 - s * cy });
   }, [fitScale, designW]);
   const onZoomReset = React.useCallback(() => setZoom(null), []);
@@ -10752,7 +10791,7 @@ function App() {
                  transformOrigin: zoom ? '0 0' : 'center center' }}>
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={appliedScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
-                onZoomTo={onZoomTo} zoomActive={!!zoom}
+                onZoomTo={onZoomTo} onZoomReset={onZoomReset} zoomActive={!!zoom}
                 surface={(level.isWalkthrough || level.isLesson || state.big16) ? 'analog' : surface} onSetSurface={setSurfacePref} canDigital={canDigital && !state.big16}
                 surfaceLocked={level.isWalkthrough || level.isLesson || !!state.big16} stageHidden={effStageHidden} stage16Open={stage16Open} briefBelow={briefBelow}
                 sidebarContent={
