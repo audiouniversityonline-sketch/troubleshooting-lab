@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=105"></script>
+<script src="content-staging.js?v=106"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5877,6 +5877,78 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   const showStage = stageOnly || !stageHidden;
   const effBriefBelow = briefBelow && !stageOnly;
 
+  // The snake fan-out at FOH — the multicore lands and fans into the desk's
+  // channel inputs. On the MX-8 the stage and console share one screen, so this
+  // rides in the main cable overlay. On the 16-channel board the stage and the
+  // console are SEPARATE screens (STAGE / MIXER toggle), so the fan-out also
+  // renders in a console-only overlay on the MIXER view — that's what makes the
+  // FOH fan-out a live crosspatch point on the big desk, not just the stage box.
+  // Each tail's channel-end is a drag handle: drop it on another channel to
+  // repatch (swap semantics). fanOutCables is empty whenever the console isn't
+  // on screen (no SNAKE anchor), so this is a no-op in the 16-ch STAGE view.
+  const fanOutEls = (
+    <>
+      {paths.fanOutCables.map((c, i) => {
+        const portKey = String(c.port);
+        const isDragged = dragState && dragState.type === 'fanout' && dragState.id === portKey;
+        const someOtherDragged = dragState && !isDragged;
+        const chanEnd = isDragged ? dragState.cursor : c.to;
+        const midY = (c.from.y + chanEnd.y) / 2 - 6;
+        const d = `M ${c.from.x} ${c.from.y} C ${c.from.x} ${midY}, ${chanEnd.x} ${midY}, ${chanEnd.x} ${chanEnd.y}`;
+        const opacity = someOtherDragged ? 0.18 : (c.unplugged ? 0.6 : (c.srcKey ? 0.95 : 0.35));
+        return (
+          <g key={i} style={{ pointerEvents: 'none' }}>
+            <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round"/>
+            <path d={d} stroke={c.color} strokeWidth={isDragged ? 4 : 3} fill="none" opacity={opacity} strokeLinecap="round"/>
+            <circle cx={c.from.x} cy={c.from.y} r="2" fill={c.color} stroke="#0a0a0c" strokeWidth="0.5" opacity={someOtherDragged ? 0.3 : 1}/>
+            {!isDragged && (
+              <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={c.color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
+            )}
+            {/* Loose tail wears its channel number so "brown is 1" reads
+                at a glance while the student patches the snake. */}
+            {c.unplugged && !isDragged && !someOtherDragged && (
+              <text x={chanEnd.x} y={chanEnd.y + 17} textAnchor="middle" fill="#e9e6df"
+                stroke="#0a0a0c" strokeWidth="2.5" paintOrder="stroke"
+                fontFamily="Geist Mono" fontSize="9" fontWeight="700">{c.port}</text>
+            )}
+            {/* Flow glow decided here, at render time, from the LIVE audio —
+                so the geometry effect above never has to re-run for it. */}
+            {(!c.unplugged && c.srcKey && audio.chanIn[c.ch - 1] > 0.05 && audio.chanInSource[c.ch - 1] === c.srcKey) && !isDragged && (
+              <path d={d} stroke="#fff" strokeWidth="1.2" fill="none" opacity="0.7" strokeDasharray="3 6" strokeLinecap="round">
+                <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.6s" repeatCount="indefinite"/>
+              </path>
+            )}
+            {/* DRAG HANDLE — channel-input end of the snake tail. */}
+            {!someOtherDragged && (
+              <g style={{ pointerEvents: 'auto' }}>
+                <circle className="cable-hit" cx={chanEnd.x} cy={chanEnd.y} r="11" fill="transparent"
+                  onPointerDown={(e) => startDrag(e, { type: 'fanout', id: portKey })}/>
+                <circle className="cable-handle" cx={chanEnd.x} cy={chanEnd.y} r={isDragged ? 6 : 5}
+                  fill={c.color} stroke="#0a0a0c" strokeWidth="1.2"
+                  pointerEvents="none"/>
+                <circle cx={chanEnd.x} cy={chanEnd.y} r="2" fill="#0a0a0c" pointerEvents="none"/>
+              </g>
+            )}
+          </g>
+        );
+      })}
+
+      {/* Drop-target highlights for an in-progress FAN-OUT drag — each
+          channel input chip glows; the snapped one glows brighter. */}
+      {dragState && dragState.type === 'fanout' && getDropTargets(dragState).map(t => {
+        const isSnapped = dragState.valid === t.payload;
+        return (
+          <g key={`drop-${t.key}`} style={{ pointerEvents: 'none' }}>
+            <circle cx={t.x} cy={t.y} r={isSnapped ? 20 : 16}
+              fill="rgba(74,222,128,0.18)"
+              stroke="var(--green)" strokeWidth={isSnapped ? 2.5 : 1.5}
+              style={{ filter: isSnapped ? 'drop-shadow(0 0 8px rgba(74,222,128,0.6))' : 'none' }}/>
+          </g>
+        );
+      })}
+    </>
+  );
+
   return (
     <div ref={containerRef} style={{
       position: 'relative', width: '100%',
@@ -6270,67 +6342,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           ));
         })()}
 
-        {/* Fan-out tails: from fan-out point to each channel input. The
-            channel-end has a draggable handle — drop it on a different
-            channel chip to repatch the snake tail. */}
-        {paths.fanOutCables.map((c, i) => {
-          const portKey = String(c.port);
-          const isDragged = dragState && dragState.type === 'fanout' && dragState.id === portKey;
-          const someOtherDragged = dragState && !isDragged;
-          const chanEnd = isDragged ? dragState.cursor : c.to;
-          const midY = (c.from.y + chanEnd.y) / 2 - 6;
-          const d = `M ${c.from.x} ${c.from.y} C ${c.from.x} ${midY}, ${chanEnd.x} ${midY}, ${chanEnd.x} ${chanEnd.y}`;
-          const opacity = someOtherDragged ? 0.18 : (c.unplugged ? 0.6 : (c.srcKey ? 0.95 : 0.35));
-          return (
-            <g key={i} style={{ pointerEvents: 'none' }}>
-              <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round"/>
-              <path d={d} stroke={c.color} strokeWidth={isDragged ? 4 : 3} fill="none" opacity={opacity} strokeLinecap="round"/>
-              <circle cx={c.from.x} cy={c.from.y} r="2" fill={c.color} stroke="#0a0a0c" strokeWidth="0.5" opacity={someOtherDragged ? 0.3 : 1}/>
-              {!isDragged && (
-                <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={c.color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
-              )}
-              {/* Loose tail wears its channel number so "brown is 1" reads
-                  at a glance while the student patches the snake. */}
-              {c.unplugged && !isDragged && !someOtherDragged && (
-                <text x={chanEnd.x} y={chanEnd.y + 17} textAnchor="middle" fill="#e9e6df"
-                  stroke="#0a0a0c" strokeWidth="2.5" paintOrder="stroke"
-                  fontFamily="Geist Mono" fontSize="9" fontWeight="700">{c.port}</text>
-              )}
-              {/* Flow glow decided here, at render time, from the LIVE audio —
-                  so the geometry effect above never has to re-run for it. */}
-              {(!c.unplugged && c.srcKey && audio.chanIn[c.ch - 1] > 0.05 && audio.chanInSource[c.ch - 1] === c.srcKey) && !isDragged && (
-                <path d={d} stroke="#fff" strokeWidth="1.2" fill="none" opacity="0.7" strokeDasharray="3 6" strokeLinecap="round">
-                  <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.6s" repeatCount="indefinite"/>
-                </path>
-              )}
-              {/* DRAG HANDLE — channel-input end of the snake tail. */}
-              {!someOtherDragged && (
-                <g style={{ pointerEvents: 'auto' }}>
-                  <circle className="cable-hit" cx={chanEnd.x} cy={chanEnd.y} r="11" fill="transparent"
-                    onPointerDown={(e) => startDrag(e, { type: 'fanout', id: portKey })}/>
-                  <circle className="cable-handle" cx={chanEnd.x} cy={chanEnd.y} r={isDragged ? 6 : 5}
-                    fill={c.color} stroke="#0a0a0c" strokeWidth="1.2"
-                    pointerEvents="none"/>
-                  <circle cx={chanEnd.x} cy={chanEnd.y} r="2" fill="#0a0a0c" pointerEvents="none"/>
-                </g>
-              )}
-            </g>
-          );
-        })}
-
-        {/* Drop-target highlights for an in-progress FAN-OUT drag — each
-            channel input chip glows; the snapped one glows brighter. */}
-        {dragState && dragState.type === 'fanout' && getDropTargets(dragState).map(t => {
-          const isSnapped = dragState.valid === t.payload;
-          return (
-            <g key={`drop-${t.key}`} style={{ pointerEvents: 'none' }}>
-              <circle cx={t.x} cy={t.y} r={isSnapped ? 20 : 16}
-                fill="rgba(74,222,128,0.18)"
-                stroke="var(--green)" strokeWidth={isSnapped ? 2.5 : 1.5}
-                style={{ filter: isSnapped ? 'drop-shadow(0 0 8px rgba(74,222,128,0.6))' : 'none' }}/>
-            </g>
-          );
-        })}
+        {/* Fan-out tails + their drag targets (extracted to fanOutEls so the
+            16-channel MIXER view can render the same interactive fan-out). */}
+        {fanOutEls}
 
         {/* RETURN TAILS — snake return channels 1-6 from the fan-out down to
             the console's output chips (MAIN L/R, AUX 1-4). Same
@@ -6477,6 +6491,18 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           );
         })}
       </svg>
+      )}
+
+      {/* Console-only fan-out overlay for the 16-channel MIXER view. On the big
+          desk the stage and its cable overlay are a separate screen, so the
+          FOH fan-out gets its own overlay here — the same interactive tails, so
+          a crosspatch can be made and fixed at the console, not only the stage
+          box. fanOutEls draws nothing unless the console (SNAKE anchor + channel
+          inputs) is on screen, so this is inert on the MX-8 and the STAGE view. */}
+      {state.big16 && !stageOnly && (
+        <svg style={{ position: 'absolute', inset: 0, pointerEvents: 'none', width: '100%', height: '100%', zIndex: 5 }}>
+          {fanOutEls}
+        </svg>
       )}
     </div>
   );
