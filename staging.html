@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=121"></script>
+<script src="content-staging.js?v=122"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6586,14 +6586,15 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                         ? window._polyRound([
                             c.from,
                             { x: 700 + c.portId * 2, y: c.from.y },              // to the right-side descent corridor
-                            { x: 700 + c.portId * 2, y: 406 + c.portId * 4 },    // down to its floor lane
-                            { x: c.to.x, y: 406 + c.portId * 4 },                // along the floor to the speaker
+                            { x: 700 + c.portId * 2, y: 464 + c.portId * 3 },    // down to its floor lane (below every speaker)
+                            { x: c.to.x, y: 464 + c.portId * 3 },                // along the floor to the speaker
                             c.to,                                                 // up into the speaker bottom
                           ], 8)
                         // 8-ch UPSTAGE wedges (W3/W4, top-connected): hug the
-                        // upstage edge — up out of the box to the back lane, along
-                        // it to the wedge, then straight down into the wedge top.
-                        : window._polyRound([c.from, { x: c.from.x, y: 124 }, { x: c.to.x, y: 124 }, c.to], 8))));
+                        // upstage edge — up out of the box into the clear lane
+                        // between the DI row and the wedge tops, along it to the
+                        // wedge, then straight down into the wedge top.
+                        : window._polyRound([c.from, { x: c.from.x, y: c.spk === 'wedge3' ? 178 : 184 }, { x: c.to.x, y: c.spk === 'wedge3' ? 178 : 184 }, c.to], 8))));
           const live = !c.unplugged && !isDragged && retLive(c.portId);
           const hovered = hoverCable === 'out:' + c.spk;
           const color = hovered ? '#eae7e0' : '#7d7a72';
