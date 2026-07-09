@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=99"></script>
+<script src="content-staging.js?v=100"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5581,21 +5581,43 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           const local = localIdx[k];
           groups[sk].list.push({ x: j.x, y: j.y, color: codeCol(local), ch, srcKey: k, cross: codeCol(local) !== codeCol(ch) });
         }
+        // A source whose cable is pulled out (state.cables[k] = 0) still belongs
+        // to its sub-snake — its tail hangs LOOSE at the fan-out with a grab
+        // handle, so a disconnected cable can always be picked back up and
+        // re-patched (fixes "unplug a cable and it's gone forever").
+        const looseByGroup = { up: [], inst: [], down: [] };
+        for (const k of sourceKeys) {
+          const sk = window.SOURCES[k] && window.SOURCES[k].snake;
+          if (groups[sk] && !(state.cables[k] >= 1)) looseByGroup[sk].push(k);
+        }
         for (const g of ['up', 'inst', 'down']) {
           const grp = groups[g];
-          if (!grp.list.length || !grp.out) continue;
+          if (!grp.out) continue;
+          const loose = looseByGroup[g];
+          if (!grp.list.length && !loose.length) continue;
           // Fan point Y = centre of the snake's CONTIGUOUS block (drums centre on
           // 1-6 so the vocal-to-14 tail just reaches further, not the whole fan).
-          const ys = (grp.block ? grp.list.filter(grp.block) : grp.list).map(o => o.y);
-          const use = ys.length ? ys : grp.list.map(o => o.y);
-          const fp = { x: fanX, y: (Math.min(...use) + Math.max(...use)) / 2 };
+          let fp;
+          if (grp.list.length) {
+            const ys = (grp.block ? grp.list.filter(grp.block) : grp.list).map(o => o.y);
+            const use = ys.length ? ys : grp.list.map(o => o.y);
+            fp = { x: fanX, y: (Math.min(...use) + Math.max(...use)) / 2 };
+          } else {
+            fp = { x: fanX, y: grp.out.y };   // nothing patched yet: park at head height
+          }
           for (const o of grp.list) patchTails.push({ fromX: fp.x, fromY: fp.y, x: o.x, y: o.y, color: o.color, ch: o.ch, srcKey: o.srcKey, cross: o.cross });
-          // Padded (unused) channels of the snake get a short DANGLING tail off the
-          // fan-out — a real fan-tail always has its full 4/8, some just not patched.
-          const empties = (grp.size || grp.list.length) - grp.list.length;
-          const maxY = Math.max(...grp.list.map(o => o.y));
+          // The loose (unplugged) tails and any padded/unused snake channels hang
+          // in a short stack below the fan-out. Loose tails carry a real srcKey so
+          // they're grabbable; padded channels are just faint danglers.
+          const baseY = grp.list.length ? Math.max(...grp.list.map(o => o.y)) : fp.y;
+          loose.forEach((k, li) => {
+            const local = localIdx[k];
+            patchTails.push({ fromX: fp.x, fromY: fp.y, x: fp.x - 18, y: baseY + 20 + li * 14, color: codeCol(local), srcKey: k, loose: true });
+          });
+          const nSrc = sourceKeys.filter(x => window.SOURCES[x] && window.SOURCES[x].snake === g).length;
+          const empties = Math.max(0, (grp.size || nSrc) - nSrc);
           for (let e = 0; e < empties; e++) {
-            patchTails.push({ fromX: fp.x, fromY: fp.y, x: fp.x - 12, y: maxY + 16 + e * 11, color: codeCol(grp.list.length + e + 1), dangling: true, srcKey: g + '-x' + e });
+            patchTails.push({ fromX: fp.x, fromY: fp.y, x: fp.x - 12, y: baseY + 20 + (loose.length + e) * 14, color: codeCol(nSrc + e + 1), dangling: true, srcKey: g + '-x' + e });
           }
           // Vocal (downstage) multicore hugs the PERIMETER instead of cutting up
           // through the open centre of the stage: it drops to a downstage floor
@@ -6124,13 +6146,16 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           const dim = someOtherDragged ? 0.2 : 1;
           const lineOp = t.dangling ? 0.55 : (t.cross ? 0.98 : 0.8);
           // At rest the plug is a small dot (so the box isn't dotted with big
-          // handles); it grows + glows on hover or while dragging.
-          const plugR = isDragged ? 5.5 : (hov ? 5 : 2);
+          // handles); it grows + glows on hover or while dragging. A LOOSE
+          // (unplugged) cable reads as an open connector — dark fill, coloured
+          // ring — and sits a touch larger so it's noticeable as "needs patching".
+          const plugR = isDragged ? 5.5 : (hov ? 5 : (t.loose ? 3.5 : 2));
+          const openPlug = t.loose || t.dangling;
           return (
             <g key={'patch-' + t.srcKey} style={{ pointerEvents: 'none' }}>
               <path d={d} stroke="#000" strokeWidth="3.5" fill="none" opacity={(t.dangling ? 0.18 : 0.35) * dim} strokeLinecap="round"/>
-              <path d={d} stroke={hov ? '#eae7e0' : t.color} strokeWidth={(t.cross ? 2.4 : 1.8) + (emph ? 0.6 : 0)} fill="none" opacity={(hov ? 1 : lineOp) * dim} strokeLinecap="round" strokeDasharray={t.dangling ? '5 3' : 'none'}/>
-              <circle cx={end.x} cy={end.y} r={plugR} fill={t.dangling ? '#0a0a0c' : t.color} stroke={t.dangling ? t.color : '#0a0a0c'} strokeWidth="0.8" opacity={dim}
+              <path d={d} stroke={hov ? '#eae7e0' : t.color} strokeWidth={(t.cross ? 2.4 : 1.8) + (emph ? 0.6 : 0)} fill="none" opacity={(hov ? 1 : (t.loose ? 0.85 : lineOp)) * dim} strokeLinecap="round" strokeDasharray={t.dangling ? '5 3' : (t.loose ? '2 2' : 'none')}/>
+              <circle cx={end.x} cy={end.y} r={plugR} fill={openPlug ? '#0a0a0c' : t.color} stroke={openPlug ? t.color : '#0a0a0c'} strokeWidth={t.loose ? 1.3 : 0.8} opacity={dim}
                 style={emph ? { filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.7))', transition: 'r 0.1s ease' } : { transition: 'r 0.1s ease' }}/>
               {/* GRAB ZONE — the tail's box end repatches the source. Hovering it
                   lights the whole cable run; the visible plug is the circle above. */}
