@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=97"></script>
+<script src="content-staging.js?v=98"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5146,11 +5146,24 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
     };
     const targets = [];
     if (drag.type === 'source') {
-      for (let port = 1; port <= 4; port++) {
-        const el = portRefs.current[port];
-        if (!el) continue;
-        const { x, y } = local(el);
-        targets.push({ key: `port-${port}`, x, y, payload: port });
+      if (state.big16) {
+        // 16-ch band stage: the sub-snake tail patches onto any of the 16
+        // stage-box IN jacks. payload = the box channel this source lands on
+        // (state.cables[srcKey]); with the identity fan-out that IS the console
+        // channel, so the audio follows the patch.
+        for (let ch = 1; ch <= 16; ch++) {
+          const el = stageBoxChRefs.current[ch];
+          if (!el) continue;
+          const { x, y } = local(el);
+          targets.push({ key: `in-${ch}`, x, y, payload: ch });
+        }
+      } else {
+        for (let port = 1; port <= 4; port++) {
+          const el = portRefs.current[port];
+          if (!el) continue;
+          const { x, y } = local(el);
+          targets.push({ key: `port-${port}`, x, y, payload: port });
+        }
       }
     } else if (drag.type === 'fanout') {
       // Snake tails land on any MONO mic/line channel — the whole desk, not a
@@ -5216,18 +5229,23 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       setState(s => {
         const next = { ...s, cables: { ...s.cables, [srcKey]: target } };
         if (bumped) next.cables[bumped] = oldPort;
-        const fanOut = s.fanOut || [1, 2, 3, 4];
-        // DISCONNECT side: the channel this cable (and a bumped swap
-        // partner) just left. Same contact-transient rule as plugging in.
-        if (oldPort > 0) {
-          const oldCh = fanOut[oldPort - 1];
-          if (oldCh >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, oldCh - 1)) {
-            next.phantomPop = { channel: oldCh - 1, at: Date.now(), cause: 'patch_live' };
+        // Contact-transient pops are modelled on the MX-8 FOH path (fanOut has 4
+        // entries there). The 16-ch band stage patches the snake straight to the
+        // box channel (identity fan-out), so skip that pop bookkeeping here.
+        if (!s.big16) {
+          const fanOut = s.fanOut || [1, 2, 3, 4];
+          // DISCONNECT side: the channel this cable (and a bumped swap
+          // partner) just left. Same contact-transient rule as plugging in.
+          if (oldPort > 0) {
+            const oldCh = fanOut[oldPort - 1];
+            if (oldCh >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, oldCh - 1)) {
+              next.phantomPop = { channel: oldCh - 1, at: Date.now(), cause: 'patch_live' };
+            }
           }
-        }
-        // CONNECT side: plugging into a live channel.
-        if (target > 0 && window.wouldPopOnPlug && window.wouldPopOnPlug(s, srcKey, target)) {
-          next.phantomPop = { channel: (fanOut[target - 1] || 1) - 1, at: Date.now(), cause: 'plug' };
+          // CONNECT side: plugging into a live channel.
+          if (target > 0 && window.wouldPopOnPlug && window.wouldPopOnPlug(s, srcKey, target)) {
+            next.phantomPop = { channel: (fanOut[target - 1] || 1) - 1, at: Date.now(), cause: 'plug' };
+          }
         }
         return next;
       });
@@ -5304,10 +5322,12 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       if (!oldPort) return;
       setState(s => {
         const next = { ...s, cables: { ...s.cables, [srcKey]: 0 } };
-        const fanOut = s.fanOut || [1, 2, 3, 4];
-        const oldCh = fanOut[oldPort - 1];
-        if (oldCh >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, oldCh - 1)) {
-          next.phantomPop = { channel: oldCh - 1, at: Date.now(), cause: 'patch_live' };
+        if (!s.big16) {
+          const fanOut = s.fanOut || [1, 2, 3, 4];
+          const oldCh = fanOut[oldPort - 1];
+          if (oldCh >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, oldCh - 1)) {
+            next.phantomPop = { channel: oldCh - 1, at: Date.now(), cause: 'patch_live' };
+          }
         }
         return next;
       });
@@ -5937,8 +5957,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           const xSorted = [...paths.stageCables].filter(c => c.from && c.to).sort((a, b) => a.from.x - b.from.x);
           return paths.stageCables.map(c => {
             if (!c.from || !c.to) return null;
-            const isDragged = dragState && dragState.type === 'source' && dragState.id === c.src;
-            const someOtherDragged = dragState && !isDragged;
+            // In the 16-ch stage the source→sub-snake XLR stays put; the
+            // patchable end is the sub-snake TAIL at the box (see patchTails).
+            // So an xlr cable never follows the cursor, but it stays bright (not
+            // dimmed) while its own tail is being repatched.
+            const isMine = dragState && dragState.type === 'source' && dragState.id === c.src;
+            const isDragged = isMine && !c.xlr;
+            const someOtherDragged = dragState && !isMine;
             // Stage cables are all one neutral gray, like real stage cabling —
             // no color to lean on. Hovering a cable brightens just that one so
             // a viewer can trace it end to end. Channel identity lives on the
@@ -6082,13 +6107,31 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           // relaxing into place, so the whole fan splays instead of reading as
           // hard straight lines. Dangling (unpatched) tails curve loose to an
           // unconnected end.
-          const dx = t.x - t.fromX, dy = t.y - t.fromY;
-          const d = `M ${t.fromX} ${t.fromY} C ${t.fromX + dx * 0.55} ${t.fromY + dy * 0.08}, ${t.fromX + dx * 0.45} ${t.y - dy * 0.08}, ${t.x} ${t.y}`;
+          //
+          // PATCHABLE: on the 16-ch band stage the tail's box end is a drag
+          // handle — grab it and drop it on a different IN jack to repatch that
+          // source (mutates state.cables, so the console channel + audio follow).
+          const patchable = state.big16 && !t.dangling && t.srcKey && !!window.SOURCES[t.srcKey];
+          const isDragged = patchable && dragState && dragState.type === 'source' && dragState.id === t.srcKey;
+          const someOtherDragged = dragState && dragState.type === 'source' && (!patchable || dragState.id !== t.srcKey);
+          const end = isDragged ? dragState.cursor : { x: t.x, y: t.y };
+          const dx = end.x - t.fromX, dy = end.y - t.fromY;
+          const d = `M ${t.fromX} ${t.fromY} C ${t.fromX + dx * 0.55} ${t.fromY + dy * 0.08}, ${t.fromX + dx * 0.45} ${end.y - dy * 0.08}, ${end.x} ${end.y}`;
+          const dim = someOtherDragged ? 0.2 : 1;
           return (
             <g key={'patch-' + t.srcKey} style={{ pointerEvents: 'none' }}>
-              <path d={d} stroke="#000" strokeWidth="3.5" fill="none" opacity={t.dangling ? 0.18 : 0.35} strokeLinecap="round"/>
-              <path d={d} stroke={t.color} strokeWidth={t.cross ? 2.4 : 1.8} fill="none" opacity={t.dangling ? 0.55 : (t.cross ? 0.98 : 0.8)} strokeLinecap="round" strokeDasharray={t.dangling ? '5 3' : 'none'}/>
-              <circle cx={t.x} cy={t.y} r="2" fill={t.dangling ? '#0a0a0c' : t.color} stroke={t.dangling ? t.color : '#0a0a0c'} strokeWidth="0.8"/>
+              <path d={d} stroke="#000" strokeWidth="3.5" fill="none" opacity={(t.dangling ? 0.18 : 0.35) * dim} strokeLinecap="round"/>
+              <path d={d} stroke={t.color} strokeWidth={t.cross ? 2.4 : 1.8} fill="none" opacity={(t.dangling ? 0.55 : (t.cross ? 0.98 : 0.8)) * dim} strokeLinecap="round" strokeDasharray={t.dangling ? '5 3' : 'none'}/>
+              <circle cx={end.x} cy={end.y} r="2" fill={t.dangling ? '#0a0a0c' : t.color} stroke={t.dangling ? t.color : '#0a0a0c'} strokeWidth="0.8" opacity={dim}/>
+              {/* DRAG HANDLE — grab the tail at the box and repatch it. */}
+              {patchable && !someOtherDragged && (
+                <g style={{ pointerEvents: 'auto' }}>
+                  <circle className="cable-hit" cx={end.x} cy={end.y} r="10" fill="transparent"
+                    onPointerDown={(e) => startDrag(e, { type: 'source', id: t.srcKey })}/>
+                  <circle className="cable-handle" cx={end.x} cy={end.y} r={isDragged ? 5.5 : 4.5}
+                    fill={t.color} stroke="#0a0a0c" strokeWidth="1.1" pointerEvents="none"/>
+                </g>
+              )}
             </g>
           );
         })}
