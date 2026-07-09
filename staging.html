@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=128"></script>
+<script src="content-staging.js?v=129"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -10627,9 +10627,17 @@ function App() {
     // sub-snake) doesn't over-zoom. A big region (the whole drum riser + its
     // sub-snake) lands at a lower scale so both fit and the runs stay traceable.
     const margin = 1.25;
-    const fit = Math.min(vp.clientWidth / (rw * margin), vp.clientHeight / (rh * margin));
-    const s = Math.max(fitScale || 1, Math.min(3, fit));
-    setZoom({ scale: s, tx: vp.clientWidth / 2 - s * cx, ty: vp.clientHeight / 2 - s * cy });
+    const fitBoth = Math.min(vp.clientWidth / (rw * margin), vp.clientHeight / (rh * margin));
+    // A region far WIDER than the viewport — the console snake fan-out on the
+    // 16-ch desk — barely zooms if we try to fit its whole width, so it reads
+    // no closer than the fit view. Instead fill its HEIGHT (a genuine close-in)
+    // and let the cursor-driven pan below carry the eye across the width.
+    const wide = (rw / rh) > (vp.clientWidth / vp.clientHeight) * 1.6;
+    const fit = wide ? (vp.clientHeight / (rh * 1.12)) : fitBoth;
+    const s = Math.max(fitScale || 1, Math.min(3.4, fit));
+    // Only the wide fan-out zoom pans; the square region zooms (stage box, drum)
+    // keep their centred, non-panning behaviour.
+    setZoom({ scale: s, tx: vp.clientWidth / 2 - s * cx, ty: vp.clientHeight / 2 - s * cy, pannable: wide });
   }, [fitScale, designW]);
   const onZoomReset = React.useCallback(() => setZoom(null), []);
   // Drop the zoom whenever the view, level, or board changes, and on Escape, so
@@ -10641,6 +10649,28 @@ function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [!!zoom]);
+  // Cursor-driven pan while zoomed. The pointer's position in the viewport maps
+  // to the pan, so a region wider or taller than the screen (the 16-ch console
+  // fan-out) can be explored by moving the mouse toward the side you want to
+  // reach, without zooming back out. The range is clamped to the content, so a
+  // region that already fits fully (stage box, drum) doesn't move at all.
+  const zoomScale = (zoom && zoom.pannable) ? zoom.scale : 0;
+  React.useEffect(() => {
+    if (!zoomScale) return;
+    const vp = fitViewportRef.current, dr = designRef.current;
+    if (!vp || !dr) return;
+    const scaledW = zoomScale * dr.offsetWidth, scaledH = zoomScale * dr.offsetHeight;
+    const onMove = (e) => {
+      const r = vp.getBoundingClientRect();
+      const nx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      const ny = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+      const txMin = Math.min(0, r.width - scaledW);   // 0 (no pan) when the content fits
+      const tyMin = Math.min(0, r.height - scaledH);
+      setZoom(z => (z ? { ...z, tx: nx * txMin, ty: ny * tyMin } : z));
+    };
+    vp.addEventListener('mousemove', onMove);
+    return () => vp.removeEventListener('mousemove', onMove);
+  }, [zoomScale]);
 
   // Keep the rendered channel count in step with the selected desk size. Padding
   // only ever adds or removes UNUSED strips (real channels are untouched), so
