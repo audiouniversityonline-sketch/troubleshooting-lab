@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=132"></script>
+<script src="content-staging.js?v=133"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7372,8 +7372,15 @@ SCENARIOS.push({
 // own testing). Everyone else reaches it through the member-gated size selector.
 const BAND_PARAM = IS_STAGING && (() => { try { return new URLSearchParams(window.location.search).get('band') === '1'; } catch (e) { return false; } })();
 
-// Lessons ("Run the show") are members-only now, alongside the challenge modes.
-const isLocked = (sc) => !!(sc && (sc.isChallenge || sc.isLesson) && TIER !== 'member');
+// Free tier now includes Run the Show (email-gated after the first win, not
+// locked), a Practice taste (budget below), and one Feedback ring-out taste.
+// The members-only depth is the Scenario Library and the Monitor World course;
+// everything else is either free or soft-gated by a budget in loadLevel.
+const isLocked = (sc) => !!(sc && TIER !== 'member' && (sc.isLibrary || sc.isMonitor));
+// The Feedback ring-out is a single free taste: a free viewer rings out one
+// wedge, then re-entry (and NEXT WEDGE) shows the member pitch. Tracked on the
+// existing completed ledger (set when the ring-out is solved), so no new field.
+const FEEDBACK_ID = window.FEEDBACK_MODE ? window.FEEDBACK_MODE.id : null;
 
 // Indices of the unlocked, no-win scenarios the app jumps to directly (the
 // welcome walkthrough and Free Play). Computed once after SCENARIOS is
@@ -7392,7 +7399,7 @@ const HOME_INDEX = (TIER === 'member') ? 0 : (SANDBOX_INDEX >= 0 ? SANDBOX_INDEX
 // FELT (a door walked through and pulled back from), not just described behind
 // a lock. Feedback Mode and custom authoring stay fully member-gated; only
 // Practice Mode is soft-gated by this budget. Members are never counted.
-const FREE_PRACTICE_LIMIT = 10;
+const FREE_PRACTICE_LIMIT = 7;
 
 // Picker bands — every scenario maps to one of four bands via bandOf(). The
 // mode picker groups by these IDs: Learn (the Essentials), Practice (Practice +
@@ -7781,10 +7788,10 @@ function EmailGate({ open, onSubmit, onSkip }) {
         boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 16px 48px rgba(0,0,0,0.8)',
         display: 'flex', flexDirection: 'column', gap: 13,
       }}>
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · HANDS-ON</div>
-        <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Learn live sound by doing it.</div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · SAVE YOUR PROGRESS</div>
+        <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Keep going with Run the Show</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          Jump onto a real mixing console. The band is playing and something just broke. Find it and fix it. Enter your email to start.
+          Nice work, the system is coming up. Enter your email to save your progress and unlock the rest of the run: gain, monitors, feedback, and the full show.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -7816,13 +7823,13 @@ function EmailGate({ open, onSubmit, onSkip }) {
           width: '100%', padding: '11px 18px', fontSize: 12, fontWeight: 800, letterSpacing: 1,
           background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
           border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer',
-        }}>GET STARTED →</button>
+        }}>SAVE AND CONTINUE →</button>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <span style={{ fontSize: 10, color: 'var(--ink-3)', lineHeight: 1.4 }}>No spam. Tips and new scenarios, unsubscribe anytime.</span>
           <button onClick={onSkip} className="ui-no-select" style={{
             background: 'transparent', border: 'none', color: 'var(--ink-3)', cursor: 'pointer',
             fontSize: 10.5, textDecoration: 'underline', whiteSpace: 'nowrap', padding: 0,
-          }}>Skip for now</button>
+          }}>Not now</button>
         </div>
       </div>
     </div>
@@ -8119,39 +8126,18 @@ function WalkthroughIntro({ open, onStart }) {
 // Wrap card: the recap, the email capture (the lead magnet's actual ask, at the
 // moment of peak interest), and the handoff to the lessons or Free Play. The
 // email is optional; routing without it is a soft skip, handled by the caller.
-function WalkthroughWrap({ open, onEmail, onLessons, onExplore }) {
-  const [name, setName] = uS('');
-  const [val, setVal] = uS('');
-  const [err, setErr] = uS(false);
-  const [sent, setSent] = uS(false);
+function WalkthroughWrap({ open, onLessons, onExplore }) {
   if (!open) return null;
-  const submit = () => {
-    if (!isValidEmail(val)) { setErr(true); return; }
-    onEmail(val.trim(), name.trim());
-    setSent(true);
-  };
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 96, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ width: 520, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, padding: '24px 26px', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: 13 }}>
+      <div style={{ width: 520, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, padding: '24px 26px', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: 15 }}>
         <div className="display" style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.1 }}>That's the whole console</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You know how the console works. Next, become a member and put those skills into action.
+          You know how every part of the console works. Next, put it together: set up a system from a cold start and run a full show, one step at a time. The first lesson is on us.
         </div>
-        {!sent ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '13px 14px', background: '#0e2415', border: '1px solid #1e3a2a', borderRadius: 8 }}>
-            <div className="display" style={{ fontSize: 14, fontWeight: 800 }}>Ready to set one up and run a full show?</div>
-            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>Enter your email and we'll show you the next step.</div>
-            <input type="text" autoComplete="given-name" placeholder="First name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 13, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid #2c9d52', outline: 'none' }}/>
-            <input type="email" inputMode="email" autoComplete="email" placeholder="you@email.com" value={val} onChange={(e) => { setVal(e.target.value); if (err) setErr(false); }} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 13, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid ' + (err ? '#e05a5a' : '#2c9d52'), outline: 'none' }}/>
-            {err && <div style={{ fontSize: 10.5, color: '#e98a8a' }}>That doesn't look like a valid email address.</div>}
-            <button onClick={submit} className="mono ui-no-select" style={{ width: '100%', padding: '10px 16px', fontSize: 11.5, fontWeight: 800, letterSpacing: 1, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>SEND ME THE NEXT STEP →</button>
-          </div>
-        ) : (
-          <div style={{ fontSize: 12, color: 'var(--green)', lineHeight: 1.5, padding: '10px 12px', background: '#0e2415', border: '1px solid #1e3a2a', borderRadius: 8 }}>Thanks{name ? ', ' + name : ''}. Check your inbox for the next step. Where to now?</div>
-        )}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button onClick={onLessons} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 6, cursor: 'pointer' }}>SEE THE FULL COURSE →</button>
-          <button onClick={onExplore} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '10px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--cool)', border: '1px solid #38383e', borderRadius: 6, cursor: 'pointer' }}>▶ EXPLORE THE BOARD</button>
+          <button onClick={onLessons} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '11px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>START RUN THE SHOW →</button>
+          <button onClick={onExplore} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '11px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--cool)', border: '1px solid #38383e', borderRadius: 6, cursor: 'pointer' }}>▶ EXPLORE THE BOARD</button>
         </div>
       </div>
     </div>
@@ -8719,6 +8705,9 @@ function App() {
   const [freePractice, setFreePractice] = uS(() => profileRef.current.freePractice || 0);
   const freeRepsLeft = TIER === 'member' ? Infinity : Math.max(0, FREE_PRACTICE_LIMIT - freePractice);
   const practiceSoftOpen = TIER === 'member' || freeRepsLeft > 0;
+  // Feedback ring-out: one free guided taste. Open until the free viewer has
+  // solved it once (the completed ledger holds the flag); members never gated.
+  const feedbackSoftOpen = TIER === 'member' || !(FEEDBACK_ID != null && completed[FEEDBACK_ID]);
 
   const [emailDone, setEmailDone] = uS(() => !!(profileRef.current.email || profileRef.current.emailSkipped));
   const captureEmail = (email, firstName) => {
@@ -8732,6 +8721,11 @@ function App() {
     saveProfile(profileRef.current);
     setEmailDone(true);
   };
+  // "Not now" on the Run the Show email gate: do NOT grant access (email stays
+  // required for the deeper lessons and Practice). Just drop the viewer back to
+  // Free Play so they're never trapped behind the modal; the gate returns the
+  // next time they open a gated lesson. loadLevel resolves by the time this runs.
+  const deferEmail = () => { if (SANDBOX_INDEX >= 0) loadLevel(SANDBOX_INDEX); };
 
   // Welcome chooser. A brand-new signup picks their first experience: a guided
   // quick fix (the diagnosis game) or the full Essentials course. pathChosen is
@@ -10063,8 +10057,12 @@ function App() {
     // budget lasts, then it shows the pitch like any locked mode. Feedback Mode
     // and custom scenarios use the hard lock (the latter is always bypassed via
     // its share link).
-    const hardLocked = isLocked(lv) && !(lv && lv.isPractice && practiceSoftOpen);
-    if (!lv || (hardLocked && !bypassLock)) { if (lv) setPitchFor(lv.isLesson ? { title: 'Run the show', isLesson: true } : lv); return; }
+    const hardLocked = isLocked(lv) && !bypassLock;
+    // Free taste budgets: Practice and Feedback aren't hard-locked, but a free
+    // viewer who has spent the budget gets the member pitch, not another go.
+    const outOfPractice = lv && lv.isPractice && !practiceSoftOpen && !bypassLock;
+    const outOfFeedback = lv && lv.isFeedbackMode && !feedbackSoftOpen && !bypassLock;
+    if (!lv || hardLocked || outOfPractice || outOfFeedback) { if (lv) setPitchFor(lv); return; }
     // New board = new room: give the wedges fresh resonance frequencies so the
     // student re-diagnoses instead of memorizing. A same-seed replay keeps them.
     if (!reuseSeed && window.reseedFeedback) window.reseedFeedback();
@@ -10399,6 +10397,9 @@ function App() {
     // gone, the next tap shows the membership pitch instead of a fresh rep.
     // (A shared-rep link's curated rep counts as one of those free reps.)
     if (level.isPractice && !practiceSoftOpen) { setPitchFor(SCENARIOS[window.LEVELS.length]); return; }
+    // Feedback ring-out is a single free taste: once the free viewer has rung out
+    // their one wedge (completed set), NEXT WEDGE shows the membership pitch.
+    if (level.isFeedbackMode && !feedbackSoftOpen) { setPitchFor(level); return; }
     // Bypass the lock: this replays the current scenario (already accessible),
     // which is also how a free viewer retries a custom or shared scenario.
     loadLevel(levelIdx, undefined, true);
@@ -10495,18 +10496,17 @@ function App() {
   const walkNext = () => { setWalkStep((s) => { if (s + 1 >= walkSteps.length) { finishMixerLesson(); return s; } return s + 1; }); };
   const walkSkip = () => { setWalkPhase(null); if (SANDBOX_INDEX >= 0) loadLevel(SANDBOX_INDEX); };
   const finishWalkthrough = (route) => {
-    const merge = { ...profileRef.current, walkthroughDone: true, pathChosen: true };
-    if (!emailDone) merge.emailSkipped = true;
-    profileRef.current = merge;
+    profileRef.current = { ...profileRef.current, walkthroughDone: true, pathChosen: true };
     saveProfile(profileRef.current);
     setPathChosen(true);
-    if (!emailDone) setEmailDone(true);
     dismissTour();
     setWalkPhase(null);
+    // Run the Show is free now, so "Start Run the Show" drops a free viewer into
+    // lesson 1 (the email gate catches them after the first win, not here). We no
+    // longer soft-skip the email gate when the tutorial ends, so that ask still
+    // fires. "Explore" just lands on Free Play.
+    if (route === 'lessons') { loadLevel(0); return; }
     loadLevel(SANDBOX_INDEX >= 0 ? SANDBOX_INDEX : 0, undefined, true);
-    // "See the full course" pitches Run the show (members); "Explore" just
-    // lands them on Free Play.
-    if (route === 'lessons') setPitchFor({ title: 'Run the show', isLesson: true });
   };
   // Fault-freshness coverage for the picker + debrief (members only). Recomputed
   // each render from the live ledger, so it reflects the rep just solved.
@@ -10913,7 +10913,6 @@ function App() {
       <TourOverlay open={tourOpen && walkPhase === null} onClose={dismissTour}/>
       <WalkthroughIntro open={walkPhase === 'intro'} onStart={startWalkthrough}/>
       <WalkthroughWrap open={walkPhase === 'wrap'}
-        onEmail={captureEmail}
         onLessons={() => finishWalkthrough('lessons')}
         onExplore={() => finishWalkthrough('explore')}/>
       {/* Any pop-up (Monitor EQ, Input List, catalog, pitch, CTA) owns the top
@@ -10922,16 +10921,15 @@ function App() {
       <WalkthroughSpotlight target={(eqPanelOpen || ioListOpen || catalogOpen || pitchFor || ctaOpen) ? null : (walkPhase === 'steps' ? (walkSteps[walkStep] && walkSteps[walkStep].target) : (guideTarget || null))}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
-      {/* Free-tier email gate (soft, skippable, remembered). Fires when a free
-          viewer reaches their first real free activity: the Essentials indices
-          (0..LEVELS.length-1, which are member-locked so a free user only lands
-          here if that ever changes) OR Practice Mode at index LEVELS.length —
-          the free hook. Shared scenario/rep links (REP_PARAM/SCENARIO_PARAM) are
-          never gated. Members never see it. The Mixer Tutorial captures at its
-          own wrap-up, so a free viewer is asked at most once (emailDone shared). */}
+      {/* Free-tier email gate. Fires AFTER the first Run the Show win: lesson 1
+          (levelIdx 0) is free, and lessons 2+ (levelIdx 1..LEVELS.length-1) plus
+          the Practice hook (index LEVELS.length) require an email to continue.
+          "Not now" (deferEmail) drops them back to Free Play without granting
+          access, so the ask stands but never traps them. Shared scenario/rep
+          links and members are never gated. */}
       <EmailGate
-        open={TIER !== 'member' && !emailDone && !tourOpen && !REP_PARAM && !SCENARIO_PARAM && !BAND_PARAM && levelIdx >= 0 && levelIdx <= window.LEVELS.length}
-        onSubmit={captureEmail} onSkip={skipEmail}/>
+        open={TIER !== 'member' && !emailDone && !tourOpen && !REP_PARAM && !SCENARIO_PARAM && !BAND_PARAM && levelIdx >= 1 && levelIdx <= window.LEVELS.length}
+        onSubmit={captureEmail} onSkip={deferEmail}/>
       {/* The welcome chooser is retired: a fresh free visitor gets the "Know
           your console" walkthrough, and everyone else lands with the mode menu
           open (startOpen on TopBar), so the menu is the single universal entry.
@@ -10985,8 +10983,8 @@ function App() {
             <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.5, fontWeight: 700 }}>🔒 MEMBERS ONLY</div>
             <div className="display" style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>{pitchFor.title}</div>
             <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-              {pitchFor.isLesson
-                ? 'Set up and run a full live show, step by step, across ten guided lessons.'
+              {pitchFor.isMonitor
+                ? 'A members course on building a separate monitor mix for every performer.'
                 : pitchFor.big16
                 ? 'Mix a full 16-channel board with every input up.'
                 : pitchFor.isDigital
@@ -10994,7 +10992,7 @@ function App() {
                 : pitchFor.isLibrary
                 ? 'A growing library of real-world scenarios to troubleshoot, each a different board.'
                 : pitchFor.isFeedbackMode
-                ? 'Ring-out training: find the frequency that is feeding back and cut it on a graphic EQ.'
+                ? 'That was your free ring-out. Members ring out every wedge, by ear, with no limit.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
                 ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free tries. Members practice with no limit.'
                 : 'Endless troubleshooting reps: a new fault each time, more at once as you turn it up.'}
@@ -11046,6 +11044,7 @@ function App() {
                   <StableSlot levelKey={levelIdx}>
                   {solved
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < SCENARIOS.length && !isLocked(SCENARIOS[levelIdx + 1])}
+                        feedbackDone={level.isFeedbackMode && TIER !== 'member' && FEEDBACK_ID != null && !!completed[FEEDBACK_ID]}
                         onPracticeAgain={level.isChallenge ? practiceAgain : null}
                         onGoEssentials={(level.isCustom && TIER !== 'member') ? () => { loadLevel(WALKTHROUGH_INDEX, undefined, true); } : null}
                         practiceFreeLeft={(level.isPractice && TIER !== 'member') ? freeRepsLeft : null}
@@ -11292,7 +11291,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   const COURSES = [];
   const mixerLessons = SCENARIOS.map((s, i) => ({ s, i })).filter((x) => x.s.isMixerLesson);
   if (mixerLessons.length) COURSES.push({ key: 'mixer', label: 'MIXER TUTORIAL', color: 'var(--cool)', tag: 'FREE', free: true, blurb: 'Learn the console one part at a time. Jump into any piece to refresh it, no need to run the whole thing.', rows: mixerLessons });
-  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a live system with nothing powered on yet and run a full show. Ten lessons, in order.', rows: lessons });
+  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'FREE', free: true, blurb: 'Set up a live system with nothing powered on yet and run a full show. Ten lessons, in order. The first is free; enter your email to keep going.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MONITOR WORLD', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build a separate mix for each performer: their own source, a bit of the vocals, a sensible level, rung out so it stays clean.', rows: monitors });
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -11398,7 +11397,8 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                     ))}
                   </div>
                 )}
-                {startBtn(isMember ? 'START →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
+                {!isMember && FEEDBACK_ID != null && !completed[FEEDBACK_ID] && <div className="mono" style={{ fontSize: 9, color: 'var(--aux)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>1 FREE RING-OUT</div>}
+                {startBtn((isMember || !(FEEDBACK_ID != null && completed[FEEDBACK_ID])) ? 'START →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
               </div>
             )}
           </div>
@@ -11888,7 +11888,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak }) {
+function SolvedCard({ level, onNext, hasNext, feedbackDone, coaching, debrief, onPracticeAgain, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -12031,7 +12031,7 @@ function SolvedCard({ level, onNext, hasNext, coaching, debrief, onPracticeAgain
             width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
             background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
             border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-          }}>{level.isFeedbackMode ? 'NEXT WEDGE →'
+          }}>{level.isFeedbackMode ? (feedbackDone ? 'JOIN TO KEEP TRAINING →' : 'NEXT WEDGE →')
               : (practiceFreeLeft === 0) ? 'JOIN TO KEEP TRAINING →'
               : 'NEXT FAULT →'}</button>
         </>
