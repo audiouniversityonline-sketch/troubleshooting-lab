@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=130"></script>
+<script src="content-staging.js?v=131"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -10630,11 +10630,19 @@ function App() {
     const fitBoth = Math.min(vp.clientWidth / (rw * margin), vp.clientHeight / (rh * margin));
     // A region far WIDER than the viewport — the console snake fan-out on the
     // 16-ch desk — barely zooms if we try to fit its whole width, so it reads
-    // no closer than the fit view. Instead fill its HEIGHT (a genuine close-in)
-    // and let the cursor-driven pan below carry the eye across the width.
+    // no closer than the fit view. Instead zoom on its HEIGHT and let the
+    // cursor-driven pan carry the eye across the width. Deliberately a MODEST
+    // close-in (not filling the height): more of the fan-out stays on screen so
+    // you can drag a tail across it and still see the far end, and the pan is
+    // gentler. Capped ~2.1x for the same reason.
     const wide = (rw / rh) > (vp.clientWidth / vp.clientHeight) * 1.6;
-    const fit = wide ? (vp.clientHeight / (rh * 1.12)) : fitBoth;
-    const s = Math.max(fitScale || 1, Math.min(3.4, fit));
+    // Wide fan-out: aim to show ~half its width on screen (a modest close-in, so
+    // the far end stays reachable while you drag a tail across), but never so much
+    // that its height overflows. Pan handles the rest. Square regions fit as before.
+    const showHalf = 2.0 * vp.clientWidth / rw;
+    const fillHeight = vp.clientHeight / (rh * 1.2);
+    const fit = wide ? Math.min(showHalf, fillHeight) : fitBoth;
+    const s = Math.max(fitScale || 1, Math.min(wide ? 2.3 : 3, fit));
     // Only the wide fan-out zoom pans; the square region zooms (stage box, drum)
     // keep their centred, non-panning behaviour.
     setZoom({ scale: s, tx: vp.clientWidth / 2 - s * cx, ty: vp.clientHeight / 2 - s * cy, pannable: wide });
@@ -10650,10 +10658,12 @@ function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [!!zoom]);
   // Cursor-driven pan while zoomed. The pointer's position in the viewport maps
-  // to the pan, so a region wider or taller than the screen (the 16-ch console
-  // fan-out) can be explored by moving the mouse toward the side you want to
-  // reach, without zooming back out. The range is clamped to the content, so a
-  // region that already fits fully (stage box, drum) doesn't move at all.
+  // to the pan, so a region wider than the screen (the 16-ch console fan-out) can
+  // be explored by moving the pointer toward the side you want to reach, without
+  // zooming back out. Uses POINTERMOVE (not mousemove) so it keeps panning while a
+  // cable is lifted mid-drag — that's how you drag a fan-out tail from one end of
+  // the snake to the other (e.g. re-patch CH 11 onto CH 2) without letting go. The
+  // range is clamped to the content, so a region that already fits doesn't move.
   const zoomScale = (zoom && zoom.pannable) ? zoom.scale : 0;
   React.useEffect(() => {
     if (!zoomScale) return;
@@ -10668,8 +10678,8 @@ function App() {
       // Keep the vertical position the zoom set (centred on the fan-out).
       setZoom(z => (z ? { ...z, tx: nx * txMin } : z));
     };
-    vp.addEventListener('mousemove', onMove);
-    return () => vp.removeEventListener('mousemove', onMove);
+    vp.addEventListener('pointermove', onMove);
+    return () => vp.removeEventListener('pointermove', onMove);
   }, [zoomScale]);
 
   // Keep the rendered channel count in step with the selected desk size. Padding
