@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=138"></script>
+<script src="content-staging.js?v=139"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8046,9 +8046,6 @@ function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
         </div>
       </div>
 
-      {/* The job, in one line — the framing, kept small so the step is the focus. */}
-      {level.symptom && <div style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.45 }}>{level.symptom}</div>}
-
       {popped && (
         <div style={{ fontSize: 11, color: 'var(--hot)', lineHeight: 1.45, padding: '6px 9px', background: 'rgba(255,70,48,0.1)', border: '1px solid rgba(255,70,48,0.4)', borderRadius: 6 }}>
           ⚠ That sent a pop to the speakers. Reset and switch +48V with the channel muted.
@@ -8057,7 +8054,6 @@ function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
 
       {active ? (
         <>
-          <div className="display" style={{ fontSize: 14, fontWeight: 800, lineHeight: 1.2 }}>{active.title || ('Step ' + (activeIndex + 1))}</div>
           {active.teach && <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>{active.teach}</div>}
           <div key={'do-' + activeIndex} style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.5, padding: '9px 11px', background: 'rgba(74,222,128,0.10)', border: '1px solid var(--green)', borderRadius: 6, '--attn': 'var(--green)', animation: 'briefAttention 1.5s ease-in-out 3' }}>
             <span className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 1, fontWeight: 800, display: 'block', marginBottom: 3 }}>DO THIS</span>
