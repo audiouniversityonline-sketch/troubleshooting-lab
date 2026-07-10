@@ -603,6 +603,145 @@ window.LEVELS = [
   },
 ];
 
+// START HERE — the free first-impression course. A short chain of little wins
+// on a system that is already patched and playing, so a newcomer gets real
+// value fast without the from-scratch patch/power grind (that now lives in the
+// members' Run the Show course). Lesson-style like LEVELS (guided coach + win
+// detection), free, and it ends on the email opt-in + join call to action.
+// Stable ids in their own 100s range so they never collide with LEVELS.
+window.START_HERE = [
+  {
+    id: 101, task: true,
+    title: 'Get Your Vocal in the Mix',
+    involves: [1, 2, 3, 4],
+    // The band is up and playing (defaults), but the lead vocal channel is all
+    // the way down. The student brings it in the right way: PFL, gain, then the
+    // fader. Teaches the gain-staging order, one small win at a time.
+    symptom: 'The band is playing, but the lead vocal is not in the mix yet: its channel is all the way down. Bring the singer in the right way. Check it in PFL, set the gain by the meter, then bring the fader up.',
+    hint: 'Work the Vocal 1 channel from the top down. Press PFL to hear it in your headphones, bring the GAIN up until the meter sits in a healthy spot, then drop PFL and bring the fader up to unity.',
+    hints: [
+      { title: 'Check it in PFL', target: 'ch1-pfl', teach: 'PFL sends the channel straight to your headphones and the meter, so you can check it before the room hears a thing. Always start here.', text: 'Press PFL on Vocal 1 to hear it in your headphones first.', done: (ctx) => (ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) },
+      { title: 'Set the gain', target: 'ch1-gain', teach: 'Gain sets how hard the mic hits the console. Bring it up while you watch the meter: strong, with a little room to spare before the red. You set gain by the meter, not by ear.', text: 'With Vocal 1 in PFL, bring the GAIN up to a healthy level on the meter.', done: (ctx) => ctx.state.channels[0] && ctx.state.channels[0].gain >= 0.4 },
+      { title: 'Bring up the fader', target: 'ch1-fader', teach: 'Gain set. Now drop PFL and bring the channel fader up to unity, the U mark. That is where it is built to run, and now the singer is in the room.', text: 'Drop PFL, then bring the Vocal 1 fader up to unity.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
+    ],
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => {
+      s.master.fader = 0.75; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.65; s.outputs.pa_r.volume = 0.65;
+      s.channels[0].gain = 0; s.channels[0].fader = 0; s.channels[0].mute = false; s.channels[0].solo = false;
+      return s;
+    },
+    solution: 'Vocal 1 checked in PFL, gain set on the meter, fader up to unity. The singer is in the mix, done the right way.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 102, task: true,
+    title: 'Give the Singer a Monitor',
+    involves: [1, 2, 3, 4],
+    // Vocal live in the PA, her wedge up. Just the aux send: open AUX 1 on the
+    // vocal to feed her monitor. (Adapts the Monitor Mix lesson.)
+    symptom: 'The singer is in the room, but she cannot hear herself on stage. Send her voice to her monitor wedge.',
+    hint: 'Wedge 1 is on and turned up. Turn up AUX 1 on the Vocal 1 channel to send her voice to it.',
+    hints: [
+      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', teach: 'A wedge is a separate mix from the room. AUX 1 feeds Wedge 1 and does not touch the PA, so you build the singer her own mix.', text: 'Turn up AUX 1 on the Vocal 1 channel to send it to Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
+    ],
+    conditions: [
+      { source: 'vocal', dest: 'pa',    min: 0.3 },
+      { source: 'vocal', dest: 'wedge', min: 0.35 },
+    ],
+    sabotage: (s) => {
+      s.master.fader = 0.75; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
+      s.channels.forEach(c => c.aux1 = 0);
+      return s;
+    },
+    solution: 'AUX 1 up on the Vocal 1 channel sends it to Wedge 1. The singer can hear herself.',
+    defaultInspect: 'wedge',
+  },
+  {
+    id: 103, task: true,
+    title: 'Ring Out the Feedback',
+    involves: [1, 2, 3, 4],
+    // The singer wants more of herself in the wedge. As the student pushes AUX 1
+    // up, the wedge crosses the ring threshold and feeds back. To win: vocal
+    // strong in the wedge (>= 0.8) AND no feedback, so pulling the send back
+    // down will not do it. The fix is the monitor EQ: cut the glowing band.
+    symptom: 'Turn Vocal 1 up in Wedge 1. Push it to a strong level and the wedge starts to ring: that is feedback. Get the level up and ring the feedback out on the monitor EQ.',
+    hint: 'Turn up AUX 1 on the Vocal 1 channel to raise it in Wedge 1. When it rings, look at the Wedge 1 monitor EQ: the ringing frequency glows. Pull that band down far enough to stop the ring. Cuts cost a little level, so keep them small.',
+    hints: [
+      { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'Push AUX 1 up to raise Vocal 1 in the wedge. As a wedge gets loud it can start to ring, which is the monitor feeding back on itself.', text: 'Bring AUX 1 on the Vocal 1 channel up until Wedge 1 reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
+      { title: 'Ring it out', target: 'out-wedge1', teach: 'Feedback rings at one frequency. On the wedge Monitor EQ that band glows. Pull just that band down a touch and the ring stops while the level stays up.', text: 'When it rings, pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback },
+    ],
+    conditions: [
+      { source: 'vocal', dest: 'pa',    min: 0.3 },
+      { source: 'vocal', dest: 'wedge', min: 0.8 },
+    ],
+    sabotage: (s) => {
+      s.master.fader = 0.75; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.7; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
+      s.channels[0].aux1 = 0.2;
+      s.channels[0].highpass = false;
+      return s;
+    },
+    solution: 'Turn Vocal 1 up in Wedge 1, then ring it out: pull the glowing band down on the monitor EQ to cut the ringing frequency.',
+    defaultInspect: 'wedge',
+  },
+  {
+    id: 104, task: true,
+    title: 'Find the Problem',
+    involves: [1, 2, 3, 4],
+    // First taste of troubleshooting: the most common real dead-channel cause,
+    // a muted strip. Everything else on Vocal 1 is set; just unmute it.
+    symptom: 'The band sounds good, but the lead vocal has gone dead: nothing from Vocal 1 is reaching the room. Find out why and get her back.',
+    hint: 'When a channel goes dead, check the simple things first. Look at the Vocal 1 channel: is it muted?',
+    hints: [
+      { title: 'Find the dead channel', target: 'ch1-strip', teach: 'Before you go digging, check the obvious. A muted channel is the most common reason a source suddenly disappears. Look at Vocal 1.', text: 'Vocal 1 is muted. Unmute it to bring the singer back.', done: (ctx) => ctx.state.channels[0] && !ctx.state.channels[0].mute && hintReaches(ctx, 'vocal', 'pa', 0.3) },
+    ],
+    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    sabotage: (s) => {
+      s.master.fader = 0.75; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.65; s.outputs.pa_r.volume = 0.65;
+      s.channels[0].mute = true;
+      return s;
+    },
+    solution: 'Vocal 1 was muted. Unmuting it brings the singer straight back. When a source dies, check the mute first.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 105, task: true,
+    title: "You're Running Sound",
+    involves: [1, 2, 3, 4],
+    // Finale: everything is set (band up, monitor sent) but the mains are down.
+    // Bring the MAIN fader up and the whole show fills the room. This is where
+    // the email opt-in + join call to action fire (handled in the app shell).
+    symptom: 'Everything is set: gains, faders, the monitor, all good. The mains are still down. Bring the main mix up and you are running the show.',
+    hint: 'Bring the MAIN fader in the master section up to unity. The whole band comes up in the room together.',
+    hints: [
+      { title: 'Bring up the main mix', target: 'master-fader', teach: 'The MAIN fader is the whole show to the audience. With everything else set, you bring it up and the band fills the room.', text: 'Bring the MAIN fader up to unity. You are running the show.', done: (ctx) => ctx.state.master && !ctx.state.master.mute && ctx.state.master.fader >= 0.6 },
+    ],
+    conditions: [
+      { source: 'vocal',  dest: 'pa', min: 0.25 },
+      { source: 'vocal2', dest: 'pa', min: 0.25 },
+      { source: 'guitar', dest: 'pa', min: 0.25 },
+      { source: 'laptop', dest: 'pa', min: 0.25 },
+    ],
+    sabotage: (s) => {
+      // Full band up and set; the bass DI is powered so it plays. The mains are
+      // all the way down: the one move left is to bring the room up.
+      s.master.fader = 0; s.master.mute = false;
+      s.outputs.pa_l.volume = 0.65; s.outputs.pa_r.volume = 0.65;
+      s.channels[2].phantom = true; // active DI on bass, powered
+      return s;
+    },
+    solution: 'The main mix is up and the whole band is in the room. You just ran a system start to finish.',
+    defaultInspect: 'pa',
+  },
+];
+
 // PRACTICE MODE — the paid tier. One endless scenario instead of a fixed
 // challenge list: every rep starts with the band up and playing, then breaks
 // 1-3 things (the FAULTS selector in the top bar) drawn at random from the

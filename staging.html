@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=134"></script>
+<script src="content-staging.js?v=135"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7278,6 +7278,11 @@ const SCENARIOS = [
       return s;
     },
   })),
+  // START HERE — the free first-impression course (lesson-style, on a playing
+  // board). Appended AFTER the LEVELS.length-based Practice index is fixed, so
+  // it never shifts Practice / Feedback / sandbox. isStartHere keeps it free
+  // (see isLocked) and groups it as its own picker course.
+  ...(Array.isArray(window.START_HERE) ? window.START_HERE.map((l) => ({ ...l, isLesson: true, isStartHere: true })) : []),
 ];
 
 // The Scenario Library: a curated, growing shelf of real-world situations Kyle
@@ -7376,7 +7381,7 @@ const BAND_PARAM = IS_STAGING && (() => { try { return new URLSearchParams(windo
 // locked), a Practice taste (budget below), and one Feedback ring-out taste.
 // The members-only depth is the Scenario Library and the Monitor World course;
 // everything else is either free or soft-gated by a budget in loadLevel.
-const isLocked = (sc) => !!(sc && TIER !== 'member' && (sc.isLibrary || sc.isMonitor));
+const isLocked = (sc) => !!(sc && TIER !== 'member' && (sc.isLibrary || sc.isMonitor || (sc.isLesson && !sc.isStartHere)));
 // The Feedback ring-out is a single free taste: a free viewer rings out one
 // wedge, then re-entry (and NEXT WEDGE) shows the member pitch. Tracked on the
 // existing completed ledger (set when the ring-out is solved), so no new field.
@@ -7389,10 +7394,15 @@ const SANDBOX_INDEX = SCENARIOS.findIndex((s) => s.isSandbox);
 const WALKTHROUGH_INDEX = SCENARIOS.findIndex((s) => s.isWalkthrough);
 // The Mixer Tutorial lessons in order, so finishing one can lead into the next.
 const MIXER_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isMixerLesson);
+// The free "Start Here" course, in order, and the id of its finale (where the
+// email opt-in + join CTA fire).
+const START_HERE_INDEX = SCENARIOS.findIndex((s) => s.isStartHere);
+const START_HERE_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isStartHere);
+const SH_FINALE_ID = 105;
 // Where a visitor lands with no resume target: members go to lesson 1 of Run
 // the show; the free tier (lessons locked) lands on Free Play, never on a
 // locked lesson board.
-const HOME_INDEX = (TIER === 'member') ? 0 : (SANDBOX_INDEX >= 0 ? SANDBOX_INDEX : 0);
+const HOME_INDEX = (TIER === 'member') ? 0 : (START_HERE_INDEX >= 0 ? START_HERE_INDEX : (SANDBOX_INDEX >= 0 ? SANDBOX_INDEX : 0));
 
 // Free-tier Practice taste: a free viewer gets this many real Practice reps
 // before the membership gate. The point is to let the endless-mastery value be
@@ -7721,10 +7731,10 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 16px 48px rgba(0,0,0,0.8)',
         display: 'flex', flexDirection: 'column', gap: 12,
       }}>
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FINAL EXAM · PASSED</div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>START HERE · DONE</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You can run a system now.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You just ran a full show from the start: powered on in order, set your levels, tested every speaker, brought in the mics and DIs, built a monitor mix, and kept it clean through feedback. That's the job.
+          You got a vocal into the mix the right way, built the singer a monitor, rang out feedback, and brought the whole show up. That is the core of the job.
         </div>
         {tier === 'member' ? (
           <>
@@ -7740,7 +7750,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         ) : (
           <>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
-              Members keep training in Practice Mode: something breaks, you find it and fix it, with a new fault each time, for as long as you want. It is part of the Audio University membership.
+              Ready for more? Practice throws you a new fault to find every time, Feedback sharpens your ear ringing out wedges, and the members course sets one up from scratch, start to finish. It is all part of the Audio University membership.
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <a href={joinUrl('completion-card')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
@@ -7788,10 +7798,10 @@ function EmailGate({ open, onSubmit, onSkip }) {
         boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 16px 48px rgba(0,0,0,0.8)',
         display: 'flex', flexDirection: 'column', gap: 13,
       }}>
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · SAVE YOUR PROGRESS</div>
-        <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Keep going with Run the Show</div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · YOU DID IT</div>
+        <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You just ran a system</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          Nice work, the system is coming up. Enter your email to save your progress and unlock the rest of the run: gain, monitors, feedback, and the full show.
+          You got a vocal into the mix, built a monitor, rang out feedback, and brought the show up. Drop your email to save your progress and get the Soundcheck Checklist, the pre-show list to run before every gig.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -7823,7 +7833,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
           width: '100%', padding: '11px 18px', fontSize: 12, fontWeight: 800, letterSpacing: 1,
           background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
           border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer',
-        }}>SAVE AND CONTINUE →</button>
+        }}>SAVE MY PROGRESS →</button>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <span style={{ fontSize: 10, color: 'var(--ink-3)', lineHeight: 1.4 }}>No spam. Tips and new scenarios, unsubscribe anytime.</span>
           <button onClick={onSkip} className="ui-no-select" style={{
@@ -8915,14 +8925,19 @@ function App() {
   // Power-Down (lesson 10) is a wind-down the student can still finish after.
   // Stable ids are append-only, so completed[9] is The Gig for good.
   const [ctaOpen, setCtaOpen] = uS(false);
+  // Finale of the free Start Here course (SH_FINALE_ID). Fires once: a free
+  // viewer who has not given an email gets the opt-in first (then the CTA);
+  // members and already-subscribed viewers get the CTA straight away.
+  const [finaleEmail, setFinaleEmail] = uS(false);
   uE(() => {
     try {
       if (window.localStorage.getItem(CTA_KEY)) return;
-      if (!completed[9]) return;
+      if (!completed[SH_FINALE_ID]) return;
       window.localStorage.setItem(CTA_KEY, '1');
-      setCtaOpen(true);
+      if (TIER !== 'member' && !emailDone) setFinaleEmail(true);
+      else setCtaOpen(true);
     } catch (e) {}
-  }, [completed]);
+  }, [completed, emailDone]);
 
   // The active scenario. A Practice rep can carry a per-rep GOAL (its win
   // conditions + prompt text) in PRACTICE_LAST.winSpec — that's how Practice
@@ -10936,15 +10951,14 @@ function App() {
       <WalkthroughSpotlight target={(eqPanelOpen || catalogOpen || pitchFor || ctaOpen) ? null : (walkPhase === 'steps' ? (walkSteps[walkStep] && walkSteps[walkStep].target) : (guideTarget || null))}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
-      {/* Free-tier email gate. Fires AFTER the first Run the Show win: lesson 1
-          (levelIdx 0) is free, and lessons 2+ (levelIdx 1..LEVELS.length-1) plus
-          the Practice hook (index LEVELS.length) require an email to continue.
-          "Not now" (deferEmail) drops them back to Free Play without granting
-          access, so the ask stands but never traps them. Shared scenario/rep
-          links and members are never gated. */}
+      {/* Free-tier email opt-in. Fires at the FINALE of the free Start Here
+          course (You're Running Sound), the moment of peak value. Submitting
+          saves progress and drops them to the CTA; "Not now" skips to the CTA
+          without granting anything. Members and subscribers never see it. */}
       <EmailGate
-        open={TIER !== 'member' && !emailDone && !tourOpen && !REP_PARAM && !SCENARIO_PARAM && !BAND_PARAM && levelIdx >= 1 && levelIdx <= window.LEVELS.length}
-        onSubmit={captureEmail} onSkip={deferEmail}/>
+        open={finaleEmail && TIER !== 'member' && !emailDone && !tourOpen}
+        onSubmit={(email, name) => { captureEmail(email, name); setFinaleEmail(false); setCtaOpen(true); }}
+        onSkip={() => { setFinaleEmail(false); setCtaOpen(true); }}/>
       {/* The welcome chooser is retired: a fresh free visitor gets the "Know
           your console" walkthrough, and everyone else lands with the mode menu
           open (startOpen on TopBar), so the menu is the single universal entry.
@@ -11267,8 +11281,12 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // never fights a manual mode switch.
   uE(() => { setMode(curMode); }, [levelIdx]);
   const isMember = TIER === 'member';
-  const lessons = []; const libraries = []; const monitors = [];
-  SCENARIOS.forEach((s, i) => { const b = bandOf(s); if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); });
+  const lessons = []; const libraries = []; const monitors = []; const startHere = [];
+  SCENARIOS.forEach((s, i) => {
+    if (s.isStartHere) { startHere.push({ s, i }); return; }
+    const b = bandOf(s);
+    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i });
+  });
   const practiceIdx = SCENARIOS.findIndex((s) => s.isPractice);
   const feedbackIdx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
   const sandboxIdx = SCENARIOS.findIndex((s) => s.isSandbox);
@@ -11304,9 +11322,8 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // the other two are gated, and a free viewer sees a lock instead of an
   // expander on them.
   const COURSES = [];
-  const mixerLessons = SCENARIOS.map((s, i) => ({ s, i })).filter((x) => x.s.isMixerLesson);
-  if (mixerLessons.length) COURSES.push({ key: 'mixer', label: 'MIXER TUTORIAL', color: 'var(--cool)', tag: 'FREE', free: true, blurb: 'Learn the console one part at a time. Jump into any piece to refresh it, no need to run the whole thing.', rows: mixerLessons });
-  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'FREE', free: true, blurb: 'Set up a live system with nothing powered on yet and run a full show. Ten lessons, in order. The first is free; enter your email to keep going.', rows: lessons });
+  if (startHere.length) COURSES.push({ key: 'starthere', label: 'START HERE', color: 'var(--green)', tag: 'FREE', free: true, blurb: 'Your first hands-on session. Get a vocal into the mix, build a monitor, ring out feedback, and run the show. Five quick wins on a system that is already live.', rows: startHere });
+  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a live system from nothing and run a full show: patch, power up, gain structure, monitors, the works. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MONITOR WORLD', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build a separate mix for each performer: their own source, a bit of the vocals, a sensible level, rung out so it stays clean.', rows: monitors });
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -11510,6 +11527,8 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
               ? 'FREE PLAY · NO GOAL'
               : level.isMonitor
               ? 'MONITOR WORLD · MEMBERS'
+              : level.isStartHere
+              ? `START HERE · ${String(START_HERE_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(START_HERE_INDEXES.length).padStart(2, '0')}`
               : `LEVEL ${String(levelIdx + 1).padStart(2, '0')} / ${String(window.LEVELS.length).padStart(2, '0')}`}
           </div>
           <div className="display" style={{ fontSize: 16, fontWeight: 700, color: solved ? 'var(--green)' : 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -11740,7 +11759,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   })();
   const workChip = (
     <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'RING-OUT' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
+      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'RING-OUT' : level.isStartHere ? 'START HERE' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
     </div>
   );
 
