@@ -645,13 +645,13 @@ window.START_HERE = [
     involves: [1, 2, 3, 4],
     // Teach the channel fader. At this point only the bass and keys are up (the
     // vocals come in the next lesson). Pull each instrument's fader down and hear
-    // it drop. requireAdjust latches once a fader is >= 12 dB below its start, so
+    // it drop. requireAdjust latches once a fader is >= 6 dB below its start, so
     // a beginner makes a move big enough to clearly hear.
     symptom: 'Only the bass and keyboard are up so far. Every channel has its own fader that sets that channel\'s level. Pull the KEYS fader down and hear the keyboard drop, then do the same with the BASS. That is how you balance a band, one fader at a time.',
-    hint: 'Pull the KEYS fader (channel 4) down at least 12 dB and listen: the keyboard drops while everything else stays put. Then do the same with the BASS (channel 3).',
+    hint: 'Pull the KEYS fader (channel 4) down at least 6 dB and listen: the keyboard drops while everything else stays put. Then do the same with the BASS (channel 3).',
     hints: [
-      { title: 'Pull the keyboard down', target: 'ch4-fader', teach: 'The channel fader sets that one channel\'s level in the room. Pull the keys down and only the keyboard drops, nothing else. Move it a good 12 dB so you clearly hear the difference.', text: 'Pull the KEYS fader (channel 4) down at least 12 dB. Hear the keyboard drop out.', done: (ctx) => !!(ctx.adjustLatched && ctx.adjustLatched[4]) },
-      { title: 'Now the bass', target: 'ch3-fader', teach: 'Same control, its own channel. Pull the bass down and only the bass drops. Each fader rides its own source, and that is how you build a balance.', text: 'Do the same with the BASS fader (channel 3): pull it down at least 12 dB.', done: (ctx) => !!(ctx.adjustLatched && ctx.adjustLatched[3]) },
+      { title: 'Pull the keyboard down', target: 'ch4-fader', teach: 'The channel fader sets that one channel\'s level in the room. Pull the keys down and only the keyboard drops, nothing else. Move it a good 6 dB so you clearly hear the difference.', text: 'Pull the KEYS fader (channel 4) down at least 6 dB. Hear the keyboard drop out.', done: (ctx) => !!(ctx.adjustLatched && ctx.adjustLatched[4]) },
+      { title: 'Now the bass', target: 'ch3-fader', teach: 'Same control, its own channel. Pull the bass down and only the bass drops. Each fader rides its own source, and that is how you build a balance.', text: 'Do the same with the BASS fader (channel 3): pull it down at least 6 dB.', done: (ctx) => !!(ctx.adjustLatched && ctx.adjustLatched[3]) },
     ],
     conditions: [],
     requireAdjust: [3, 4],
@@ -680,7 +680,7 @@ window.START_HERE = [
     hints: [
       { title: 'Check Vocal 1 in PFL', target: 'ch1-pfl', teach: 'PFL is pre-fader and pre-mute, so it lets you line a channel up in your headphones before the room hears it, even muted and down. You will hear it once you bring the gain up.', text: 'Press PFL on Vocal 1 to line it up in your headphones.', done: (ctx) => (ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) },
       { title: 'Set Vocal 1 gain', target: 'ch1-gain', teach: 'Gain sets how hard the mic hits the console. Bring it up while you watch the meter: strong, with a little room to spare before the red. Set it by the meter, not by ear.', text: 'With Vocal 1 in PFL, bring the GAIN up to a healthy level on the meter.', done: (ctx) => ctx.state.channels[0] && ctx.state.channels[0].gain >= 0.4 },
-      { title: 'Bring Vocal 1 in', target: 'ch1-fader', teach: 'Gain set. Now drop PFL, unmute the channel, and bring the fader up to unity. The lead singer is in the room.', text: 'Drop PFL, unmute Vocal 1, and bring the fader up to unity.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
+      { title: 'Bring Vocal 1 in', target: ['ch1-fader', 'ch1-mute', 'ch1-pfl'], teach: 'Gain set. Now drop PFL, unmute the channel, and bring the fader up to unity. The lead singer is in the room.', text: 'Drop PFL, unmute Vocal 1, and bring the fader up to unity.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
       { title: 'Power Vocal 2 (+48V)', target: 'ch2-phantom', teach: 'Vocal 2 is a condenser mic. It needs +48V phantom power to work at all, and it is dead without it. Switch +48V on while the channel is muted, so the turn-on thump never reaches the speakers.', text: 'Turn on +48V phantom for Vocal 2 (channel 2) while it is muted.', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom },
       { title: 'Bring Vocal 2 in', target: 'ch2-strip', teach: 'Now that it has power, treat it exactly like Vocal 1: PFL it, set the gain on the meter, then drop PFL, unmute, and bring the fader up. Your turn, from memory.', text: 'Bring Vocal 2 in the same way: PFL, set the gain, drop PFL, unmute, and fader up.', done: (ctx) => hintReaches(ctx, 'vocal2', 'pa', 0.3) },
     ],

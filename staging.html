@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=137"></script>
+<script src="content-staging.js?v=138"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6926,6 +6926,9 @@ function saveProfile(profile) {
 // passed — the emotional peak, before the Power-Down wind-down lesson.
 const TOUR_KEY = 'audiou-troubleshooting-lab-tour-v1';
 const CTA_KEY = 'audiou-troubleshooting-lab-essentials-cta-v1';
+// Separate "shown once" flag for the Start Here finale, so a returning viewer
+// whose legacy CTA_KEY is already set (from the old Essentials) still gets it.
+const SH_DONE_KEY = 'audiou-troubleshooting-lab-starthere-cta-v1';
 
 // The membership join page. The two highest-intent moments in the app (the
 // completion card after The Gig, and the pitch overlay when a free user
@@ -7750,19 +7753,19 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         ) : (
           <>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
-              Ready for more? Practice throws you a new fault to find every time, Feedback sharpens your ear ringing out wedges, and the members course sets one up from scratch, start to finish. It is all part of the Audio University membership.
+              Now put it to work. Practice Mode hands you a broken system to diagnose and fix, a new fault every time. The full gym, the by-ear feedback training, and setting a system up from scratch are all part of the Audio University membership.
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <a href={joinUrl('completion-card')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
+              <button onClick={onGoPractice} className="mono ui-no-select" style={{
                 padding: '9px 18px', fontSize: 11, fontWeight: 800, letterSpacing: 1,
                 background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
-                border: '1px solid #2c9d52', borderRadius: 5, cursor: 'pointer', textDecoration: 'none',
+                border: '1px solid #2c9d52', borderRadius: 5, cursor: 'pointer',
+              }}>TRY PRACTICE MODE →</button>
+              <a href={joinUrl('completion-card')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
+                padding: '9px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
+                background: '#16161a', color: 'var(--accent)', border: '1px solid var(--accent)',
+                borderRadius: 5, cursor: 'pointer', textDecoration: 'none',
               }}>JOIN AUDIO UNIVERSITY →</a>
-              <button onClick={onClose} className="mono ui-no-select" style={{
-                padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
-                background: '#1a1a1d', color: 'var(--ink-2)', border: '1px solid #38383e',
-                borderRadius: 5, cursor: 'pointer',
-              }}>KEEP PLAYING</button>
             </div>
           </>
         )}
@@ -8938,9 +8941,9 @@ function App() {
   const [finaleEmail, setFinaleEmail] = uS(false);
   uE(() => {
     try {
-      if (window.localStorage.getItem(CTA_KEY)) return;
+      if (window.localStorage.getItem(SH_DONE_KEY)) return;
       if (!completed[SH_FINALE_ID]) return;
-      window.localStorage.setItem(CTA_KEY, '1');
+      window.localStorage.setItem(SH_DONE_KEY, '1');
       if (TIER !== 'member' && !emailDone) setFinaleEmail(true);
       else setCtaOpen(true);
     } catch (e) {}
@@ -9247,7 +9250,7 @@ function App() {
     if (level.requireAdjust && adjustBaseRef.current) {
       level.requireAdjust.forEach((ch) => {
         const c = state.channels[ch - 1]; const base = adjustBaseRef.current[ch - 1];
-        if (c && base != null && (taperDb(base, FADER_TAPER) - taperDb(c.fader ?? 0, FADER_TAPER)) >= 12) adjustLatchRef.current[ch] = true;
+        if (c && base != null && (taperDb(base, FADER_TAPER) - taperDb(c.fader ?? 0, FADER_TAPER)) >= 6) adjustLatchRef.current[ch] = true;
       });
     }
     const adjustOk = !level.requireAdjust || level.requireAdjust.every((ch) => !!adjustLatchRef.current[ch]);
