@@ -244,10 +244,10 @@ window.LEVELS = [
     task: true,
     involves: [7],
     requirePflCheck: true,
-    // inputBand = the healthy AVERAGE window on the real-units meter: -21 to
-    // -15 dBFS (about -18 average, the digital-console standard), in the
-    // engine's nominal-anchored linear values.
-    gainStructure: { refChannel: 7, unity: 0.75, faderTol: 0.06, inputBand: [0.575, 1.148] },
+    // inputBand = the healthy window on the real-units meter, kept lenient:
+    // -20 to -3 dBFS (anywhere from a conservative level up to just under the
+    // red), in the engine's nominal-anchored linear values.
+    gainStructure: { refChannel: 7, unity: 0.75, faderTol: 0.06, inputBand: [0.645, 4.566] },
     conditions: [
       { source: 'playback', dest: 'pa', min: 0.30, max: 0.65 },
     ],
@@ -1174,7 +1174,7 @@ window.PRACTICE_GOALS = [
       s.channels[2].gain = window.HEALTHY_GAIN_BY_CH[2] * 0.5; s.channels[2].fader = 0.9;
       return {
         conditions: [{ source: 'guitar', dest: 'pa', min: 0.3 }],
-        gainStructure: { refChannel: 3, inputBand: [0.575, 1.148], gainOnly: true },
+        gainStructure: { refChannel: 3, inputBand: [0.645, 4.566], gainOnly: true },
         symptom: 'The bass gain is set too low and the fader is pushed up to compensate. Set the level at the top of the chain: bring the GAIN up until the bass sits healthy on its meter. The fader from there is a mix call.',
         title: 'Fix the Gain Structure',
         hint: 'PFL the bass (channel 3) and bring its GAIN up until the input meter sits in the healthy zone. That is the fix. The fader is yours to set the balance after.',

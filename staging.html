@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=143"></script>
+<script src="content-staging.js?v=144"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1149,14 +1149,15 @@ function detectClipping(audio, state) {
   // the upstream-most clipping stage and tell the user which knob actually
   // fixes it.
   //
-  // Thresholds are in the real dBu model. Each stage WARNS (settled/baseline)
-  // a little before the AUDIBLE grit (which fires on live PEAKS), so the meter
-  // goes red before you hear it distort, never after:
+  // Thresholds line up with the METER'S RED ZONE (-3 dBFS = +19 dBu): we only
+  // flag distortion once the level is actually in the red, so the warning never
+  // fires while every meter still reads amber (which just reads as a bug to the
+  // user). Master keeps the 0 dBFS ceiling — by then it is deep in the red.
   //
-  //   Preamp   → chanIn baseline > +15 dBu   (grit when peaks reach +22)
-  //   Channel  → post   baseline > +15 dBu
+  //   Preamp   → chanIn baseline > +19 dBu   (-3 dBFS, the red line)
+  //   Channel  → post   baseline > +19 dBu   (-3 dBFS)
   //   Master   → mainBus         > +22 dBu   (0 dBFS, the output ceiling)
-  //   Speaker  → outputs         > +14 dBu   (grit ceiling is 0 dBFS / +22)
+  //   Speaker  → outputs         > +19 dBu   (-3 dBFS)
 
   // Stage 1 — PREAMP (channel input after the gain knob). The PFL bar's
   // red zone. Only the GAIN knob fixes this; the fader is downstream and
@@ -1171,7 +1172,7 @@ function detectClipping(audio, state) {
   if (audio && audio.chanInBaseline) {
     const preampClips = [];
     audio.chanInBaseline.forEach((v, i) => {
-      if (v > dbuToLin(15)) {
+      if (v > dbuToLin(19)) {
         preampClips.push({
           stage: 'preamp',
           id: i,
@@ -1192,7 +1193,7 @@ function detectClipping(audio, state) {
   if (audio && audio.post) {
     const channelClips = [];
     audio.post.forEach((p, i) => {
-      if (p > dbuToLin(15)) {
+      if (p > dbuToLin(19)) {
         channelClips.push({
           stage: 'channel',
           id: i,
@@ -1234,7 +1235,7 @@ function detectClipping(audio, state) {
     const speakerClips = [];
     for (const s of speakers) {
       const lvl = audio.outputs[s.key] || 0;
-      if (lvl > dbuToLin(14)) speakerClips.push({ stage: 'speaker', id: s.key, label: s.label, fix: s.fix });
+      if (lvl > dbuToLin(19)) speakerClips.push({ stage: 'speaker', id: s.key, label: s.label, fix: s.fix });
     }
     if (speakerClips.length) return speakerClips;
   }
@@ -10489,6 +10490,12 @@ function App() {
     // which is also how a free viewer retries a custom or shared scenario.
     loadLevel(levelIdx, undefined, true);
   };
+  // Forward a spent-out Practice free user to the Ear Training free rounds (or
+  // its own pitch, if those are used up too). Reuses loadLevel's feedback gate.
+  const goFeedback = () => {
+    const idx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
+    if (idx >= 0) loadLevel(idx);
+  };
   // FAULTS difficulty change re-rolls the current rep at the new count.
   const setPracticeFaults = (n) => {
     drillFocusRef.current = null;  // a manual difficulty choice leaves the sign-off drill
@@ -11139,6 +11146,7 @@ function App() {
                           : etByEarPhase ? (etByEar === 0 ? 'Guided done. Now find the ring by ear.' : ('BY EAR · ' + etByEar + ' / ' + FREE_ET_BYEAR))
                           : ('GUIDED · ' + etGuided + ' / ' + FREE_ET_GUIDED)}
                         onPracticeAgain={level.isChallenge ? practiceAgain : null}
+                        onGoFeedback={(level.isPractice && TIER !== 'member') ? goFeedback : null}
                         onGoEssentials={(level.isCustom && TIER !== 'member') ? () => { loadLevel(WALKTHROUGH_INDEX, undefined, true); } : null}
                         practiceFreeLeft={(level.isPractice && TIER !== 'member') ? freeRepsLeft : null}
                         onCopyRepLink={level.isPractice ? copyRepLink : null} repCopied={repCopied}
@@ -11987,7 +11995,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, coaching, debrief, onPracticeAgain, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak }) {
+function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, coaching, debrief, onPracticeAgain, onGoFeedback, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -12130,13 +12138,29 @@ function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, co
                 : 'FREE PREVIEW USED'}
             </div>
           ))}
-          <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
-            width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
-            background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
-            border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-          }}>{level.isFeedbackMode ? (feedbackLabel || 'NEXT ROUND →')
-              : (practiceFreeLeft === 0) ? 'JOIN TO KEEP TRAINING →'
-              : 'NEXT FAULT →'}</button>
+          {(level.isPractice && practiceFreeLeft === 0 && onGoFeedback) ? (
+            /* Free Practice taste used up: offer the two next steps — join, or
+               try the Ear Training free rounds — instead of a dead end. */
+            <>
+              <button onClick={onGoFeedback} className="mono ui-no-select" style={{
+                width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+                background: 'linear-gradient(180deg, var(--aux), #2c5d9e)', color: '#0a0a0c',
+                border: '1px solid #2c5d9e', borderRadius: 3, cursor: 'pointer',
+              }}>TRY EAR TRAINING →</button>
+              <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
+                width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+                background: '#16161a', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, cursor: 'pointer',
+              }}>JOIN AUDIO UNIVERSITY →</button>
+            </>
+          ) : (
+            <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
+              width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+              background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+              border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
+            }}>{level.isFeedbackMode ? (feedbackLabel || 'NEXT ROUND →')
+                : (practiceFreeLeft === 0) ? 'JOIN TO KEEP TRAINING →'
+                : 'NEXT FAULT →'}</button>
+          )}
         </>
       ) : hasNext ? (
         <button onClick={onNext} className="mono ui-no-select" style={{
