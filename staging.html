@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=131"></script>
+<script src="content-staging.js?v=132"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -10674,9 +10674,13 @@ function App() {
       const r = vp.getBoundingClientRect();
       const nx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
       const txMin = Math.min(0, r.width - scaledW);   // 0 (no pan) when the content fits
-      // Horizontal only: the fan-out fills the height, so panning is side-to-side.
-      // Keep the vertical position the zoom set (centred on the fan-out).
-      setZoom(z => (z ? { ...z, tx: nx * txMin } : z));
+      // Ease the cursor->pan mapping: GENTLE near the centre (a wide, low-gain
+      // band where you line up a drop precisely) and only speeding up toward the
+      // edges to reach the far channels. Slower/steadier than a straight 1:1 map
+      // while still reaching both ends. Horizontal only (fan-out fills the height).
+      const m = nx - 0.5;
+      const f = 0.5 + Math.sign(m) * Math.pow(Math.abs(2 * m), 2.2) * 0.5;
+      setZoom(z => (z ? { ...z, tx: f * txMin } : z));
     };
     vp.addEventListener('pointermove', onMove);
     return () => vp.removeEventListener('pointermove', onMove);
