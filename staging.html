@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=135"></script>
+<script src="content-staging.js?v=136"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7734,7 +7734,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>START HERE · DONE</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You can run a system now.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You got a vocal into the mix the right way, built the singer a monitor, rang out feedback, and brought the whole show up. That is the core of the job.
+          You turned on the system, balanced the band, got a vocal into the mix, built the singer a monitor, and rang out feedback. That is running sound.
         </div>
         {tier === 'member' ? (
           <>
@@ -7801,7 +7801,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · YOU DID IT</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You just ran a system</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You got a vocal into the mix, built a monitor, rang out feedback, and brought the show up. Drop your email to save your progress and get the Soundcheck Checklist, the pre-show list to run before every gig.
+          You turned on a system, balanced the band, got a vocal into the mix, built a monitor, and rang out feedback. Drop your email to save your progress and get the Soundcheck Checklist, the pre-show list to run before every gig.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -8619,6 +8619,10 @@ function App() {
   });
   const [solved, setSolved] = uS(false);
   const [audioOn, setAudioOn] = uS(false);
+  // Start Here "Balance the Band": the fader positions the level loaded with, so
+  // a lesson can require the student to actually MOVE a set of channel faders
+  // (requireAdjust) and feel what each one does.
+  const adjustBaseRef = uR(null);
   // Latch: has sound ever been on this session? Drives the SOUND button's
   // first-run glow — it pulses until the first enable, then stays quiet
   // even if the user mutes again.
@@ -9230,7 +9234,15 @@ function App() {
       const outOk = op.pa_l === 1 && op.pa_r === 2 && op.wedge === 3 && op.wedge2 === 4 && op.wedge3 === 5 && op.wedge4 === 6;
       return cablesOk && fanOutOk && outFanOk && outOk;
     })());
-    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk;
+    // Start Here: a lesson can require the app sound to be on (requireSound) and
+    // that the student moved a set of channel faders (requireAdjust), to feel
+    // what each control does. Both default to satisfied when the level omits them.
+    const soundOk = !level.requireSound || audioOn;
+    const adjustOk = !level.requireAdjust || (!!adjustBaseRef.current && level.requireAdjust.every((ch) => {
+      const c = state.channels[ch - 1]; const base = adjustBaseRef.current[ch - 1];
+      return c && base != null && Math.abs((c.fader ?? 0) - base) > 0.05;
+    }));
+    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk;
     // Mirror the live, truly-winnable state so the sign-off button can tell a
     // correct "system is healthy" call from a premature one.
     wonRef.current = won && !blocked;
@@ -9263,7 +9275,7 @@ function App() {
       stableRef.current = null;
     }
     return () => { if (stableRef.current) { clearTimeout(stableRef.current); stableRef.current = null; } };
-  }, [state, solved, signedOff]);
+  }, [state, solved, signedOff, audioOn]);
 
   // Brief red flash whenever a new phantomPop event lands. The persistent
   // warning chip (in BriefCard) sticks around until the next reset; the
@@ -10179,6 +10191,7 @@ function App() {
     hintsUsedRef.current = 0;
     setHintCount(0);
     prevStateRef.current = sab;
+    adjustBaseRef.current = (sab && sab.channels) ? sab.channels.map((c) => c.fader) : null;
     lastMoveRef.current = { key: null, at: 0 };
   };
 
@@ -10891,7 +10904,7 @@ function App() {
   // win. (Same reason the BriefCard objectives use audioBaseline.)
   const hintCtx = {
     state, audio: audioBaseline, powerStatus, gainStatus, verifyStatus, pflEachStatus,
-    zeroStatus, patchStatus, feedback,
+    zeroStatus, patchStatus, feedback, audioOn, adjustBase: adjustBaseRef.current,
     pflChannels: pflChannelsRef.current, pflChecked: pflCheckedRef.current,
   };
   const hintDefs = level.hints || (level.hint ? [{ text: level.hint, done: () => false }] : []);
@@ -11564,7 +11577,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             ))}
           </div>
         )}
-        <button onClick={() => setAudioOn(!audioOn)} className="mono ui-no-select" style={{
+        <button data-walk="sound" onClick={() => setAudioOn(!audioOn)} className="mono ui-no-select" style={{
           ...navBtn,
           background: audioOn ? 'linear-gradient(180deg, var(--green), #2c9d52)' : '#1a1a1d',
           color: audioOn ? '#0a0a0c' : 'var(--ink-2)',
