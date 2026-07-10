@@ -7439,12 +7439,12 @@ const HOME_INDEX = (TIER === 'member') ? 0 : (START_HERE_INDEX >= 0 ? START_HERE
 // FELT (a door walked through and pulled back from), not just described behind
 // a lock. Feedback Mode and custom authoring stay fully member-gated; only
 // Practice Mode is soft-gated by this budget. Members are never counted.
-const FREE_PRACTICE_LIMIT = 7;
-// Ear Training free taste: three guided rounds, then a taste of by-ear, then
-// the membership pitch. Guided teaches how it works; by-ear shows how hard the
-// real thing is, so the pitch lands.
+const FREE_PRACTICE_LIMIT = 5;
+// Ear Training free taste: three guided rounds, then the membership pitch — and
+// on that pitch, one by-ear round is offered as the alternative to joining, to
+// show how hard the real thing is before they commit.
 const FREE_ET_GUIDED = 3;
-const FREE_ET_BYEAR = 3;
+const FREE_ET_BYEAR = 1;
 
 // Picker bands — every scenario maps to one of four bands via bandOf(). The
 // mode picker groups by these IDs: Learn (the Essentials), Practice (Practice +
@@ -9042,6 +9042,9 @@ function App() {
   // when cleared. lastFbTimeRef gives the real per-frame dt for that integration.
   const ringEnergyRef = uR(null);
   const lastFbTimeRef = uR(0);
+  // Per-channel feedback level (0..1), so a program-muted mic still shows the
+  // ring swelling on its meter and fader even with no sample playing.
+  const fbMeterRef = uR({});
   const lastSevRef = uR(null);
   // Peak ring energy this frame + how many bands are ringing, surfaced to the UI
   // so the warning can escalate (ring -> howl -> "too many, pull it down").
@@ -9097,7 +9100,7 @@ function App() {
   // Every active ring, mapped to its voice (index into FULL_EQ_HZ). Voices
   // whose band stops ringing decay to silence in the animation loop.
   feedbackRingsRef.current = (feedback && feedback.rings ? feedback.rings : [])
-    .map(r => ({ hzIndex: FULL_EQ_HZ.indexOf(r.hz), risk: r.risk }))
+    .map(r => ({ hzIndex: FULL_EQ_HZ.indexOf(r.hz), risk: r.risk, channelIdx: r.channelIdx }))
     .filter(r => r.hzIndex >= 0);
   // Auto-open the Monitor EQ panel the moment a WEDGE starts ringing, so the
   // engineer is taken right to the ring-out (the band is glowing). Only on the
@@ -9398,6 +9401,23 @@ function App() {
       for (const k of METER_SOURCES) {
         const synthF = envelopeFactor(k, t);
         const chain = chainsRef.current && chainsRef.current[k];
+        const stc = stateRef.current;
+        const progMuted = !!(stc && stc.programMute && stc.programMute[k]);
+        if (progMuted) {
+          // Program-muted: silence the sample into the meter and audio, but let
+          // FEEDBACK still register — an open mic with no one singing still rings,
+          // and the swell should show on this channel's meter and fader.
+          if (chain && chain.envelope) { chain.envelope.gain.value = 0; chain._pmZeroed = true; }
+          let chIdx = -1;
+          if (stc && stc.channels && window.sourceFor) for (let i = 0; i < stc.channels.length; i++) { if (window.sourceFor(stc, i) === k) { chIdx = i; break; } }
+          const fb = (chIdx >= 0 && fbMeterRef.current) ? (fbMeterRef.current[chIdx] || 0) : 0;
+          const tgt = Math.min(4.5, fb * 4.5);
+          const cur0 = envelopeRef.current[k] != null ? envelopeRef.current[k] : 0;
+          envelopeRef.current[k] = tgt > cur0 ? cur0 + (tgt - cur0) * 0.6 : cur0 + (tgt - cur0) * 0.25;
+          continue;
+        }
+        // Restore the envelope the frame after a source is un-muted.
+        if (chain && chain.envelope && chain._pmZeroed) { chain.envelope.gain.value = chain.skipEnvelope ? 1 : synthF; chain._pmZeroed = false; }
         // AUDIO modulation: the synth band sources get the synthetic envelope.
         // Recorded clips carry their own dynamics (skipEnvelope) and the
         // playback bed has no profile, so neither gets a fake wiggle.
@@ -9473,6 +9493,15 @@ function App() {
           const cur = v.gain.gain.value;
           v.gain.gain.value = (e === 0 && cur < 1e-3) ? 0 : cur + (target - cur) * 0.3;
         });
+        // Per-channel feedback level: the loudest ring energy on each mic's loop,
+        // so a program-muted mic still shows the ring building on its own meter.
+        const fbByCh = {};
+        for (const r of rings) {
+          if (r.channelIdx == null || r.hzIndex < 0 || r.hzIndex >= energy.length) continue;
+          const e = energy[r.hzIndex] || 0;
+          if (e > (fbByCh[r.channelIdx] || 0)) fbByCh[r.channelIdx] = e;
+        }
+        fbMeterRef.current = fbByCh;
         // Escalating severity for the on-screen warning, bucketed so it only
         // re-renders on a transition (0 clear, 1 building ring, 2 howl); the ring
         // count drives the "several at once" copy.
@@ -9488,6 +9517,7 @@ function App() {
         // ring voices so a ring builds from zero when sound comes back on, instead
         // of pre-charging to a howl in the background.
         lastFbTimeRef.current = 0;
+        fbMeterRef.current = {};
         const energy = ringEnergyRef.current;
         if (energy) for (let i = 0; i < energy.length; i++) energy[i] = 0;
         fbChain.voices.forEach(v => { if (v.gain.gain.value !== 0) v.gain.gain.value = 0; });
@@ -11150,12 +11180,11 @@ function App() {
                         feedbackLabel={!level.isFeedbackMode ? null
                           : TIER === 'member' ? 'NEXT ROUND →'
                           : etExhausted ? 'JOIN TO KEEP TRAINING →'
-                          : (etByEarPhase && etByEar === 0) ? 'TRY IT BY EAR →'
                           : 'NEXT ROUND →'}
                         feedbackCaption={(!level.isFeedbackMode || TIER === 'member') ? null
                           : etExhausted ? 'FREE ROUNDS USED'
-                          : etByEarPhase ? (etByEar === 0 ? 'Guided done. Now find the ring by ear.' : ('BY EAR · ' + etByEar + ' / ' + FREE_ET_BYEAR))
                           : ('GUIDED · ' + etGuided + ' / ' + FREE_ET_GUIDED)}
+                        feedbackGuidedDone={level.isFeedbackMode && TIER !== 'member' && etGuided >= FREE_ET_GUIDED && etByEar === 0}
                         onPracticeAgain={level.isChallenge ? practiceAgain : null}
                         onGoFeedback={(level.isPractice && TIER !== 'member') ? goFeedback : null}
                         onGoEssentials={(level.isCustom && TIER !== 'member') ? () => { loadLevel(WALKTHROUGH_INDEX, undefined, true); } : null}
@@ -12006,7 +12035,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, coaching, debrief, onPracticeAgain, onGoFeedback, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak }) {
+function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, feedbackGuidedDone, coaching, debrief, onPracticeAgain, onGoFeedback, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -12138,6 +12167,22 @@ function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, co
            On the free tier, Practice shows how many taste reps remain so the
            membership wall is foreseen, not sprung. */
         <>
+          {feedbackGuidedDone ? (
+            /* Three guided rounds done: pitch to join, or offer one by-ear round. */
+            <>
+              <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5, textAlign: 'center' }}>
+                With practice, members learn to pick these ringing frequencies out by ear. Join to keep training, or try one round on your own.
+              </div>
+              <a href={joinUrl('ear-training')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
+                display: 'block', width: '100%', boxSizing: 'border-box', padding: '7px 10px', fontSize: 10, fontWeight: 800, letterSpacing: 1, textAlign: 'center',
+                background: 'linear-gradient(180deg, var(--accent), #c79a1f)', color: '#0a0a0c', border: '1px solid #c79a1f', borderRadius: 3, cursor: 'pointer', textDecoration: 'none',
+              }}>JOIN AUDIO UNIVERSITY →</a>
+              <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
+                width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+                background: '#16161a', color: 'var(--aux)', border: '1px solid var(--aux)', borderRadius: 3, cursor: 'pointer',
+              }}>TRY ONE ROUND BY EAR →</button>
+            </>
+          ) : (<>
           {level.isFeedbackMode ? (feedbackCaption && (
             <div className="mono" style={{ fontSize: 8.5, letterSpacing: 0.6, textAlign: 'center', fontWeight: 700, color: feedbackLabel === 'JOIN TO KEEP TRAINING →' ? 'var(--accent)' : 'var(--aux)' }}>
               {feedbackCaption}
@@ -12172,6 +12217,7 @@ function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, co
                 : (practiceFreeLeft === 0) ? 'JOIN TO KEEP TRAINING →'
                 : 'NEXT FAULT →'}</button>
           )}
+          </>)}
         </>
       ) : hasNext ? (
         <button onClick={onNext} className="mono ui-no-select" style={{
