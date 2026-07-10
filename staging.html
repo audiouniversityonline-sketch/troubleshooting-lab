@@ -7671,47 +7671,34 @@ function StableSlot({ levelKey, children }) {
   );
 }
 
-// First-run tour. One card, four things to know, shown once per browser.
-// Deliberately not a multi-step walkthrough: the lab teaches itself, this
-// just orients a first-timer and says out loud that the lab makes sound.
+// First-run greeting. One card, one promise, one button that hands the
+// visitor straight into lesson 1. Deliberately NOT a syllabus: the lab
+// teaches itself through the coaching box and spotlight, exactly when each
+// piece becomes relevant. A wall of instructions before any action reads as
+// homework and bounces cold visitors, so we keep this to a single breath.
 function TourOverlay({ open, onClose }) {
   if (!open) return null;
-  const row = (icon, title, body) => (
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      <div className="mono" style={{ fontSize: 13, lineHeight: 1.3, width: 22, textAlign: 'center', flexShrink: 0, color: 'var(--accent)', fontWeight: 800 }}>{icon}</div>
-      <div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>{title}</div>
-        <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>{body}</div>
-      </div>
-    </div>
-  );
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 95, background: 'rgba(0,0,0,0.78)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{
-        width: 500, maxWidth: '92vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
-        border: '1px solid var(--accent)', borderRadius: 10, padding: '20px 22px',
+        width: 440, maxWidth: '92vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
+        border: '1px solid var(--accent)', borderRadius: 10, padding: '28px 26px',
         boxShadow: '0 0 0 1px rgba(255,201,58,0.15), 0 16px 48px rgba(0,0,0,0.8)',
-        display: 'flex', flexDirection: 'column', gap: 14,
+        display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', textAlign: 'center',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src={window.AU_LOGO} alt="Audio University" style={{ height: 40, width: 40, display: 'block' }}/>
-          <div>
-            <div className="display" style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.1 }}>Welcome to the lab</div>
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 2 }}>Four things before you start</div>
-          </div>
+        <img src={window.AU_LOGO} alt="Audio University" style={{ height: 46, width: 46, display: 'block' }}/>
+        <div className="display" style={{ fontSize: 25, fontWeight: 800, lineHeight: 1.12 }}>You're about to run a live show.</div>
+        <div style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, maxWidth: 360 }}>
+          Real console, real speakers, real sound. Nothing you do here is permanent, so touch everything.
         </div>
-        {row('1', 'THE STAGE', 'The top half is the stage: the band\'s sources, the speakers, and every cable. Click a speaker to listen to it. Grab a cable end to move it.')}
-        {row('2', 'THE CONSOLE', 'The right side is the mixing console. Every knob, fader and button works like the real thing, and mistakes have consequences you can hear. Nothing is permanent though: Reset starts any level over, so explore freely. Hover any control for a quick description.')}
-        {row('3', 'TURN ON SOUND', 'This lab makes sound. Hit the SOUND button in the top bar so you can hear what you\'re doing. The bar at the bottom shows which speaker your ears are on.')}
-        {row('4', 'THE BRIEF', 'The card next to the stage tells you the task or the symptom, tracks your objectives, and offers a hint. Green checks mean you\'re done.')}
         <button onClick={onClose} className="mono ui-no-select" style={{
-          alignSelf: 'flex-start', padding: '9px 18px', fontSize: 11, fontWeight: 800, letterSpacing: 1,
+          marginTop: 4, padding: '12px 26px', fontSize: 12, fontWeight: 800, letterSpacing: 1.5,
           background: 'linear-gradient(180deg, var(--accent), #c79a1f)', color: '#0a0a0c',
-          border: '1px solid #c79a1f', borderRadius: 5, cursor: 'pointer',
-        }}>START →</button>
+          border: '1px solid #c79a1f', borderRadius: 6, cursor: 'pointer',
+        }}>LET'S GO →</button>
       </div>
     </div>
   );
