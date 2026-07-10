@@ -643,49 +643,61 @@ window.START_HERE = [
     id: 102, task: true,
     title: 'Balance the Band',
     involves: [1, 2, 3, 4],
-    // Teach the channel fader: move each instrument's fader and hear how it sets
-    // just that channel's level in the mix. requireAdjust wins once the student
-    // has actually moved the keys, bass, and second-vocal faders.
-    symptom: 'The band is playing. Every channel has its own fader that sets that channel\'s level in the mix. Grab the KEYS fader and move it, then do the same with the BASS and VOCAL 2. Hear how each one changes just its own channel.',
-    hint: 'Move the KEYS fader (channel 4) up and down and listen: it changes only the keyboard. Then do the same with the BASS (channel 3) and VOCAL 2 (channel 2). That is how you balance a band, one fader at a time.',
+    // Teach the channel fader. At this point only the bass and keys are up (the
+    // vocals come in the next lesson). Pull each instrument's fader down and hear
+    // it drop. requireAdjust latches once a fader is >= 12 dB below its start, so
+    // a beginner makes a move big enough to clearly hear.
+    symptom: 'Only the bass and keyboard are up so far. Every channel has its own fader that sets that channel\'s level. Pull the KEYS fader down and hear the keyboard drop, then do the same with the BASS. That is how you balance a band, one fader at a time.',
+    hint: 'Pull the KEYS fader (channel 4) down at least 12 dB and listen: the keyboard drops while everything else stays put. Then do the same with the BASS (channel 3).',
     hints: [
-      { title: 'Move the keyboard fader', target: 'ch4-fader', teach: 'The channel fader sets that one channel\'s level in the room. Move the keys up and it gets louder, down and it drops, and nothing else changes.', text: 'Grab the KEYS fader (channel 4) and move it up and down. Hear it change just the keyboard.', done: (ctx) => ctx.adjustBase && ctx.state.channels[3] && Math.abs((ctx.state.channels[3].fader ?? 0) - ctx.adjustBase[3]) > 0.05 },
-      { title: 'Now the bass and vocal 2', target: null, teach: 'Same control, every channel: each fader rides its own source. Set the band so you can hear everyone.', text: 'Do the same with the BASS (channel 3) and VOCAL 2 (channel 2). Each fader moves just its own channel.', done: (ctx) => ctx.adjustBase && [1, 2].every((i) => ctx.state.channels[i] && Math.abs((ctx.state.channels[i].fader ?? 0) - ctx.adjustBase[i]) > 0.05) },
+      { title: 'Pull the keyboard down', target: 'ch4-fader', teach: 'The channel fader sets that one channel\'s level in the room. Pull the keys down and only the keyboard drops, nothing else. Move it a good 12 dB so you clearly hear the difference.', text: 'Pull the KEYS fader (channel 4) down at least 12 dB. Hear the keyboard drop out.', done: (ctx) => !!(ctx.adjustLatched && ctx.adjustLatched[4]) },
+      { title: 'Now the bass', target: 'ch3-fader', teach: 'Same control, its own channel. Pull the bass down and only the bass drops. Each fader rides its own source, and that is how you build a balance.', text: 'Do the same with the BASS fader (channel 3): pull it down at least 12 dB.', done: (ctx) => !!(ctx.adjustLatched && ctx.adjustLatched[3]) },
     ],
     conditions: [],
-    requireAdjust: [2, 3, 4],
+    requireAdjust: [3, 4],
     sabotage: (s) => {
+      // Only bass + keys are up here (the vocals arrive next lesson). Bass DI is
+      // powered so it plays; both vocals are muted and down.
       s.master.fader = 0.75; s.master.mute = false;
       s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
       s.channels[2].phantom = true; // active DI on bass, powered
+      s.channels[0].mute = true; s.channels[0].fader = 0;
+      s.channels[1].mute = true; s.channels[1].fader = 0;
       return s;
     },
-    solution: 'Each channel fader rides its own source. Moving the keys, bass, and vocal 2 faders is how you build a balance.',
+    solution: 'Each channel fader rides its own source. Pulling the keys and bass down shows how you set a balance, one fader at a time.',
     defaultInspect: 'pa',
   },
   {
     id: 103, task: true,
-    title: 'Get Your Vocal in the Mix',
+    title: 'Get Your Vocals in the Mix',
     involves: [1, 2, 3, 4],
-    // Vocal 1 starts MUTED with the fader down (how a channel sits before you
-    // bring it in). The sequence: PFL to set the gain safely, then drop PFL,
-    // unmute, and bring the fader up.
-    symptom: 'The band is playing, but the lead vocal is not in yet: Vocal 1 is muted with its fader down. Bring the singer in the right way. Check it in PFL and set the gain, then drop PFL, unmute, and bring the fader up.',
-    hint: 'Vocal 1 is muted and down. Press PFL to hear it in your headphones, safe from the room, and set the GAIN on the meter. Then drop PFL, unmute the channel, and bring the fader up to unity.',
+    // Both vocals start muted with faders down. Vocal 1 is guided step by step;
+    // Vocal 2 is the same routine on the student's own recall, plus its condenser
+    // needs +48V phantom first (dead until powered). Win = both vocals in the PA.
+    symptom: 'Neither vocal is in yet: both are muted with their faders down. Bring Vocal 1 in the right way (PFL, set the gain, then drop PFL, unmute, and bring the fader up), then do the same for Vocal 2. Vocal 2 is a condenser, so it needs +48V phantom power first.',
+    hint: 'Vocal 1: press PFL, set the GAIN on the meter, then drop PFL, unmute, and bring the fader to unity. Then Vocal 2 the same way, but turn its +48V phantom on first (while it is muted), because a condenser is dead without it.',
     hints: [
-      { title: 'Check it in PFL', target: 'ch1-pfl', teach: 'PFL sends the channel to your headphones and the meter, before the room hears it. It works even with the channel muted, so you can set a level safely.', text: 'Press PFL on Vocal 1 to hear it in your headphones first.', done: (ctx) => (ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) },
-      { title: 'Set the gain', target: 'ch1-gain', teach: 'Gain sets how hard the mic hits the console. Bring it up while you watch the meter: strong, with a little room to spare before the red. Set gain by the meter, not by ear.', text: 'With Vocal 1 in PFL, bring the GAIN up to a healthy level on the meter.', done: (ctx) => ctx.state.channels[0] && ctx.state.channels[0].gain >= 0.4 },
-      { title: 'Bring it into the mix', target: 'ch1-fader', teach: 'Gain set. Now drop PFL, unmute the channel, and bring the fader up to unity, the U mark. That is where it is built to run, and now the singer is in the room.', text: 'Drop PFL, unmute Vocal 1, and bring the fader up to unity.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
+      { title: 'Check Vocal 1 in PFL', target: 'ch1-pfl', teach: 'PFL is pre-fader and pre-mute, so it lets you line a channel up in your headphones before the room hears it, even muted and down. You will hear it once you bring the gain up.', text: 'Press PFL on Vocal 1 to line it up in your headphones.', done: (ctx) => (ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) },
+      { title: 'Set Vocal 1 gain', target: 'ch1-gain', teach: 'Gain sets how hard the mic hits the console. Bring it up while you watch the meter: strong, with a little room to spare before the red. Set it by the meter, not by ear.', text: 'With Vocal 1 in PFL, bring the GAIN up to a healthy level on the meter.', done: (ctx) => ctx.state.channels[0] && ctx.state.channels[0].gain >= 0.4 },
+      { title: 'Bring Vocal 1 in', target: 'ch1-fader', teach: 'Gain set. Now drop PFL, unmute the channel, and bring the fader up to unity. The lead singer is in the room.', text: 'Drop PFL, unmute Vocal 1, and bring the fader up to unity.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
+      { title: 'Power Vocal 2 (+48V)', target: 'ch2-phantom', teach: 'Vocal 2 is a condenser mic. It needs +48V phantom power to work at all, and it is dead without it. Switch +48V on while the channel is muted, so the turn-on thump never reaches the speakers.', text: 'Turn on +48V phantom for Vocal 2 (channel 2) while it is muted.', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom },
+      { title: 'Bring Vocal 2 in', target: 'ch2-strip', teach: 'Now that it has power, treat it exactly like Vocal 1: PFL it, set the gain on the meter, then drop PFL, unmute, and bring the fader up. Your turn, from memory.', text: 'Bring Vocal 2 in the same way: PFL, set the gain, drop PFL, unmute, and fader up.', done: (ctx) => hintReaches(ctx, 'vocal2', 'pa', 0.3) },
     ],
-    conditions: [{ source: 'vocal', dest: 'pa', min: 0.3 }],
+    conditions: [
+      { source: 'vocal',  dest: 'pa', min: 0.3 },
+      { source: 'vocal2', dest: 'pa', min: 0.3 },
+    ],
     sabotage: (s) => {
       s.master.fader = 0.75; s.master.mute = false;
       s.outputs.pa_l.volume = 0.65; s.outputs.pa_r.volume = 0.65;
-      s.channels[2].phantom = true; // bass powered so the band plays
+      s.channels[2].phantom = true; // bass powered so the band plays under the vocals
+      // Both vocals start muted, down, ungained; Vocal 2's phantom is off (dead).
       s.channels[0].gain = 0; s.channels[0].fader = 0; s.channels[0].mute = true; s.channels[0].solo = false;
+      s.channels[1].gain = 0; s.channels[1].fader = 0; s.channels[1].mute = true; s.channels[1].solo = false; s.channels[1].phantom = false;
       return s;
     },
-    solution: 'Vocal 1 checked in PFL, gain set on the meter, then unmuted with the fader at unity. The singer is in the mix, done the right way.',
+    solution: 'Both vocals brought in the same way: PFL, set the gain, drop PFL, unmute, fader up. Vocal 2 needed +48V phantom first because it is a condenser.',
     defaultInspect: 'pa',
   },
   {
@@ -1352,6 +1364,10 @@ window.PRACTICE = {
       // turn only make sense on the 16-ch board with its stage patch UI.
       if (f.big8only && s.big16) continue;
       if (f.big16only && !s.big16) continue;
+      // Free tier never gets patch / crosspatch faults: patching is the members'
+      // Run the Show course, so a free Practice rep must always be solvable
+      // without touching the stage patch. The app sets window.PRACTICE_FREE.
+      if (window.PRACTICE_FREE && /crosspatch|wrong-input|soft-patch/.test(f.key)) continue;
       // "Practice what needs it" biases the draw toward the fault types the
       // member is rusty on (window.PRACTICE_FOCUS, set by the app from the
       // freshness ledger). Unset = an even draw across the pool.

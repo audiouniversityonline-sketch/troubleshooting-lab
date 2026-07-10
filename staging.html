@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=136"></script>
+<script src="content-staging.js?v=137"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8623,6 +8623,9 @@ function App() {
   // a lesson can require the student to actually MOVE a set of channel faders
   // (requireAdjust) and feel what each one does.
   const adjustBaseRef = uR(null);
+  // Balance the Band latches: once a required fader has been pulled >= 12 dB
+  // below its loaded position, it stays satisfied even if moved back.
+  const adjustLatchRef = uR({});
   // Latch: has sound ever been on this session? Drives the SOUND button's
   // first-run glow — it pulses until the first enable, then stays quiet
   // even if the user mutes again.
@@ -8790,7 +8793,7 @@ function App() {
   // Keep the fault-draw's surface global in sync. Digital-only faults (mute
   // groups, DCA) carry digital:true and are skipped by the draw unless this is
   // 'digital', so an analog player never gets a fault they can't reach.
-  uE(() => { window.PRACTICE_SURFACE = surface; }, [surface]);
+  uE(() => { window.PRACTICE_SURFACE = surface; window.PRACTICE_FREE = (TIER !== 'member'); }, [surface]);
   // Free tier flag for the Practice rep generator: the free taste drops the
   // "check the speakers" verify goal so the sample reads as pure fault-finding.
   uE(() => { window.PRACTICE_FREE = (TIER !== 'member'); }, []);
@@ -9238,10 +9241,16 @@ function App() {
     // that the student moved a set of channel faders (requireAdjust), to feel
     // what each control does. Both default to satisfied when the level omits them.
     const soundOk = !level.requireSound || audioOn;
-    const adjustOk = !level.requireAdjust || (!!adjustBaseRef.current && level.requireAdjust.every((ch) => {
-      const c = state.channels[ch - 1]; const base = adjustBaseRef.current[ch - 1];
-      return c && base != null && Math.abs((c.fader ?? 0) - base) > 0.05;
-    }));
+    // Balance the Band: latch each required fader once it has been pulled >= 12 dB
+    // below where it loaded (a clear, audible move for a beginner). Latching means
+    // putting the fader back does not un-check the objective.
+    if (level.requireAdjust && adjustBaseRef.current) {
+      level.requireAdjust.forEach((ch) => {
+        const c = state.channels[ch - 1]; const base = adjustBaseRef.current[ch - 1];
+        if (c && base != null && (taperDb(base, FADER_TAPER) - taperDb(c.fader ?? 0, FADER_TAPER)) >= 12) adjustLatchRef.current[ch] = true;
+      });
+    }
+    const adjustOk = !level.requireAdjust || level.requireAdjust.every((ch) => !!adjustLatchRef.current[ch]);
     const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk;
     // Mirror the live, truly-winnable state so the sign-off button can tell a
     // correct "system is healthy" call from a premature one.
@@ -10192,6 +10201,7 @@ function App() {
     setHintCount(0);
     prevStateRef.current = sab;
     adjustBaseRef.current = (sab && sab.channels) ? sab.channels.map((c) => c.fader) : null;
+    adjustLatchRef.current = {};
     lastMoveRef.current = { key: null, at: 0 };
   };
 
@@ -10904,7 +10914,7 @@ function App() {
   // win. (Same reason the BriefCard objectives use audioBaseline.)
   const hintCtx = {
     state, audio: audioBaseline, powerStatus, gainStatus, verifyStatus, pflEachStatus,
-    zeroStatus, patchStatus, feedback, audioOn, adjustBase: adjustBaseRef.current,
+    zeroStatus, patchStatus, feedback, audioOn, adjustBase: adjustBaseRef.current, adjustLatched: adjustLatchRef.current,
     pflChannels: pflChannelsRef.current, pflChecked: pflCheckedRef.current,
   };
   const hintDefs = level.hints || (level.hint ? [{ text: level.hint, done: () => false }] : []);
@@ -11104,7 +11114,7 @@ function App() {
                           goalLabel: (level.isPractice && practiceInfoRef.current && practiceInfoRef.current.goalKey) ? practiceInfoRef.current.goalLabel : null,
                           falseSignoffs: falseSignoffRef.current,
                         } : null}
-                        coaching={window.detectGainStagingMistakes ? window.detectGainStagingMistakes(state, audio, level) : []}/>
+                        coaching={(!level.isStartHere && window.detectGainStagingMistakes) ? window.detectGainStagingMistakes(state, audio, level) : []}/>
                     : level.isWalkthrough
                     ? <WalkthroughPanel step={walkStep} steps={walkSteps} total={walkSteps.length} state={state} active={walkPhase === 'steps'} onNext={walkNext} onSkip={walkSkip} lastLesson={MIXER_INDEXES.length > 0 && MIXER_INDEXES[MIXER_INDEXES.length - 1] === levelIdx}/>
                     : guideSteps
