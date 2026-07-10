@@ -1419,7 +1419,7 @@ window.PRACTICE = {
 //     rings needed. Win = target level + no rings + tone intact.
 window.FEEDBACK_MODE = {
   id: 'feedback-mode',
-  title: 'Mic Feedback Mode',
+  title: 'Ear Training',
   par: 12,
   conditions: [
     // Target 1.0 under the real-dB engine: reaching it forces the send about
@@ -1432,7 +1432,7 @@ window.FEEDBACK_MODE = {
   // four small cuts pass easily, slammed sliders or shotgun cutting fail.
   toneGate: 0.92,
   involves: [1],
-  symptom: 'Ring-out training. Bring Vocal 1 up to the target level in Wedge 1. As you push, a frequency will start to ring. Back the send off a little, find the glowing band on the wedge\'s graphic EQ, and cut it a few dB, just enough that the ring stays gone. Then keep climbing. A real ring-out only takes a few cuts, so keep them small and stop when you reach the target.',
+  symptom: 'Ear training. Bring Vocal 1 up to the target level in Wedge 1. As you push, a frequency will start to ring. Back the send off a little, find the glowing band on the wedge\'s graphic EQ, and cut it a few dB, just enough that the ring stays gone. Then keep climbing. A real ring-out only takes a few cuts, so keep them small and stop when you reach the target.',
   hint: 'Raise the send a little at a time. When a frequency rings, find it on the monitor EQ and pull that band down a few dB, just past where the ring stops. Expect three or four on the way up, and keep every cut small. Once the vocal hits the target, stop.',
   sabotage: (s, rng) => {
     const r = rng || (() => 0.5);

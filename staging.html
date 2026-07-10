@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=140"></script>
+<script src="content-staging.js?v=141"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -3694,7 +3694,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
   };
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, background: 'rgba(0,0,0,0.45)' }}>
-      <div onClick={(e) => e.stopPropagation()} className="ui-no-select" style={{ background: 'linear-gradient(180deg,#1c1c20 0%, #141417 100%)', border: '1px solid #38383e', borderRadius: 10, padding: '14px 16px', boxShadow: '0 16px 48px rgba(0,0,0,0.6)' }}>
+      <div onClick={(e) => e.stopPropagation()} className="ui-no-select" style={{ width: 500, maxWidth: '94vw', boxSizing: 'border-box', background: 'linear-gradient(180deg,#1c1c20 0%, #141417 100%)', border: '1px solid #38383e', borderRadius: 10, padding: '14px 16px', boxShadow: '0 16px 48px rgba(0,0,0,0.6)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 24 }}>
           <div>
             <div className="display" style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.5 }}>Monitor EQ</div>
@@ -3736,7 +3736,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
             ? <span>the ringing frequency by <b style={{ color: 'var(--hot)' }}>ear</b></span>
             : <span>the <b style={{ color: 'var(--hot)' }}>glowing band</b></span>;
           return (
-            <div style={{ marginBottom: 10, padding: '8px 10px', minHeight: 34, display: 'flex', alignItems: 'center',
+            <div style={{ marginBottom: 10, padding: '8px 10px', minHeight: 48, display: 'flex', alignItems: 'center',
               background: ringing ? (hot ? 'rgba(255,70,48,0.18)' : 'rgba(255,70,48,0.10)') : 'rgba(255,255,255,0.03)',
               border: '1px solid ' + (ringing ? 'var(--hot)' : '#2a2a2e'), borderRadius: 6,
               fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.4 }}>
@@ -8401,15 +8401,15 @@ function FaultCatalog({ open, onClose, tier }) {
           ))}
         </div>
 
-        {sectionTitle('var(--aux)', 'MIC FEEDBACK MODE · MEMBERS')}
+        {sectionTitle('var(--aux)', 'EAR TRAINING · MEMBERS')}
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-          Ring-out training: push a wedge toward a target level, and when a frequency starts to ring, find it on the graphic EQ and cut it by ear. Each one is a new wedge with a new set of problem frequencies.
+          Ear training: push a wedge toward a target level, and when a frequency starts to ring, find it on the graphic EQ and cut it by ear. Each round is a new wedge with a new set of problem frequencies.
         </div>
 
         {tier !== 'member' && (
           <div style={{ marginTop: 14, borderTop: '1px solid #2a2a2e', paddingTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 11, color: 'var(--ink)', lineHeight: 1.5, flex: 1, minWidth: 180 }}>
-              The Mixer Tutorial is free. Run the Show, Practice Mode, and Mic Feedback Mode are part of the Audio University membership.
+              The Mixer Tutorial is free. Run the Show, Practice Mode, and Ear Training are part of the Audio University membership.
             </div>
             <a href={joinUrl('catalog')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
               padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
@@ -11023,7 +11023,7 @@ function App() {
                 : pitchFor.isLibrary
                 ? 'A growing library of real-world scenarios to troubleshoot, each a different board.'
                 : pitchFor.isFeedbackMode
-                ? 'That was your free ring-out. Members ring out every wedge, by ear, with no limit.'
+                ? 'That was your free round. Members get unlimited ear training, guided and by ear.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
                 ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free tries. Members practice with no limit.'
                 : 'Endless troubleshooting reps: a new fault each time, more at once as you turn it up.'}
@@ -11303,7 +11303,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   const MODES = [
     { key: 'learn', icon: '≡', label: 'LEARN', sub: '', accent: 'var(--accent)' },
     { key: 'practice', icon: '∞', label: 'PRACTICE', sub: '', accent: 'var(--green)' },
-    { key: 'feedback', icon: '∿', label: 'MIC FEEDBACK', sub: '', accent: 'var(--aux)' },
+    { key: 'feedback', icon: '∿', label: 'EAR TRAINING', sub: '', accent: 'var(--aux)' },
     { key: 'play', icon: '▶', label: 'FREE PLAY', sub: '', accent: 'var(--cool)' },
   ];
   // A course row in the Learn pane. `num` is the lesson's position WITHIN its
@@ -11420,7 +11420,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
             )}
             {mode === 'feedback' && (
               <div>
-                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--aux)', marginBottom: 10 }}>MIC FEEDBACK · EAR TRAINING</div>
+                <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--aux)', marginBottom: 10 }}>EAR TRAINING</div>
                 <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Ring out a wedge: push the send until it starts to ring, find the frequency on the graphic EQ, and cut it by ear.</div>
                 {isMember && onSetFeedbackByEar && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
@@ -11431,7 +11431,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                     ))}
                   </div>
                 )}
-                {!isMember && FEEDBACK_ID != null && !completed[FEEDBACK_ID] && <div className="mono" style={{ fontSize: 9, color: 'var(--aux)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>1 FREE RING-OUT</div>}
+                {!isMember && FEEDBACK_ID != null && !completed[FEEDBACK_ID] && <div className="mono" style={{ fontSize: 9, color: 'var(--aux)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>1 FREE ROUND</div>}
                 {startBtn((isMember || !(FEEDBACK_ID != null && completed[FEEDBACK_ID])) ? 'START →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
               </div>
             )}
@@ -11524,7 +11524,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             {level.isPractice
               ? (practiceFreeLeft != null ? 'PRACTICE MODE · FREE PREVIEW' : 'PRACTICE MODE · MEMBERS')
               : level.isFeedbackMode
-              ? 'MIC FEEDBACK MODE · MEMBERS'
+              ? 'EAR TRAINING · MEMBERS'
               : level.isSandbox
               ? 'FREE PLAY · NO GOAL'
               : level.isMonitor
@@ -11761,7 +11761,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   })();
   const workChip = (
     <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'RING-OUT' : level.isStartHere ? 'START HERE' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
+      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
     </div>
   );
 
@@ -12067,7 +12067,7 @@ function SolvedCard({ level, onNext, hasNext, feedbackDone, coaching, debrief, o
             width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
             background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
             border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-          }}>{level.isFeedbackMode ? (feedbackDone ? 'JOIN TO KEEP TRAINING →' : 'NEXT WEDGE →')
+          }}>{level.isFeedbackMode ? (feedbackDone ? 'JOIN TO KEEP TRAINING →' : 'NEXT ROUND →')
               : (practiceFreeLeft === 0) ? 'JOIN TO KEEP TRAINING →'
               : 'NEXT FAULT →'}</button>
         </>
