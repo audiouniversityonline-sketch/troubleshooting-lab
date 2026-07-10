@@ -286,7 +286,9 @@ const OUT_PORT_LABELS = { mainL: 'MAIN L', mainR: 'MAIN R', aux1: 'AUX 1', aux2:
 // Graphic EQ on the monitor sends — ISO mid-octave centre frequencies. A cut on
 // the band a wedge rings at (its ringBand) drops the feedback loop at that
 // frequency. Bands 0-1 are "low" (an HPF can help there); 2-4 are mid/high
-// (only the EQ rings those out). EQ_CUT_DB = the cut at a band's full setting.
+// (only the EQ rings those out). The EQ is bidirectional: a cut drops the loop
+// at that frequency, a boost raises it (pushing a band up toward its resonance
+// is a real way to find the ring). EQ_CUT_DB = the boost/cut range each way.
 const EQ_BANDS = ['250', '500', '1k', '2k', '4k'];
 // Center frequency of each band, in Hz. The audible feedback ring is played at
 // the center frequency of whichever band is glowing, so what you hear and what
@@ -376,10 +378,12 @@ function wedgeProfileFor(wKey) {
   _wedgeProfileCache.set(ck, prof);
   return prof;
 }
-// Linear relief multiplier from a band's cut fraction (0 flat .. 1 full cut).
-function eqBandRelief(cutFrac) {
-  const c = Math.max(0, Math.min(1, cutFrac || 0));
-  return Math.pow(10, (-EQ_CUT_DB * c) / 20);
+// Linear gain multiplier from a band's fader position. The graphic EQ is
+// bidirectional: g = +1 is a full boost, g = -1 is a full cut, 0 is flat, and
+// EQ_CUT_DB is the range each way (so +1 = +EQ_CUT_DB dB, -1 = -EQ_CUT_DB dB).
+function eqBandRelief(g) {
+  const v = Math.max(-1, Math.min(1, g || 0));
+  return Math.pow(10, (EQ_CUT_DB * v) / 20);
 }
 // What the EQ does to the monitor's overall LEVEL: energy comes out of the
 // wedge with every cut (mean of the band gains). This is why a real engineer
@@ -458,7 +462,7 @@ function defaultState() {
     outputs: {
       pa_l:   { on: true, mute: false, volume: 0.7 },
       pa_r:   { on: true, mute: false, volume: 0.7 },
-      // eq: per-band cut on the monitor send, 0 (flat) .. 1 (full -12 dB cut),
+      // eq: per-band fader on the monitor send, -1 (full -12 dB cut) .. 0 (flat) .. +1 (full +12 dB boost),
       // one entry per FULL_EQ_BANDS frequency. Every wedge now carries the full
       // 25-band graphic EQ (consistent across all levels and modes, and the
       // realistic monitor tool). ringBand: the band this wedge rings at when it
@@ -1677,7 +1681,7 @@ function detectFeedback(s, audio) {
     for (const { b, p } of bands) {
       const lowBand = hzOf(b) <= 250;
       const hpfDb = (hpf && lowBand) ? -4.4 : 0;
-      const eqDb = w.eq ? -EQ_CUT_DB * Math.max(0, Math.min(1, w.eq[b] || 0)) : 0;
+      const eqDb = w.eq ? EQ_CUT_DB * Math.max(-1, Math.min(1, w.eq[b] || 0)) : 0;
       const loopDb = feedDb + 20 * Math.log10(p) + eqDb + hpfDb;
       const key = wKey + ':' + b;
       const th = _ringActive[key] ? RING_SUSTAIN_DB : 0;
@@ -1763,7 +1767,7 @@ function feedbackMargins(s, audio) {
     let m = -999;
     for (const { b, p } of bands) {
       const hpfDb = (hpf && hzOf(b) <= 250) ? -4.4 : 0;
-      const eqDb = w.eq ? -EQ_CUT_DB * Math.max(0, Math.min(1, w.eq[b] || 0)) : 0;
+      const eqDb = w.eq ? EQ_CUT_DB * Math.max(-1, Math.min(1, w.eq[b] || 0)) : 0;
       const loopDb = feedDb + 20 * Math.log10(p) + eqDb + hpfDb;
       if (loopDb > m) m = loopDb;
     }
@@ -3623,27 +3627,34 @@ function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePowe
   );
 }
 
-// One band of the monitor graphic EQ. value = cut fraction (0 flat .. 1 full
-// cut). The handle sits at the cut depth: top = flat (0 dB), bottom = full cut
-// (-EQ_CUT_DB). Drag down to cut that band. When this band is the one ringing,
-// it glows red so the engineer can ring it out.
+// One band of the monitor graphic EQ. value = fader position, bidirectional:
+// 0 flat, +1 full boost (up), -1 full cut (down). The handle rests at centre
+// (0 dB) and moves up to boost or down to cut. When this band is the one
+// ringing it glows red, and pushing a band UP toward its resonance drives it
+// into feedback faster — a real diagnostic trick for finding the ring.
 function EqBand({ value, onChange, label, ringing, accent, height = 96, width = 22, vertical }) {
   const ref = React.useRef(null);
   const startRef = React.useRef(null);
   const fitScale = React.useContext(window.FitScaleContext) || 1;
-  const cut = Math.max(0, Math.min(1, value || 0));
-  const onDown = (e) => { e.preventDefault(); e.stopPropagation(); try { ref.current.setPointerCapture(e.pointerId); } catch(_){} startRef.current = { y: e.clientY, v: cut }; };
-  const onMove = (e) => { if (!startRef.current) return; const dy = (e.clientY - startRef.current.y) / (fitScale || 1); let v = startRef.current.v + dy / height; v = Math.max(0, Math.min(1, v)); onChange(v); };
+  const g = Math.max(-1, Math.min(1, value || 0));
+  const onDown = (e) => { e.preventDefault(); e.stopPropagation(); try { ref.current.setPointerCapture(e.pointerId); } catch(_){} startRef.current = { y: e.clientY, v: g }; };
+  const onMove = (e) => { if (!startRef.current) return; const dy = (e.clientY - startRef.current.y) / (fitScale || 1); let v = startRef.current.v - (dy / height) * 2; v = Math.max(-1, Math.min(1, v)); onChange(v); };
   const onUp = (e) => { startRef.current = null; try { ref.current.releasePointerCapture(e.pointerId); } catch(_){} };
-  const handleY = cut * (height - 8);
+  const travel = height - 8;
+  const centerY = travel / 2;
+  const handleY = (1 - g) / 2 * travel;   // g=+1 -> top, g=-1 -> bottom, 0 -> centre
+  const boosting = g > 0.02, cutting = g < -0.02;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
       <div ref={ref} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} className="ui-no-select"
         style={{ width, height, position: 'relative', cursor: 'ns-resize' }}>
         {/* track */}
         <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 3, transform: 'translateX(-50%)', background: '#0a0a0c', border: '1px solid ' + (ringing ? 'var(--hot)' : '#2a2a2e'), borderRadius: 2, boxShadow: ringing ? '0 0 8px rgba(255,70,48,0.7)' : 'none' }}/>
-        {/* 0 dB centre tick at top, cut shown below the handle */}
-        <div style={{ position: 'absolute', left: 0, right: 0, top: handleY + 7, bottom: 0, background: 'rgba(255,70,48,0.10)', borderRadius: 2, opacity: cut > 0.02 ? 1 : 0 }}/>
+        {/* 0 dB centre tick */}
+        <div style={{ position: 'absolute', left: '50%', top: centerY + 3.5, width: width + 4, height: 1, transform: 'translateX(-50%)', background: '#4a4a52' }}/>
+        {/* fill from centre to the handle: green up (boost), red down (cut) */}
+        <div style={{ position: 'absolute', left: 0, right: 0, top: (boosting ? handleY : centerY) + 4, height: Math.abs(handleY - centerY),
+          background: boosting ? 'rgba(74,222,128,0.16)' : cutting ? 'rgba(255,70,48,0.12)' : 'transparent', borderRadius: 2 }}/>
         {/* handle */}
         <div style={{ position: 'absolute', left: '50%', top: handleY, transform: 'translateX(-50%)', width: width, height: 8, borderRadius: 2,
           background: ringing ? 'var(--hot)' : accent, border: '1px solid ' + (ringing ? '#b8341f' : '#0a0a0c'),
@@ -10081,13 +10092,13 @@ function App() {
       }
       const full = !!(eqArr && eqArr.length === FULL_EQ_HZ.length);
       for (let bi = 0; bi < bank.length; bi++) {
-        let cut = 0;
+        let g = 0;
         if (eqArr) {
-          if (full) cut = eqArr[bi] || 0;
-          else { const i5 = EQ_BAND_HZ.indexOf(FULL_EQ_HZ[bi]); if (i5 >= 0) cut = eqArr[i5] || 0; }
+          if (full) g = eqArr[bi] || 0;
+          else { const i5 = EQ_BAND_HZ.indexOf(FULL_EQ_HZ[bi]); if (i5 >= 0) g = eqArr[i5] || 0; }
         }
-        cut = Math.max(0, Math.min(1, cut));
-        rampParam(bank[bi].gain, ctx, -EQ_CUT_DB * cut);
+        g = Math.max(-1, Math.min(1, g));   // bidirectional: +1 boost, -1 cut
+        rampParam(bank[bi].gain, ctx, EQ_CUT_DB * g);
       }
     }
   }, [audioOn, audio, state.inspect, state.programMute]);
