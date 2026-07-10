@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=141"></script>
+<script src="content-staging.js?v=142"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6815,6 +6815,8 @@ function defaultProfile() {
     lastLevel: 0,       // resume: scenario index last open
     practiceFaults: 1,  // resume: FAULTS difficulty (1-3)
     feedbackByEar: false, // resume: Feedback Mode GUIDED(false)/BY EAR(true)
+    etGuided: 0,        // free-tier Ear Training: guided rounds finished (cap FREE_ET_GUIDED)
+    etByEar: 0,         // free-tier Ear Training: by-ear rounds finished (cap FREE_ET_BYEAR)
     email: '',          // free-tier email gate: captured address (sent to Kit)
     firstName: '',      // free-tier email gate: captured first name (sent to Kit)
     emailSkipped: false, // free-tier email gate: chose "skip for now" (soft gate)
@@ -7413,6 +7415,11 @@ const HOME_INDEX = (TIER === 'member') ? 0 : (START_HERE_INDEX >= 0 ? START_HERE
 // a lock. Feedback Mode and custom authoring stay fully member-gated; only
 // Practice Mode is soft-gated by this budget. Members are never counted.
 const FREE_PRACTICE_LIMIT = 7;
+// Ear Training free taste: three guided rounds, then a taste of by-ear, then
+// the membership pitch. Guided teaches how it works; by-ear shows how hard the
+// real thing is, so the pitch lands.
+const FREE_ET_GUIDED = 3;
+const FREE_ET_BYEAR = 3;
 
 // Picker bands — every scenario maps to one of four bands via bandOf(). The
 // mode picker groups by these IDs: Learn (the Essentials), Practice (Practice +
@@ -8684,6 +8691,8 @@ function App() {
   // true = by ear (no glow; the engineer finds the ringing frequency by
   // listening). Only affects Feedback Mode.
   const [feedbackByEar, setFeedbackByEar] = uS(() => !!profileRef.current.feedbackByEar);
+  const [etGuided, setEtGuided] = uS(() => profileRef.current.etGuided || 0);
+  const [etByEar, setEtByEar] = uS(() => profileRef.current.etByEar || 0);
 
   // Console surface (member feature). Free tier is always analog; clicking
   // DIGITAL on free opens the member pitch instead of switching. setPitchFor is
@@ -8716,9 +8725,20 @@ function App() {
   const [freePractice, setFreePractice] = uS(() => profileRef.current.freePractice || 0);
   const freeRepsLeft = TIER === 'member' ? Infinity : Math.max(0, FREE_PRACTICE_LIMIT - freePractice);
   const practiceSoftOpen = TIER === 'member' || freeRepsLeft > 0;
-  // Feedback ring-out: one free guided taste. Open until the free viewer has
-  // solved it once (the completed ledger holds the flag); members never gated.
-  const feedbackSoftOpen = TIER === 'member' || !(FEEDBACK_ID != null && completed[FEEDBACK_ID]);
+  // Ear Training free taste: three guided rounds, then three by-ear rounds,
+  // then the membership pitch. Members are never gated.
+  const etGuidedLeft = TIER === 'member' ? Infinity : Math.max(0, FREE_ET_GUIDED - etGuided);
+  const etByEarLeft = TIER === 'member' ? Infinity : Math.max(0, FREE_ET_BYEAR - etByEar);
+  const etByEarPhase = TIER !== 'member' && etGuided >= FREE_ET_GUIDED; // guided taste done
+  const etExhausted = TIER !== 'member' && etGuided >= FREE_ET_GUIDED && etByEar >= FREE_ET_BYEAR;
+  const feedbackSoftOpen = TIER === 'member' || !etExhausted;
+  // The free tier's ring-out difficulty is driven by the phase, not a toggle:
+  // guided until the three guided rounds are done, by-ear after. Members keep
+  // manual control of the GUIDED/BY EAR switch.
+  const feedbackFreeLabel = TIER === 'member' ? null
+    : etExhausted ? null
+    : etByEarPhase ? (etByEarLeft + ' FREE ROUND' + (etByEarLeft === 1 ? '' : 'S') + ' · BY EAR')
+    : (etGuidedLeft + ' FREE ROUND' + (etGuidedLeft === 1 ? '' : 'S') + ' · GUIDED');
 
   const [emailDone, setEmailDone] = uS(() => !!(profileRef.current.email || profileRef.current.emailSkipped));
   const captureEmail = (email, firstName) => {
@@ -8765,9 +8785,19 @@ function App() {
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
   // feedbackByEar drive "resume where I left off" on the next load.
   uE(() => {
-    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow, stageHidden, consoleSize };
+    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, etGuided, etByEar, freePractice, surface, liveShow, stageHidden, consoleSize };
     saveProfile(profileRef.current);
-  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, freePractice, surface, liveShow, stageHidden, consoleSize]);
+  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, etGuided, etByEar, freePractice, surface, liveShow, stageHidden, consoleSize]);
+
+  // Free tier: Ear Training difficulty follows the phase. Guided for the first
+  // three rounds, by-ear after. Runs on entering the mode and when the guided
+  // count crosses the threshold. Members are left to their own GUIDED/BY EAR toggle.
+  uE(() => {
+    if (TIER === 'member') return;
+    if (!level || !level.isFeedbackMode) return;
+    const want = etGuided >= FREE_ET_GUIDED;
+    setFeedbackByEar(prev => (prev === want ? prev : want));
+  }, [levelIdx, etGuided]);
 
   // Keep the fault-draw's surface global in sync. Digital-only faults (mute
   // groups, DCA) carry digital:true and are skipped by the draw unless this is
@@ -9255,6 +9285,12 @@ function App() {
             // Free tier: a finished rep spends one of the free-taste budget.
             // Members are never counted (their reps are unlimited anyway).
             if (TIER !== 'member') setFreePractice(n => n + 1);
+          }
+          // Free tier Ear Training: a finished round spends the guided or by-ear
+          // budget, depending on the mode it was run in.
+          if (level.isFeedbackMode && TIER !== 'member') {
+            if (feedbackByEar) setEtByEar(n => n + 1);
+            else setEtGuided(n => n + 1);
           }
         }, 900);
       }
@@ -10928,6 +10964,7 @@ function App() {
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
         practiceFaults={practiceFaults} onSetPracticeFaults={repShareFree ? null : setPracticeFaults}
         feedbackByEar={feedbackByEar} onSetFeedbackByEar={setFeedbackByEar}
+        feedbackFreeLabel={feedbackFreeLabel} feedbackExhausted={etExhausted}
         practiceFreeLeft={TIER === 'member' ? null : freeRepsLeft}
         rank={rank} rankClean={rankClean} onTrainRank={(TIER === 'member' && !repShareFree) ? trainRank : null}
         liveShow={false} onSetLiveShow={null}
@@ -10981,7 +11018,7 @@ function App() {
         rings={feedback ? feedback.rings : []}
         toneGate={level.toneGate}
         byEar={feedbackByEar}
-        onSetByEar={setFeedbackByEar}
+        onSetByEar={TIER === 'member' ? setFeedbackByEar : null}
         severity={fbSeverity}
       />
 
@@ -10994,8 +11031,8 @@ function App() {
 
       <ProgressModal open={saveModalOpen} onClose={() => setSaveModalOpen(false)}
         profile={{ ...profileRef.current, completed, reps }}
-        onRestore={(p) => { profileRef.current = p; setCompleted(p.completed); setReps(p.reps); }}
-        onResetProgress={() => { profileRef.current = defaultProfile(); setCompleted({}); setReps(0); }}/>
+        onRestore={(p) => { profileRef.current = p; setCompleted(p.completed); setReps(p.reps); setEtGuided(p.etGuided || 0); setEtByEar(p.etByEar || 0); }}
+        onResetProgress={() => { profileRef.current = defaultProfile(); setCompleted({}); setReps(0); setEtGuided(0); setEtByEar(0); }}/>
 
       {/* Member pitch — shown on the free tier when locked Practice Mode is
           clicked. Short and honest; the locked entry does the selling. */}
@@ -11023,7 +11060,7 @@ function App() {
                 : pitchFor.isLibrary
                 ? 'A growing library of real-world scenarios to troubleshoot, each a different board.'
                 : pitchFor.isFeedbackMode
-                ? 'That was your free round. Members get unlimited ear training, guided and by ear.'
+                ? 'That is your free ear training. Members get unlimited rounds, guided and by ear, plus the full live-sound course.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
                 ? 'That is your ' + FREE_PRACTICE_LIMIT + ' free tries. Members practice with no limit.'
                 : 'Endless troubleshooting reps: a new fault each time, more at once as you turn it up.'}
@@ -11075,7 +11112,15 @@ function App() {
                   <StableSlot levelKey={levelIdx}>
                   {solved
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < SCENARIOS.length && !isLocked(SCENARIOS[levelIdx + 1])}
-                        feedbackDone={level.isFeedbackMode && TIER !== 'member' && FEEDBACK_ID != null && !!completed[FEEDBACK_ID]}
+                        feedbackLabel={!level.isFeedbackMode ? null
+                          : TIER === 'member' ? 'NEXT ROUND →'
+                          : etExhausted ? 'JOIN TO KEEP TRAINING →'
+                          : (etByEarPhase && etByEar === 0) ? 'TRY IT BY EAR →'
+                          : 'NEXT ROUND →'}
+                        feedbackCaption={(!level.isFeedbackMode || TIER === 'member') ? null
+                          : etExhausted ? 'FREE ROUNDS USED'
+                          : etByEarPhase ? (etByEar === 0 ? 'Guided done. Now find the ring by ear.' : ('BY EAR · ' + etByEar + ' / ' + FREE_ET_BYEAR))
+                          : ('GUIDED · ' + etGuided + ' / ' + FREE_ET_GUIDED)}
                         onPracticeAgain={level.isChallenge ? practiceAgain : null}
                         onGoEssentials={(level.isCustom && TIER !== 'member') ? () => { loadLevel(WALKTHROUGH_INDEX, undefined, true); } : null}
                         practiceFreeLeft={(level.isPractice && TIER !== 'member') ? freeRepsLeft : null}
@@ -11253,7 +11298,7 @@ function App() {
 // (Troubleshooting / Feedback / Library) instead of cramming everything into one
 // list. Opens onto whatever mode the current level belongs to. The digital
 // console toggle is NOT here (it lives on the console itself).
-function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedbackByEar, onSetFeedbackByEar, onPick, practiceFreeLeft, onOpenCatalog }) {
+function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedbackByEar, onSetFeedbackByEar, feedbackFreeLabel, feedbackExhausted, onPick, practiceFreeLeft, onOpenCatalog }) {
   // Mounted fresh each time the picker opens (rendered behind `{picker && ...}`),
   // so it always lands on whatever mode the current level belongs to.
   // Monitor World now lives INSIDE the Learn pane as a third course (alongside
@@ -11431,8 +11476,8 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                     ))}
                   </div>
                 )}
-                {!isMember && FEEDBACK_ID != null && !completed[FEEDBACK_ID] && <div className="mono" style={{ fontSize: 9, color: 'var(--aux)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>1 FREE ROUND</div>}
-                {startBtn((isMember || !(FEEDBACK_ID != null && completed[FEEDBACK_ID])) ? 'START →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
+                {!isMember && feedbackFreeLabel && <div className="mono" style={{ fontSize: 9, color: 'var(--aux)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>{feedbackFreeLabel}</div>}
+                {startBtn((isMember || !feedbackExhausted) ? 'START →' : '🔒 MEMBERS · SEE MORE', () => go(feedbackIdx))}
               </div>
             )}
           </div>
@@ -11442,7 +11487,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, stage16Open, consoleSize, onSetConsoleSize, sizeSelectable, big16 }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, feedbackFreeLabel, feedbackExhausted, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, stage16Open, consoleSize, onSetConsoleSize, sizeSelectable, big16 }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -11543,6 +11588,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
               level={level} levelIdx={levelIdx} completed={completed}
               practicePanel={practicePanel}
               feedbackByEar={feedbackByEar} onSetFeedbackByEar={onSetFeedbackByEar}
+              feedbackFreeLabel={feedbackFreeLabel} feedbackExhausted={feedbackExhausted}
               onPick={onPick} practiceFreeLeft={practiceFreeLeft} onOpenCatalog={onOpenCatalog}/>
           )}
         </div>
@@ -11924,7 +11970,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, feedbackDone, coaching, debrief, onPracticeAgain, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak }) {
+function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, coaching, debrief, onPracticeAgain, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -12056,18 +12102,22 @@ function SolvedCard({ level, onNext, hasNext, feedbackDone, coaching, debrief, o
            On the free tier, Practice shows how many taste reps remain so the
            membership wall is foreseen, not sprung. */
         <>
-          {practiceFreeLeft != null && (
+          {level.isFeedbackMode ? (feedbackCaption && (
+            <div className="mono" style={{ fontSize: 8.5, letterSpacing: 0.6, textAlign: 'center', fontWeight: 700, color: feedbackLabel === 'JOIN TO KEEP TRAINING →' ? 'var(--accent)' : 'var(--aux)' }}>
+              {feedbackCaption}
+            </div>
+          )) : (practiceFreeLeft != null && (
             <div className="mono" style={{ fontSize: 8.5, letterSpacing: 0.6, textAlign: 'center', fontWeight: 700, color: practiceFreeLeft > 0 ? 'var(--green)' : 'var(--accent)' }}>
               {practiceFreeLeft > 0
                 ? ('FREE PREVIEW · ' + practiceFreeLeft + ' LEFT')
                 : 'FREE PREVIEW USED'}
             </div>
-          )}
+          ))}
           <button onClick={onPracticeAgain} className="mono ui-no-select" style={{
             width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
             background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
             border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-          }}>{level.isFeedbackMode ? (feedbackDone ? 'JOIN TO KEEP TRAINING →' : 'NEXT ROUND →')
+          }}>{level.isFeedbackMode ? (feedbackLabel || 'NEXT ROUND →')
               : (practiceFreeLeft === 0) ? 'JOIN TO KEEP TRAINING →'
               : 'NEXT FAULT →'}</button>
         </>

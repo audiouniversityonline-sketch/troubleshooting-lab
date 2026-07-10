@@ -1432,7 +1432,7 @@ window.FEEDBACK_MODE = {
   // four small cuts pass easily, slammed sliders or shotgun cutting fail.
   toneGate: 0.92,
   involves: [1],
-  symptom: 'Ear training. Bring Vocal 1 up to the target level in Wedge 1. As you push, a frequency will start to ring. Back the send off a little, find the glowing band on the wedge\'s graphic EQ, and cut it a few dB, just enough that the ring stays gone. Then keep climbing. A real ring-out only takes a few cuts, so keep them small and stop when you reach the target.',
+  symptom: 'Push Vocal 1 up in Wedge 1 to the target level. When a frequency rings, cut it on the wedge EQ, then keep climbing. Small cuts, not big ones.',
   hint: 'Raise the send a little at a time. When a frequency rings, find it on the monitor EQ and pull that band down a few dB, just past where the ring stops. Expect three or four on the way up, and keep every cut small. Once the vocal hits the target, stop.',
   sabotage: (s, rng) => {
     const r = rng || (() => 0.5);
