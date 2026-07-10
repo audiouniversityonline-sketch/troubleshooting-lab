@@ -7442,10 +7442,10 @@ function bandOf(l) {
 const RANK_GATE = 3;
 const HIGHEST_LIVE_RANK = 4;
 const RANKS = [
-  { n: 1, label: 'Find one',   blurb: 'Spot a single hidden fault.',       faults: 1, need: (d) => d.faults >= 1 },
-  { n: 2, label: 'Find two',   blurb: 'Two faults at once, no answer key.', faults: 2, need: (d) => d.faults >= 2 },
-  { n: 3, label: 'Find three', blurb: 'A full stack of three.',            faults: 3, need: (d) => d.faults >= 3 },
-  { n: 4, label: 'Live show',  blurb: 'Diagnose without the room paying.', faults: 2, liveShow: true, need: (d) => d.liveShow && d.faults >= 1 && d.dropouts === 0 },
+  { n: 1, label: 'Find one',   blurb: 'One fault to find.',              faults: 1, need: (d) => d.faults >= 1 },
+  { n: 2, label: 'Find two',   blurb: 'Two faults at once.',            faults: 2, need: (d) => d.faults >= 2 },
+  { n: 3, label: 'Find three', blurb: 'Three faults at once.',          faults: 3, need: (d) => d.faults >= 3 },
+  { n: 4, label: 'Live show',  blurb: 'Fix it while the show is running.', faults: 2, liveShow: true, need: (d) => d.liveShow && d.faults >= 1 && d.dropouts === 0 },
 ];
 const rankByN = (n) => RANKS.find((r) => r.n === n) || RANKS[0];
 
@@ -7724,7 +7724,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>START HERE · DONE</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You can run a system now.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You turned on the system, balanced the band, got a vocal into the mix, built the singer a monitor, and rang out feedback. That is running sound.
+          You turned on the system, balanced the band, got a vocal into the mix, built the singer a monitor mix, and rang out feedback. That is running sound.
         </div>
         {tier === 'member' ? (
           <>
@@ -7740,7 +7740,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         ) : (
           <>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
-              Now put it to work. Practice Mode hands you a broken system to diagnose and fix, a new fault every time. The full gym, the by-ear feedback training, and setting a system up from scratch are all part of the Audio University membership.
+              Now put it to work. Practice Mode gives you a broken system to fix, a new fault every time. Unlimited practice, the by-ear feedback training, and setting up a system from scratch are all part of the Audio University membership.
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={onGoPractice} className="mono ui-no-select" style={{
@@ -7791,7 +7791,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · YOU DID IT</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You just ran a system</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You turned on a system, balanced the band, got a vocal into the mix, built a monitor, and rang out feedback. Drop your email to save your progress and get the Soundcheck Checklist, the pre-show list to run before every gig.
+          You turned on a system, balanced the band, got a vocal into the mix, built a monitor mix, and rang out feedback. Add your email to save your progress and get the Soundcheck Checklist, the pre-show list to run before every gig.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -11312,10 +11312,10 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
     }}>{label}</button>
   );
   const MODES = [
-    { key: 'learn', icon: '≡', label: 'LEARN', sub: 'Guided courses · step by step', accent: 'var(--accent)' },
-    { key: 'practice', icon: '∞', label: 'PRACTICE', sub: 'Endless reps · find the fault', accent: 'var(--green)' },
-    { key: 'feedback', icon: '∿', label: 'MIC FEEDBACK', sub: 'Ring out a wedge · train your ear', accent: 'var(--aux)' },
-    { key: 'play', icon: '▶', label: 'FREE PLAY', sub: 'A working system · explore', accent: 'var(--cool)' },
+    { key: 'learn', icon: '≡', label: 'LEARN', sub: '', accent: 'var(--accent)' },
+    { key: 'practice', icon: '∞', label: 'PRACTICE', sub: '', accent: 'var(--green)' },
+    { key: 'feedback', icon: '∿', label: 'MIC FEEDBACK', sub: '', accent: 'var(--aux)' },
+    { key: 'play', icon: '▶', label: 'FREE PLAY', sub: '', accent: 'var(--cool)' },
   ];
   // A course row in the Learn pane. `num` is the lesson's position WITHIN its
   // course (01, 02 ...); `free` unlocks it for the free tier (Mixer Tutorial).
@@ -11335,9 +11335,9 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // the other two are gated, and a free viewer sees a lock instead of an
   // expander on them.
   const COURSES = [];
-  if (startHere.length) COURSES.push({ key: 'starthere', label: 'START HERE', color: 'var(--green)', tag: 'FREE', free: true, blurb: 'Your first hands-on session. Get a vocal into the mix, build a monitor, ring out feedback, and run the show. Five quick wins on a system that is already live.', rows: startHere });
-  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a live system from nothing and run a full show: patch, power up, gain structure, monitors, the works. Ten lessons, in order.', rows: lessons });
-  if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MONITOR WORLD', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build a separate mix for each performer: their own source, a bit of the vocals, a sensible level, rung out so it stays clean.', rows: monitors });
+  if (startHere.length) COURSES.push({ key: 'starthere', label: 'START HERE', color: 'var(--green)', tag: 'FREE', free: true, blurb: 'Start here to learn the essential skills, one step at a time.', rows: startHere });
+  COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a system from nothing and run a full show. Ten lessons, in order.', rows: lessons });
+  if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MONITOR WORLD', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build a separate monitor mix for each performer, and ring it out so it stays clean.', rows: monitors });
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 680, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>
@@ -11362,13 +11362,13 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
               const on = mode === m.key;
               return (
                 <div key={m.key} onClick={() => setMode(m.key)} className="ui-no-select"
-                  style={{ cursor: 'pointer', border: '1px solid ' + (on ? m.accent : '#2a2a2e'), borderRadius: 8, padding: '11px 12px', background: on ? 'rgba(255,255,255,0.03)' : '#16161a', display: 'flex', gap: 10, alignItems: 'flex-start' }}
+                  style={{ cursor: 'pointer', border: '1px solid ' + (on ? m.accent : '#2a2a2e'), borderRadius: 8, padding: '11px 12px', background: on ? 'rgba(255,255,255,0.03)' : '#16161a', display: 'flex', gap: 10, alignItems: 'center' }}
                   onMouseEnter={(e) => { if (!on) e.currentTarget.style.background = '#1d1d22'; }}
                   onMouseLeave={(e) => { if (!on) e.currentTarget.style.background = '#16161a'; }}>
                   <div style={{ fontSize: 15, color: m.accent, width: 18, textAlign: 'center' }}>{m.icon}</div>
                   <div>
                     <div className="mono" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.6, color: on ? 'var(--ink)' : 'var(--ink-2)' }}>{m.label}</div>
-                    <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.3 }}>{m.sub}</div>
+                    {m.sub && <div style={{ fontSize: 10, color: 'var(--ink-3)', marginTop: 2, lineHeight: 1.3 }}>{m.sub}</div>}
                   </div>
                 </div>
               );
@@ -11411,7 +11411,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
             {mode === 'play' && (
               <div>
                 <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--cool)', marginBottom: 5 }}>FREE PLAY</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 14 }}>A full working system with nothing broken. Move any fader, turn any knob, and listen to what changes. No goal and no timer, just a place to get familiar with the console.</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 14 }}>A working system with nothing broken. Move any fader, turn any knob, and hear what changes. No goal, just a place to get used to the console.</div>
                 {startBtn('START FREE PLAY →', () => go(sandboxIdx))}
               </div>
             )}
@@ -11422,7 +11422,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                   ? practicePanel
                   : (
                     <div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Something in the system is broken. Find it and fix it. Each one has a new fault to find.</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Something in the system is broken. Find it and fix it. A new fault every time.</div>
                       {practiceFreeLeft != null && practiceFreeLeft > 0 && <div className="mono" style={{ fontSize: 9, color: 'var(--green)', fontWeight: 800, letterSpacing: 0.6, marginBottom: 10 }}>{practiceFreeLeft} FREE TRIES LEFT</div>}
                       {startBtn('START SESSION →', () => go(practiceIdx))}
                     </div>
@@ -11432,7 +11432,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
             {mode === 'feedback' && (
               <div>
                 <div className="mono" style={{ fontSize: 9, letterSpacing: 1.4, fontWeight: 700, color: 'var(--aux)', marginBottom: 10 }}>MIC FEEDBACK · EAR TRAINING</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Ring out a wedge: push the send until it starts to ring, find the frequency on the graphic EQ, and cut it by ear. This is the ear you keep sharpening for years, and a monitor engineer's core skill.</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>Ring out a wedge: push the send until it starts to ring, find the frequency on the graphic EQ, and cut it by ear.</div>
                 {isMember && onSetFeedbackByEar && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
                     <span className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, fontWeight: 700 }}>DIFFICULTY</span>
