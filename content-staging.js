@@ -1491,6 +1491,10 @@ window.FEEDBACK_MODE = {
     }
     for (const h of hot) profile[h.idx] = h.p;
     s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.8, eq: new Array(N).fill(0), fbProfile: profile };
+    // Ring out against an open mic with no one singing, like a real soundcheck.
+    // The vocal's sample is muted (no loop hammering the ear), but the mic stays
+    // open so the wedge still rings as the send comes up.
+    s.programMute = { ...s.programMute, vocal: true };
     return s;
   },
   // Never shown (the debrief replaces the answer key); kept for the contract.

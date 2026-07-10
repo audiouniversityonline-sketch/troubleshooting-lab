@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=142"></script>
+<script src="content-staging.js?v=143"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -480,6 +480,11 @@ function defaultState() {
     outPatch: { ...DEFAULT_OUT_PATCH },
     fanOut: [1, 2, 3, 4],
     sourceMute: { vocal: false, guitar: false, laptop: false, vocal2: false, playback: false },
+    // Program mute: silences a source's PLAYBACK SAMPLE only. The mic stays
+    // open, so the channel can still feed back and placement still matters
+    // (feedback is computed from knob positions, not the live sample). Used to
+    // ring out a wedge with an open mic and no one singing, like a real soundcheck.
+    programMute: { vocal: false, guitar: false, laptop: false, vocal2: false, playback: false },
     // Playback 5/6 source: 'music' (the synth bed, later a real music file) or
     // 'pink' (a pink-noise generator for ringing the system out). Audible only;
     // the metering/physics treat the line input the same either way.
@@ -3495,6 +3500,14 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
             <div onClick={(e) => { e.stopPropagation(); onOpenPlacement(srcKey); }} className="mono ui-no-select"
               style={{ fontSize: 8, padding: '2px 6px', background: '#0a0a0c', color: 'var(--accent)', border: '1px solid #38383e', borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>PLACEMENT</div>
           )}
+          {/* Mute the source's sound only. The mic stays open, so the channel can
+              still feed back and placement still matters — like an open mic on a
+              stage with no one singing into it. */}
+          {!compact && onMute && (
+            <div onClick={(e) => { e.stopPropagation(); onMute(); }} className="mono ui-no-select"
+              title="Mute this source's sound. The mic stays open, so it can still feed back."
+              style={{ fontSize: 8, padding: '2px 6px', background: muted ? 'rgba(216,71,63,0.18)' : '#0a0a0c', color: muted ? '#ff6a5e' : 'var(--ink-3)', border: '1px solid ' + (muted ? '#a8322b' : '#38383e'), borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>{muted ? 'MUTED' : 'MUTE'}</div>
+          )}
         </div>
       </div>
     </div>
@@ -4753,10 +4766,10 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               diActive={window.SOURCES[k].diActive}
               compact={isDrum(k)}
               onOpenPlacement={onOpenPlacement}
-              muted={state.sourceMute[k]}
+              muted={!!(state.programMute && state.programMute[k])}
               isTesting={state.testing === k}
               onTest={() => setState({ ...state, testing: k })}
-              onMute={() => setState({ ...state, sourceMute: { ...state.sourceMute, [k]: !state.sourceMute[k] } })}
+              onMute={() => setState(s => ({ ...s, programMute: { ...s.programMute, [k]: !(s.programMute && s.programMute[k]) } }))}
               onPatch={() => {
                 // Cycle this source through 0 (unplugged) → 1 → … → nPorts → 0.
                 // Functional setState so a rapid double-click sees the latest
@@ -9976,8 +9989,12 @@ function App() {
           lvlL = v; lvlR = v;
         }
       }
-      const targetL = Math.max(0, Math.min(0.4, lvlL * 0.35));
-      const targetR = Math.max(0, Math.min(0.4, lvlR * 0.35));
+      // Program mute silences this source's playback sample here, downstream of
+      // the feedback math (which runs on knob positions in detectFeedback) and
+      // the separate ring-voice bus, so a muted mic can still ring out.
+      const progMuted = !!(state.programMute && state.programMute[k]);
+      const targetL = progMuted ? 0 : Math.max(0, Math.min(0.4, lvlL * 0.35));
+      const targetR = progMuted ? 0 : Math.max(0, Math.min(0.4, lvlR * 0.35));
       rampParam(chainsRef.current[k].gainL.gain, ctx, targetL);
       rampParam(chainsRef.current[k].gainR.gain, ctx, targetR);
 
@@ -10072,7 +10089,7 @@ function App() {
         rampParam(bank[bi].gain, ctx, -EQ_CUT_DB * cut);
       }
     }
-  }, [audioOn, audio, state.inspect]);
+  }, [audioOn, audio, state.inspect, state.programMute]);
 
   // Board-source growth: when the board gains inputs after the graph is already
   // up (switching into the 16-channel board), build the chains and load the
