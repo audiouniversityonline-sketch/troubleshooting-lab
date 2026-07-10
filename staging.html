@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=139"></script>
+<script src="content-staging.js?v=140"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1436,7 +1436,7 @@ function detectPaBalanceIssue(s) {
     return {
       stage: 'pa_balance',
       label: 'PA Balance',
-      fix: `PA L: ${Math.round(pl.volume * 100)}%, PA R: ${Math.round(pr.volume * 100)}%. Match them so the room hears a balanced stereo mix.`,
+      fix: `PA L: ${Math.round(pl.volume * 100)}%, PA R: ${Math.round(pr.volume * 100)}%. Match them so the audience hears a balanced stereo mix.`,
     };
   }
   return null;
@@ -1508,7 +1508,7 @@ function detectGainStagingMistakes(state, audio, level) {
   if (paLv > 0.90 || paRv > 0.90) {
     mistakes.push({
       kind: 'hot_speakers',
-      message: 'The PA speaker volume is turned up too high. Speaker level gets set once when the system is tuned for the room, then left alone. Changing it mid-show changes how everything sounds and raises the chance of feedback. If one channel is too quiet, fix that channel. If the whole room needs to be louder, use the master fader.',
+      message: 'The PA speaker volume is turned up too high. Speaker level gets set once when the system is tuned for the room, then left alone. Changing it mid-show changes how everything sounds and raises the chance of feedback. If one channel is too quiet, fix that channel. If the whole mix needs to be louder, use the master fader.',
     });
   }
 
@@ -2481,7 +2481,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
             the engineer's headphone bus. Does NOT mute the rest of the
             mix; the audience keeps hearing everything. */}
         {walk('pfl', <BP active={ch.solo} onClick={() => set({ solo: !ch.solo })} label="PFL" color="var(--amber)" width={24} height={14} fontSize={7}
-          tip="Pre-fade listen. Hear just this channel in your headphones. The room keeps hearing the full mix."/>)}
+          tip="Pre-fade listen. Hear just this channel in your headphones. The audience keeps hearing the full mix."/>)}
       </div>
 
       {/* The walkthrough spotlight anchors on the whole fader+meter row (not
@@ -2778,7 +2778,7 @@ function DigitalSelStrip({ ch, idx, selected, onSelect, onSelectQuiet, onMute, o
         {/* SOLO + MUTE under the fader, the way a console lays them out. */}
         <div style={{ display: 'flex', gap: 4 }}>
           <BP active={ch.solo} onClick={() => onSolo()} label="SOLO" color="var(--amber)" width={40} height={15} fontSize={7.5}
-            tip="Pre-fade listen (PFL). Hear just this channel in your headphones; the room keeps the full mix." />
+            tip="Pre-fade listen (PFL). Hear just this channel in your headphones; the audience keeps hearing the full mix." />
           <BP active={ch.mute} onClick={() => onMute()} label="MUTE" color="var(--hot)" width={40} height={15} fontSize={7.5}
             tip="Silence this channel everywhere after the preamp: PA and wedges." />
         </div>
@@ -3698,7 +3698,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 24 }}>
           <div>
             <div className="display" style={{ fontSize: 13, fontWeight: 800, letterSpacing: 0.5 }}>Monitor EQ</div>
-            <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>graphic EQ on the monitor sends · pull a band down to cut that frequency</div>
+            <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>graphic EQ on the monitor sends</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* By-ear difficulty, right here on the monitor window as a second
@@ -3749,7 +3749,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
               ) : (
                 byEar
                   ? <span>Listen for the ring, then pull that frequency's band down. No band glows in this mode; use your ear.</span>
-                  : <span>Pull a band down to cut that frequency. A band glows red when it is ringing; cut it just enough to stop it.</span>
+                  : <span>These are the graphic equalizers between the console and each monitor wedge. When a frequency is ringing, bring down that EQ band to eliminate mic feedback.</span>
               )}
             </div>
           );
@@ -7791,7 +7791,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · YOU DID IT</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You just ran a system</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You turned on a system, balanced the band, got a vocal into the mix, built a monitor mix, and rang out feedback. Add your email to save your progress and get the Soundcheck Checklist, the pre-show list to run before every gig.
+          You turned it on, balanced the band, got the vocals in, built a monitor mix, and rang out feedback. This is a quick stop, not the end: next you put these skills to work in Practice Mode, feedback training, and the rest of the Lab. Add your email to save your progress and get the Soundcheck Checklist, the list to run before every show.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -7824,13 +7824,6 @@ function EmailGate({ open, onSubmit, onSkip }) {
           background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
           border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer',
         }}>SAVE MY PROGRESS →</button>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <span style={{ fontSize: 10, color: 'var(--ink-3)', lineHeight: 1.4 }}>No spam. Tips and new scenarios, unsubscribe anytime.</span>
-          <button onClick={onSkip} className="ui-no-select" style={{
-            background: 'transparent', border: 'none', color: 'var(--ink-3)', cursor: 'pointer',
-            fontSize: 10.5, textDecoration: 'underline', whiteSpace: 'nowrap', padding: 0,
-          }}>Not now</button>
-        </div>
       </div>
     </div>
   );
@@ -7903,7 +7896,7 @@ const WALK_STEPS = [
     act: 'The outputs', title: 'The master section', target: 'master-section',
     teach: "Every output has one control here in the master section. The MAIN fader is the overall volume to the audience. The mute above it cuts the mains. Each AUX master sets the level of one aux output: AUX 1 to Wedge 1, AUX 2 to Wedge 2, and so on.",
     prompt: "Bring the MAIN fader down, then back up. Try an AUX master too.",
-    takeaway: "Every output has its own control in the master section: the MAIN fader for the room, the mute to cut it, and an AUX master for each wedge.",
+    takeaway: "Every output has its own control in the master section: the MAIN fader for the audience, the mute to cut it, and an AUX master for each wedge.",
     test: (s, b) => Math.abs((s.master.fader ?? 0) - b.mfader) > 0.08
       || Math.abs((s.master.aux1 ?? 0.75) - b.maux1) > 0.05 || Math.abs((s.master.aux2 ?? 0.75) - b.maux2) > 0.05
       || Math.abs((s.master.aux3 ?? 0.75) - b.maux3) > 0.05 || Math.abs((s.master.aux4 ?? 0.75) - b.maux4) > 0.05
@@ -7911,9 +7904,9 @@ const WALK_STEPS = [
   },
   {
     act: 'The channel strip', title: 'PFL and the meter', target: 'ch1-pfl',
-    teach: "PFL, at the bottom of the strip, checks a channel in your headphones before the room hears it. It stands for pre-fader listen, so you hear the channel no matter where the fader sits. Watch the meter while you listen: yellow is fine, red is too hot.",
+    teach: "PFL, at the bottom of the strip, checks a channel in your headphones before the audience hears it. It stands for pre-fader listen, so you hear the channel no matter where the fader sits. Watch the meter while you listen: yellow is fine, red is too hot.",
     prompt: "Press PFL on the lead vocal to hear just that channel. Press it again to drop back.",
-    takeaway: "PFL sends a channel to your headphones and the meter so you can check it before the room hears it. It is pre-fader, so the fader does not change what you hear.",
+    takeaway: "PFL sends a channel to your headphones and the meter so you can check it before the audience hears it. It is pre-fader, so the fader does not change what you hear.",
     test: (s, b) => (!!s.channels[WALK_LEAD].solo) !== b.solo,
   },
   {
@@ -7927,7 +7920,7 @@ const WALK_STEPS = [
   {
     act: 'The channel strip', title: 'The channel fader', target: 'ch1-fader',
     teach: "The channel fader is this channel's level in the main mix, the control you ride to blend the band during the show. Keep it near the U mark, unity: the scale is finer up there, so small moves make small changes. The mute next to it is the channel's on and off.",
-    prompt: "Bring the lead vocal fader up into the room. Try the mute too: the singer drops out, then comes back.",
+    prompt: "Bring the lead vocal fader up into the mix. Try the mute too: the singer drops out, then comes back.",
     takeaway: "The channel fader is that channel's level in the mix. Keep it near unity (U) for the finest control. Mute is its on and off.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].fader ?? 0) - b.cfader) > 0.05 || (!!s.channels[WALK_LEAD].mute) !== b.mute,
   },
@@ -7935,12 +7928,12 @@ const WALK_STEPS = [
     act: 'The channel strip', title: 'Pan', target: 'ch1-pan',
     teach: "Pan sets where the channel sits between the left and right speakers: full left, full right, or center for both evenly.",
     prompt: "Pan the lead vocal left, then right, then back to center. It clicks when it reaches center.",
-    takeaway: "Pan places the channel across the room, left to right. Center sends it to both sides evenly.",
+    takeaway: "Pan places the channel between the left and right speakers. Center sends it to both sides evenly.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].pan ?? 0.5) - b.pan) > 0.04,
   },
   {
     act: 'The aux sends', title: 'The monitor send', target: 'ch1-aux',
-    teach: "The AUX send knobs set how much of this channel goes to each aux output: AUX 1 to Wedge 1, AUX 2 to Wedge 2, AUX 3 to Wedge 3, AUX 4 to Wedge 4. That is how you build a separate mix for each person on stage. Turn AUX 1 up and this channel gets louder in Wedge 1, while the room mix stays the same.",
+    teach: "The AUX send knobs set how much of this channel goes to each aux output: AUX 1 to Wedge 1, AUX 2 to Wedge 2, AUX 3 to Wedge 3, AUX 4 to Wedge 4. That is how you build a separate mix for each person on stage. Turn AUX 1 up and this channel gets louder in Wedge 1, while the main mix stays the same.",
     prompt: "Turn the lead vocal's AUX 1 up, and you are listening at Wedge 1. Then try AUX 2, AUX 3, and AUX 4. Each one feeds its own wedge.",
     takeaway: "Each aux send goes out its own output to its own speaker: AUX 1 to Wedge 1, AUX 2 to Wedge 2, AUX 3 to Wedge 3, AUX 4 to Wedge 4. The room mix stays separate.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].aux1 ?? 0) - b.aux1) > 0.04
@@ -8278,8 +8271,8 @@ function IoListPanel({ open, onClose, state }) {
   // one per performer (Vocal 1, bass, keys, drummer). Only list the wedges the
   // board actually has, with the right owner.
   const outputDefs = [
-    { bus: 'mainL', label: 'Main L', to: 'The left PA speaker (the room)' },
-    { bus: 'mainR', label: 'Main R', to: 'The right PA speaker (the room)' },
+    { bus: 'mainL', label: 'Main L', to: 'The left PA speaker (the audience)' },
+    { bus: 'mainR', label: 'Main R', to: 'The right PA speaker (the audience)' },
     { bus: 'aux1', label: 'Aux 1', to: "Wedge 1 (Vocal 1's monitor)" },
     { bus: 'aux2', label: 'Aux 2', to: s.big16 ? "Wedge 2 (the bass player's monitor)" : "Wedge 2 (Vocal 2's monitor)" },
     ...(s.big16 ? [
@@ -8536,7 +8529,7 @@ function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset,
     ) : cause === 'mixer_off_pop' ? (
       <>The correct order is power-on in reverse: master fader down → <b>speakers and wedges off</b> → console off last.</>
     ) : cause === 'phantom_cans' ? (
-      <>The correct order: turn on <b>+48V before you PFL the channel</b> (or release PFL first). Then PFL to check it, release, and bring the channel up.</>
+      <>The correct order: turn on <b>+48V before you PFL the channel</b> (or disengage PFL first). Then PFL to check it, disengage, and bring the channel up.</>
     ) : (
       <>The correct order: <b>mute the channel</b> (or pull its fader down) → turn on +48V → wait a moment → bring the channel back up.</>
     );
@@ -11502,11 +11495,11 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
       }}>START SESSION →</button>
       {onPracticeLive && (
         <button onClick={(e) => { e.stopPropagation(); onPracticeLive(!liveShow); setPicker(false); }} className="mono ui-no-select"
-          title="Live Show: the audience is listening, so muting a channel or pulling the master is a dropout the room hears. PFL into your headphones stays free." style={{
+          title="Live Show: the audience is listening, so muting a channel or pulling the master is a dropout the audience hears. PFL into your headphones stays free." style={{
           marginTop: 8, width: '100%', padding: '7px 10px', fontSize: 9, fontWeight: 800, letterSpacing: 0.5, borderRadius: 5, cursor: 'pointer',
           background: liveShow ? 'linear-gradient(180deg, #d8473f, #a8322b)' : '#16161a',
           color: liveShow ? '#fff' : 'var(--ink-3)', border: '1px solid ' + (liveShow ? '#a8322b' : '#38383e'),
-        }}>{liveShow ? '● LIVE SHOW ON · the room is listening' : 'START WITH LIVE SHOW · the room is listening'}</button>
+        }}>{liveShow ? '● LIVE SHOW ON · the audience is listening' : 'START WITH LIVE SHOW · the audience is listening'}</button>
       )}
     </div>
   ) : null;
@@ -11792,7 +11785,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
           <div className="mono" style={{ fontSize: 11.5, color: (level.task ? 'var(--cool)' : 'var(--hot)'), letterSpacing: 1.4, fontWeight: 800 }}>{level.task ? '▸ TASK' : '⚠ SYMPTOM'}</div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {liveShow && level.isPractice && (
-              <div className="mono" title="The audience is listening. Muting a channel or pulling the master is a dropout the room hears. PFL into your headphones is free." style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 1, padding: '3px 7px', borderRadius: 12, background: 'rgba(216,71,63,0.16)', color: '#ff6a5e', border: '1px solid #a8322b' }}>● LIVE · ROOM IS LISTENING</div>
+              <div className="mono" title="The audience is listening. Muting a channel or pulling the master is a dropout the audience hears. PFL into your headphones is free." style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 1, padding: '3px 7px', borderRadius: 12, background: 'rgba(216,71,63,0.16)', color: '#ff6a5e', border: '1px solid #a8322b' }}>● LIVE · AUDIENCE IS LISTENING</div>
             )}
             {statusPill}
             {workChip}
@@ -11807,8 +11800,8 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
         {liveShow && level.isPractice && (
           <div className="mono" style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.3, lineHeight: 1.4, color: dropouts > 0 ? 'var(--hot)' : 'var(--ink-3)' }}>
             {dropouts > 0
-              ? '⚠ ' + dropouts + ' dropout' + (dropouts === 1 ? '' : 's') + ' the room heard. PFL a channel to check it instead of muting it; leave the master alone.'
-              : 'No dropouts yet. Find it with PFL and the meters, not by cutting the room.'}
+              ? '⚠ ' + dropouts + ' dropout' + (dropouts === 1 ? '' : 's') + ' the audience heard. PFL a channel to check it instead of muting it; leave the master alone.'
+              : 'No dropouts yet. Find it with PFL and the meters, not by cutting the audience.'}
           </div>
         )}
       </div>
@@ -12031,7 +12024,7 @@ function SolvedCard({ level, onNext, hasNext, feedbackDone, coaching, debrief, o
           <div className="mono" style={{ fontSize: 8, color: dropouts > 0 ? 'var(--hot)' : 'var(--green)', letterSpacing: 1.2, fontWeight: 700 }}>● LIVE SHOW</div>
           <div style={{ fontSize: 9, color: 'var(--ink-2)', lineHeight: 1.4 }}>
             {dropouts > 0
-              ? <>The room heard <b style={{ color: 'var(--hot)' }}>{dropouts} dropout{dropouts === 1 ? '' : 's'}</b> while you worked. PFL lets you check a channel in your headphones without the audience hearing it, and the master never needs to move.</>
+              ? <>The audience heard <b style={{ color: 'var(--hot)' }}>{dropouts} dropout{dropouts === 1 ? '' : 's'}</b> while you worked. PFL lets you check a channel in your headphones without the audience hearing it, and the master never needs to move.</>
               : <>The room <b style={{ color: 'var(--green)' }}>never heard you working</b>. You found it with PFL and the meters. That's the live-show standard.</>}
           </div>
         </div>
