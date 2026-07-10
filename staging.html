@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=133"></script>
+<script src="content-staging.js?v=134"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8198,6 +8198,12 @@ function WalkthroughSpotlight({ target }) {
 // the console channel — that's exactly what the patch lesson asks the
 // student to wire, and what a crosspatch rep gets compared against.
 function IoListPanel({ open, onClose, state }) {
+  // Non-modal, draggable panel: it stays open while the user patches the board
+  // (no backdrop, and the container passes pointer events through), so there's no
+  // more flipping back and forth. `pos` is null until the user drags it off its
+  // default top-right dock.
+  const [pos, setPos] = uS(null);
+  const dragRef = uR(null);
   if (!open) return null;
   // Built from the LIVE board so the list is accurate in every mode (MX-8, the
   // full band, etc.) — one input row per fader, and every console output bus.
@@ -8285,21 +8291,30 @@ function IoListPanel({ open, onClose, state }) {
       { bus: 'aux4', label: 'Aux 4', to: "Wedge 4 (the drummer's monitor)" },
     ] : []),
   ];
+  const startDrag = (e) => {
+    const card = e.currentTarget.closest('[data-iolist-card]');
+    if (!card) return;
+    const r = card.getBoundingClientRect();
+    dragRef.current = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+    const move = (ev) => setPos({ left: Math.max(4, ev.clientX - dragRef.current.dx), top: Math.max(48, ev.clientY - dragRef.current.dy) });
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  };
+  const dock = pos ? { left: pos.left, top: pos.top } : { right: 12, top: 64 };
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.55)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        width: 560, maxWidth: '94vw', maxHeight: '86vh', overflow: 'auto',
+    <div style={{ position: 'fixed', inset: 0, zIndex: 80, pointerEvents: 'none' }}>
+      <div data-iolist-card style={{
+        position: 'fixed', ...dock,
+        width: 400, maxWidth: '94vw', maxHeight: '78vh', overflow: 'auto',
         background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
         border: '1px solid #38383e', borderRadius: 8, padding: '16px 18px',
-        boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.7)', pointerEvents: 'auto',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <div>
-            <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>Input List</div>
-            <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>the inputs from the stage and the outputs to your speakers</div>
+          <div onPointerDown={startDrag} className="ui-no-select" style={{ cursor: 'move', flex: 1 }}>
+            <div className="display" style={{ fontSize: 16, fontWeight: 800 }}>Input List <span style={{ fontSize: 9.5, color: 'var(--ink-3)', fontWeight: 700, letterSpacing: 0.5 }}>⠿ drag</span></div>
+            <div className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginTop: 1 }}>stays open while you patch · inputs from the stage, outputs to your speakers</div>
           </div>
           <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
         </div>
@@ -10891,7 +10906,7 @@ function App() {
         onToggleStage={state.big16 ? (() => setStage16Open(v => !v)) : ((stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null)}
         stage16Open={!!(state.big16 && stage16Open)}
         consoleSize={consoleSize} onSetConsoleSize={onFreePlaySize} sizeSelectable={sizeSelectable} big16={!!state.big16}
-        onOpenIoList={() => setIoListOpen(true)}
+        onOpenIoList={() => setIoListOpen(v => !v)}
         onOpenCatalog={() => setCatalogOpen(true)}
         nudgeSound={!audioOn && !everSoundRef.current && !tourOpen}
         practiceFaults={practiceFaults} onSetPracticeFaults={repShareFree ? null : setPracticeFaults}
@@ -10918,7 +10933,7 @@ function App() {
       {/* Any pop-up (Monitor EQ, Input List, catalog, pitch, CTA) owns the top
           layer: the spotlight ring hides while one is open so it can't draw in
           front of the window. */}
-      <WalkthroughSpotlight target={(eqPanelOpen || ioListOpen || catalogOpen || pitchFor || ctaOpen) ? null : (walkPhase === 'steps' ? (walkSteps[walkStep] && walkSteps[walkStep].target) : (guideTarget || null))}/>
+      <WalkthroughSpotlight target={(eqPanelOpen || catalogOpen || pitchFor || ctaOpen) ? null : (walkPhase === 'steps' ? (walkSteps[walkStep] && walkSteps[walkStep].target) : (guideTarget || null))}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
       {/* Free-tier email gate. Fires AFTER the first Run the Show win: lesson 1
