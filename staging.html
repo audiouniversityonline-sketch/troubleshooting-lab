@@ -7795,10 +7795,10 @@ function EmailGate({ open, onSubmit, onSkip }) {
         boxShadow: '0 0 0 1px rgba(74,222,128,0.2), 0 16px 48px rgba(0,0,0,0.8)',
         display: 'flex', flexDirection: 'column', gap: 13,
       }}>
-        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · YOU DID IT</div>
-        <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You just ran a system</div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · NEXT STEP</div>
+        <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>Put it into practice</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You turned it on, balanced the band, got the vocals in, built a monitor mix, and rang out feedback. This is a quick stop, not the end: next you put these skills to work in Practice Mode, feedback training, and the rest of the Lab. Add your email to save your progress and get the Soundcheck Checklist, the list to run before every show.
+          Add your email to jump into Practice Mode and get the Soundcheck Checklist, the pre-show list you run before every show.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input
@@ -7830,7 +7830,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
           width: '100%', padding: '11px 18px', fontSize: 12, fontWeight: 800, letterSpacing: 1,
           background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
           border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer',
-        }}>SAVE MY PROGRESS →</button>
+        }}>TRY PRACTICE MODE →</button>
       </div>
     </div>
   );
@@ -10996,7 +10996,7 @@ function App() {
           without granting anything. Members and subscribers never see it. */}
       <EmailGate
         open={finaleEmail && TIER !== 'member' && !emailDone && !tourOpen}
-        onSubmit={(email, name) => { captureEmail(email, name); setFinaleEmail(false); setCtaOpen(true); }}
+        onSubmit={(email, name) => { captureEmail(email, name); setFinaleEmail(false); loadLevel(window.LEVELS.length); }}
         onSkip={() => { setFinaleEmail(false); setCtaOpen(true); }}/>
       {/* The welcome chooser is retired: a fresh free visitor gets the "Know
           your console" walkthrough, and everyone else lands with the mode menu
