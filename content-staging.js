@@ -1693,3 +1693,94 @@ window.MONITOR_WORLD = [
     toneGate: 0.8,
   },
 ];
+
+// ============================================================
+// PATCHING (members' course) — Kyle 2026-07-11
+// Breaks the one overwhelming "Patch the System" lesson into digestible
+// pieces and adds fault-finding. The whole course is objective: a cable is in
+// the right port or it isn't. Setup lessons grade with requirePatch (the
+// identity check at staging.html); the disconnected-cable lesson grades with a
+// signal condition (the source has to reach the PA again). All MX-8.
+// Board note: every lesson runs on the MX-8 (loadLevel passes defaultState as
+// the sabotage base). requirePatch asserts the identity map (vocal->1,
+// vocal2->2, guitar->3, laptop->4, identity fan-out, home returns), so a setup
+// lesson can disconnect PART of that map and leave the rest intact: the user
+// restores their part and the whole map reads identity again and the win
+// latches. First slice (read the list, patch the outputs, disconnected cable);
+// cross-patch, snakes and sub-snakes, and a whole sub-snake down come next.
+// ============================================================
+window.PATCHING = [
+  {
+    id: 'pt1',
+    title: 'Read the Input List',
+    task: true,
+    requirePatch: true,
+    involves: [],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    symptom: 'The input list is your plan for the whole system: every channel, the source on it, and the port it patches to. Open the Input List in the top bar, then patch each source to the port it calls for. The outputs are already connected.',
+    hint: 'Open the Input List in the top bar. Drag each source cable onto its numbered stage-box port. The colors follow the snake code: 1 brown, 2 red, 3 orange, 4 yellow. Dropping on a taken port swaps the two.',
+    hints: [
+      { title: 'Patch the inputs', target: null, teach: 'The input list is the plan, not the live cabling. It names the source on every channel and the port it lands on. Follow it, top to bottom.', text: 'Open the Input List, then drag each source cable onto the stage-box port it calls for.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
+    ],
+    sabotage: (s) => {
+      // Only the inputs are loose. The snake fan-out, the returns, and the
+      // speakers stay connected, so requirePatch reads identity again the
+      // moment the four input cables land on their ports.
+      s.cables = { vocal: 0, vocal2: 0, guitar: 0, laptop: 0 };
+      return s;
+    },
+    solution: 'Each source on the port the list calls for: Vocal 1 to 1, Vocal 2 to 2, Bass to 3, Keys to 4. The input list is the plan you patch against every time.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pt2',
+    title: 'Patch the Outputs',
+    task: true,
+    requirePatch: true,
+    involves: [],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    symptom: 'The inputs are patched, but the mix has no way out yet. Send the console outputs down the snake, then land each speaker line, so the mains and the wedges can play.',
+    hint: 'Send the console outputs into the snake returns: Main L to 1, Main R to 2, AUX 1 to 3, AUX 2 to 4. Then patch each speaker line to its out port at the stage box: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4.',
+    hints: [
+      { title: 'Send the outputs down the snake', target: null, teach: 'The mix leaves the console on its outputs and rides the snake back to the stage. With no output patch, nothing reaches the mains or the wedges.', text: 'Patch the console outputs into the snake returns: Main L to 1, Main R to 2, AUX 1 to 3, AUX 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
+      { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'At the stage, each speaker picks up the return channel feeding it.', text: 'Patch each speaker line to its out port: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
+    ],
+    sabotage: (s) => {
+      // Inputs stay patched; only the return side is loose (console outputs and
+      // speaker lines). Restoring both makes the whole map read identity.
+      s.outFan = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
+      s.outPatch = { pa_l: null, pa_r: null, wedge: null, wedge2: null, wedge3: null, wedge4: null };
+      return s;
+    },
+    solution: 'Outputs down the snake returns and every speaker on its port. Inputs get the sound in; outputs get the mix back out to the audience and the stage.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pt3',
+    title: 'The Disconnected Cable',
+    task: true,
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'guitar', dest: 'pa', min: 0.2 },
+    ],
+    symptom: 'The band is playing, but the bass is gone. The channel looks right: gain up, fader up, not muted. Find why the bass is missing, then bring it back without popping the speakers.',
+    hint: 'A dead channel with the fader up usually means the signal never reached the console. Check the bass against the Input List. Plugging a cable into a live channel pops the speakers, so mute that channel first, reconnect the cable, then unmute.',
+    hints: [
+      { title: 'Mute the channel first', target: null, teach: 'Plugging a cable into a live channel sends a loud pop to the speakers. Mute the channel first, or pull its fader down.', text: 'Mute the Bass channel (channel 3) before you touch the cable.', done: (ctx) => !!(ctx.state.channels[2] && ctx.state.channels[2].mute) },
+      { title: 'Reconnect the bass', target: null, teach: 'With the channel muted it is safe to plug in. Check the source against the input list so the cable lands on the right port.', text: 'Reconnect the bass cable to its port at the stage box.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.guitar === 3) },
+      { title: 'Bring it back', target: null, teach: 'Cable in, channel safe, now open it back up.', text: 'Unmute the Bass channel. The bass is back in the mix.', done: (ctx) => hintReaches(ctx, 'guitar', 'pa', 0.2) },
+    ],
+    sabotage: (s) => {
+      // A healthy, fully patched show, then one input cable pulled loose: the
+      // bass is dead in the PA even though its channel is up. Reconnecting into a
+      // live channel pops, so the lesson teaches the safe order: mute, plug, unmute.
+      mwBoard(s);
+      s.cables.guitar = 0;
+      return s;
+    },
+    solution: 'The bass cable was unplugged at the stage box. Mute the channel, reconnect the cable, then unmute, so the plug-in pop never reaches the audience. When a channel is dead with the fader up, check the patch first.',
+    defaultInspect: 'pa',
+  },
+];

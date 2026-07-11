@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=146"></script>
+<script src="content-staging.js?v=149"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7379,6 +7379,12 @@ if (Array.isArray(window.SCENARIO_LIBRARY)) {
 if (Array.isArray(window.MONITOR_WORLD)) {
   window.MONITOR_WORLD.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isMonitor: true }));
 }
+// Patching course (members). isPatching groups them under their own PATCHING
+// picker band; member-gated via isLesson (not isStartHere). Pushed after the
+// LEVELS.length Practice index is fixed, so scenario indices don't shift.
+if (Array.isArray(window.PATCHING)) {
+  window.PATCHING.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isPatching: true }));
+}
 
 // A custom scenario opened from a ?scenario= link gets appended as its own
 // scenario. It behaves like a challenge (hint behind a button, a debrief, no
@@ -7469,6 +7475,8 @@ const MIXER_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isMi
 // email opt-in + join CTA fire).
 const START_HERE_INDEX = SCENARIOS.findIndex((s) => s.isStartHere);
 const START_HERE_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isStartHere);
+// Patching course lesson indices, for the "PATCHING · 01 / 03" top-bar label.
+const PATCHING_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isPatching);
 const SH_FINALE_ID = 105;
 // Where a visitor lands with no resume target: members go to lesson 1 of Run
 // the show; the free tier (lessons locked) lands on Free Play, never on a
@@ -7494,6 +7502,7 @@ const FREE_ET_BYEAR = 1;
 function bandOf(l) {
   if (l.isWalkthrough) return 'PLAY';  // the guided tour, entered directly, never a picker row
   if (l.isMonitor) return 'MONITOR';   // Monitor World course (members)
+  if (l.isPatching) return 'PATCHING'; // Patching course (members)
   if (l.isSandbox) return 'PLAY';      // free, no-goal exploration
   if (l.isLibrary) return 'LIBRARY';   // curated, browsable real-world scenarios
   if (l.isChallenge) return 'DRILL';   // Practice + Feedback Mode + any future packs
@@ -11432,7 +11441,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // Free visitors land with Mixer Tutorial expanded (their starting course);
   // members get a clean list unless they're mid-course.
   const initialOpenCourse = level
-    ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : (bandOf(level) === 'LEARN' ? 'show' : (TIER !== 'member' ? 'mixer' : null)))
+    ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : level.isPatching ? 'patching' : (bandOf(level) === 'LEARN' ? 'show' : (TIER !== 'member' ? 'mixer' : null)))
     : (TIER !== 'member' ? 'mixer' : null);
   const [openCourse, setOpenCourse] = uS(initialOpenCourse);
   // When the picker is open on load, the resume effect may swap the level in
@@ -11442,11 +11451,11 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // never fights a manual mode switch.
   uE(() => { setMode(curMode); }, [levelIdx]);
   const isMember = TIER === 'member';
-  const lessons = []; const libraries = []; const monitors = []; const startHere = [];
+  const lessons = []; const libraries = []; const monitors = []; const patching = []; const startHere = [];
   SCENARIOS.forEach((s, i) => {
     if (s.isStartHere) { startHere.push({ s, i }); return; }
     const b = bandOf(s);
-    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i });
+    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i });
   });
   const practiceIdx = SCENARIOS.findIndex((s) => s.isPractice);
   const feedbackIdx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
@@ -11484,6 +11493,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // expander on them.
   const COURSES = [];
   if (startHere.length) COURSES.push({ key: 'starthere', label: 'START HERE', color: 'var(--green)', tag: 'FREE', free: true, blurb: 'Start here to learn the essential skills, one step at a time.', rows: startHere });
+  if (patching.length > 0) COURSES.push({ key: 'patching', label: 'PATCHING', color: 'var(--cool)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Read the input list, patch the system, and find the fault when a cable is wrong.', rows: patching });
   COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a system from nothing and run a full show. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MONITOR WORLD', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build a separate monitor mix for each performer, and ring it out so it stays clean.', rows: monitors });
   return (
@@ -11688,6 +11698,8 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
               ? 'FREE PLAY · NO GOAL'
               : level.isMonitor
               ? 'MONITOR WORLD · MEMBERS'
+              : level.isPatching
+              ? `PATCHING · ${String(PATCHING_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(PATCHING_INDEXES.length).padStart(2, '0')}`
               : level.isStartHere
               ? `START HERE · ${String(START_HERE_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(START_HERE_INDEXES.length).padStart(2, '0')}`
               : `LEVEL ${String(levelIdx + 1).padStart(2, '0')} / ${String(window.LEVELS.length).padStart(2, '0')}`}
@@ -11921,7 +11933,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   })();
   const workChip = (
     <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
+      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : level.isPatching ? 'PATCHING' : level.isMonitor ? 'MONITOR WORLD' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
     </div>
   );
 
