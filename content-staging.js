@@ -1763,24 +1763,25 @@ window.PATCHING = [
     task: true,
     involves: [1, 2, 3, 4],
     conditions: [
-      { source: 'guitar', dest: 'pa', min: 0.2 },
+      { source: 'vocal', dest: 'pa', min: 0.3 },
     ],
-    symptom: 'The band is playing, but the bass is gone. The channel looks right: gain up, fader up, not muted. Find why the bass is missing, then bring it back without popping the speakers.',
-    hint: 'A dead channel with the fader up usually means the signal never reached the console. Check the bass against the Input List. Plugging a cable into a live channel pops the speakers, so mute that channel first, reconnect the cable, then unmute.',
+    symptom: 'The band is playing, but the lead vocal is gone. Channel 1 looks right: gain up, fader up, not muted. Find why the vocal is missing, then bring it back without popping the speakers.',
+    hint: 'A dead channel with the fader up usually means the signal never reached the console. Check Vocal 1 against the Input List. Plugging a cable into a live channel pops the speakers, so mute that channel first, reconnect the cable, then unmute.',
     hints: [
-      { title: 'Mute the channel first', target: null, teach: 'Plugging a cable into a live channel sends a loud pop to the speakers. Mute the channel first, or pull its fader down.', text: 'Mute the Bass channel (channel 3) before you touch the cable.', done: (ctx) => !!(ctx.state.channels[2] && ctx.state.channels[2].mute) },
-      { title: 'Reconnect the bass', target: null, teach: 'With the channel muted it is safe to plug in. Check the source against the input list so the cable lands on the right port.', text: 'Reconnect the bass cable to its port at the stage box.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.guitar === 3) },
-      { title: 'Bring it back', target: null, teach: 'Cable in, channel safe, now open it back up.', text: 'Unmute the Bass channel. The bass is back in the mix.', done: (ctx) => hintReaches(ctx, 'guitar', 'pa', 0.2) },
+      { title: 'Mute the channel first', target: null, teach: 'Plugging a cable into a live channel sends a loud pop to the speakers. Mute the channel first, or pull its fader down.', text: 'Mute the Vocal 1 channel (channel 1) before you touch the cable.', done: (ctx) => !!(ctx.state.channels[0] && ctx.state.channels[0].mute) },
+      { title: 'Reconnect the vocal', target: null, teach: 'With the channel muted it is safe to plug in. Check the source against the input list so the cable lands on the right port.', text: 'Reconnect the Vocal 1 cable to its port at the stage box.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1) },
+      { title: 'Bring it back', target: null, teach: 'Cable in, channel safe, now open it back up.', text: 'Unmute the Vocal 1 channel. The lead vocal is back in the mix.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
     ],
     sabotage: (s) => {
-      // A healthy, fully patched show, then one input cable pulled loose: the
-      // bass is dead in the PA even though its channel is up. Reconnecting into a
-      // live channel pops, so the lesson teaches the safe order: mute, plug, unmute.
+      // A healthy, fully patched show, then the lead vocal's cable pulled loose:
+      // Vocal 1 is dead in the PA even though its channel is up. Reconnecting into
+      // a live channel pops, so the lesson teaches mute, plug, unmute. Vocal 1 is
+      // on the first port, so reconnecting is one move with nothing live in the way.
       mwBoard(s);
-      s.cables.guitar = 0;
+      s.cables.vocal = 0;
       return s;
     },
-    solution: 'The bass cable was unplugged at the stage box. Mute the channel, reconnect the cable, then unmute, so the plug-in pop never reaches the audience. When a channel is dead with the fader up, check the patch first.',
+    solution: 'The lead vocal cable was unplugged at the stage box. Mute the channel, reconnect the cable, then unmute, so the plug-in pop never reaches the audience. When a channel is dead with the fader up, check the patch first.',
     defaultInspect: 'pa',
   },
 ];
