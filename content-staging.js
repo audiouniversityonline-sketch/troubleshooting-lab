@@ -1721,7 +1721,11 @@ window.PATCHING = [
     symptom: 'The input list is your plan for the whole system: every channel, the source on it, and the port it patches to. Open the Input List in the top bar, then patch each source to the port it calls for. The outputs are already connected.',
     hint: 'Open the Input List in the top bar. Drag each source cable onto its numbered stage-box port. The colors follow the snake code: 1 brown, 2 red, 3 orange, 4 yellow. Dropping on a taken port swaps the two.',
     hints: [
-      { title: 'Patch the inputs', target: null, teach: 'The input list is the plan, not the live cabling. It names the source on every channel and the port it lands on. Follow it, top to bottom.', text: 'Open the Input List, then drag each source cable onto the stage-box port it calls for.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
+      { title: 'Open the input list', target: 'iolist', teach: 'The input list is your plan, not the live cabling. It names the source on every channel and the port it patches to. Open it first, every time.', text: 'Open the Input List in the top bar (it is glowing).', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
+      { title: 'Patch Vocal 1', target: 'src-vocal', teach: 'The list puts Vocal 1 on channel 1, so its cable goes to stage-box port 1.', text: 'Patch Vocal 1: click its patch chip until it reads PORT 1, or drag its cable to port 1.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1) },
+      { title: 'Patch Vocal 2', target: 'src-vocal2', teach: 'Vocal 2 is next on the list: channel 2, port 2.', text: 'Patch Vocal 2 to port 2.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal2 === 2) },
+      { title: 'Patch the Bass', target: 'src-guitar', teach: 'The bass DI lands on channel 3, port 3.', text: 'Patch the Bass to port 3.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.guitar === 3) },
+      { title: 'Patch the Keys', target: 'src-laptop', teach: 'Last on the list: the keyboard DI on channel 4, port 4.', text: 'Patch the Keys to port 4.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.laptop === 4) },
     ],
     sabotage: (s) => {
       // Only the inputs are loose. The snake fan-out, the returns, and the
@@ -1744,6 +1748,7 @@ window.PATCHING = [
     symptom: 'The inputs are patched, but the mix has no way out yet. Send the console outputs down the snake, then land each speaker line, so the mains and the wedges can play.',
     hint: 'Send the console outputs into the snake returns: Main L to 1, Main R to 2, AUX 1 to 3, AUX 2 to 4. Then patch each speaker line to its out port at the stage box: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4.',
     hints: [
+      { title: 'Open the input list', target: 'iolist', teach: 'The input list also shows the outputs: which console output feeds each speaker. Open it for the plan.', text: 'Open the Input List in the top bar (it is glowing).', done: (ctx) => !!(ctx.ioListOpen || (ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass)) },
       { title: 'Send the outputs down the snake', target: null, teach: 'The mix leaves the console on its outputs and rides the snake back to the stage. With no output patch, nothing reaches the mains or the wedges.', text: 'Patch the console outputs into the snake returns: Main L to 1, Main R to 2, AUX 1 to 3, AUX 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
       { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'At the stage, each speaker picks up the return channel feeding it.', text: 'Patch each speaker line to its out port: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
     ],
@@ -1768,9 +1773,9 @@ window.PATCHING = [
     symptom: 'The band is playing, but the lead vocal is gone. Channel 1 looks right: gain up, fader up, not muted. Find why the vocal is missing, then bring it back without popping the speakers.',
     hint: 'A dead channel with the fader up usually means the signal never reached the console. Check Vocal 1 against the Input List. Plugging a cable into a live channel pops the speakers, so mute that channel first, reconnect the cable, then unmute.',
     hints: [
-      { title: 'Mute the channel first', target: null, teach: 'Plugging a cable into a live channel sends a loud pop to the speakers. Mute the channel first, or pull its fader down.', text: 'Mute the Vocal 1 channel (channel 1) before you touch the cable.', done: (ctx) => !!(ctx.state.channels[0] && ctx.state.channels[0].mute) },
-      { title: 'Reconnect the vocal', target: null, teach: 'With the channel muted it is safe to plug in. Check the source against the input list so the cable lands on the right port.', text: 'Reconnect the Vocal 1 cable to its port at the stage box.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1) },
-      { title: 'Bring it back', target: null, teach: 'Cable in, channel safe, now open it back up.', text: 'Unmute the Vocal 1 channel. The lead vocal is back in the mix.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
+      { title: 'Mute the channel first', target: 'ch1-mute', teach: 'Plugging a cable into a live channel sends a loud pop to the speakers. Mute the channel first, or pull its fader down.', text: 'Mute the Vocal 1 channel (channel 1) before you touch the cable.', done: (ctx) => !!(ctx.state.channels[0] && ctx.state.channels[0].mute) },
+      { title: 'Reconnect the vocal', target: 'src-vocal', teach: 'With the channel muted it is safe to plug in. Check the source against the input list so the cable lands on the right port.', text: 'Reconnect the Vocal 1 cable to its port at the stage box.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1) },
+      { title: 'Bring it back', target: 'ch1-mute', teach: 'Cable in, channel safe, now open it back up.', text: 'Unmute the Vocal 1 channel. The lead vocal is back in the mix.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
     ],
     sabotage: (s) => {
       // A healthy, fully patched show, then the lead vocal's cable pulled loose:
