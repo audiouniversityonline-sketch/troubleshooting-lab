@@ -1803,4 +1803,36 @@ window.PATCHING = [
     solution: 'The lead vocal cable was unplugged at the stage box. Mute the channel, reconnect the cable, then unmute, so the plug-in pop never reaches the audience. When a channel is dead with the fader up, check the patch first.',
     defaultInspect: 'pa',
   },
+  {
+    id: 'pt4',
+    title: 'The Cross-Patch',
+    task: true,
+    requirePatch: true,
+    involves: [],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    symptom: 'Line check before the show. The input list says the Bass is on channel 3 and the Keys on channel 4, but at the stage box their cables are crossed. Put each one back on the port the list calls for.',
+    hint: 'Open the Input List and compare it to the stage box. The Bass cable is in the Keys port and the Keys cable is in the Bass port. Drag either plug to its correct port; dropping it on the taken port swaps the two back.',
+    hints: [
+      { title: 'Open the input list', target: 'iolist', teach: 'A cross-patch is invisible until you check the patch against the plan. The input list is that plan.', text: 'Open the Input List and compare it to the stage box.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.guitar === 3 && ctx.state.cables.laptop === 4)) },
+      { title: 'Fix the cross-patch', target: 'src-guitar', teach: 'The Bass and Keys cables are in each other\'s ports. Move one to its correct port and the other swaps back with it.', text: 'Drag the Bass cable\'s plug onto port 3. Dropping it on the Keys cable swaps the two back.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.guitar === 3 && ctx.state.cables.laptop === 4) },
+    ],
+    sabotage: (s) => {
+      // Line check with the rig off. Two input cables are crossed: the Bass sits
+      // in the Keys port and the Keys in the Bass port. requirePatch flags it until
+      // each cable is back on the port the input list calls for. Dropping one plug
+      // on the other's port swaps them, so a single drag sets both right.
+      s.cables.guitar = 4;
+      s.cables.laptop = 3;
+      s.mixer = { on: false };
+      s.master = { ...s.master, mute: true, fader: 0 };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: false, volume: 0 };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: false, volume: 0 };
+      s.outputs.wedge = { ...s.outputs.wedge, on: false, volume: 0 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
+      return s;
+    },
+    solution: 'The Bass and Keys cables were in each other\'s ports. Back on the ports the list calls for, the channels match the plan. When something shows up on the wrong fader, check the patch against the input list.',
+    defaultInspect: 'pa',
+  },
 ];
