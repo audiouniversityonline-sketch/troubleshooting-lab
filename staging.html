@@ -7434,6 +7434,12 @@ SCENARIOS.push({
 // own testing). Everyone else reaches it through the member-gated size selector.
 const BAND_PARAM = IS_STAGING && (() => { try { return new URLSearchParams(window.location.search).get('band') === '1'; } catch (e) { return false; } })();
 
+// Free-tier "already opted in" flag. A follow-up email link (or a returning
+// visitor who already gave their email) carries ?optedin=1, so the finale email
+// gate is skipped — Kit already has them, don't ask twice. Works in production,
+// so it is NOT staging-gated. Members never see the gate anyway.
+const OPTED_IN_PARAM = (() => { try { return new URLSearchParams(window.location.search).get('optedin') === '1'; } catch (e) { return false; } })();
+
 // Free tier now includes Run the Show (email-gated after the first win, not
 // locked), a Practice taste (budget below), and one Feedback ring-out taste.
 // The members-only depth is the Scenario Library and the Monitor World course;
@@ -8792,7 +8798,15 @@ function App() {
     : etByEarPhase ? (etByEarLeft + ' FREE ROUND' + (etByEarLeft === 1 ? '' : 'S') + ' · BY EAR')
     : (etGuidedLeft + ' FREE ROUND' + (etGuidedLeft === 1 ? '' : 'S') + ' · GUIDED');
 
-  const [emailDone, setEmailDone] = uS(() => !!(profileRef.current.email || profileRef.current.emailSkipped));
+  const [emailDone, setEmailDone] = uS(() => OPTED_IN_PARAM || !!(profileRef.current.email || profileRef.current.emailSkipped));
+  // Arriving via an ?optedin=1 link: remember it (as a skip, since Kit already
+  // has them) so a later direct visit doesn't re-ask, when browser storage holds.
+  uE(() => {
+    if (OPTED_IN_PARAM && !profileRef.current.email && !profileRef.current.emailSkipped) {
+      profileRef.current = { ...profileRef.current, emailSkipped: true };
+      saveProfile(profileRef.current);
+    }
+  }, []);
   const captureEmail = (email, firstName) => {
     profileRef.current = { ...profileRef.current, email, firstName: firstName || '' };
     saveProfile(profileRef.current);
