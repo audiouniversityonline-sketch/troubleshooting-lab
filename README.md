@@ -4,14 +4,25 @@ An interactive mixing-console training simulator for [Audio University](https://
 
 ## Files
 
-- **`index.html`** — the app shell: engine, UI, and the synthesized audio.
-- **`content.js`** — the scenario library. Sets `window.LEVELS` (the free Essentials, in order) and `window.CHALLENGE_BANK` (paid scenarios). **This is the file to edit when adding new levels.**
+Two parallel pairs — a sandbox and production. `IS_STAGING` auto-detects which is which from the content-script filename, so the two HTML files stay identical except for the one `<script src>` line.
+
+- **`staging.html` + `content-staging.js`** — the development sandbox. Do all work here.
+- **`index.html` + `content.js`** — production (the live embed). Promote by copying `staging.html` → `index.html` (pointing the one `<script src>` at `content.js?v=N`) and `content-staging.js` → `content.js`, then bump `N`.
+- The app shell holds the engine, UI, and synthesized audio; the content file is the scenario library (`window.LEVELS`, `window.START_HERE`, `window.FEEDBACK_MODE`, etc.). **Edit the content file when adding or changing levels.**
 
 ## Hosting
 
-Served via GitHub Pages and embedded in an iframe on the Audio University Circle community. The member page is gated to an access group; the free page is open as a lead magnet.
+Served via GitHub Pages, embedded in an iframe on the Audio University Circle community. A commit to `main` auto-deploys within about a minute.
 
-A commit to `main` auto-deploys to the live Pages URL within about a minute. That is the whole content pipeline: add a scenario to `content.js`, commit, and it is live.
+One production build, three iframe embeds that differ only by URL query (all share the full-bleed wrapper with `allow="autoplay; fullscreen"`). Base URL: `https://audiouniversityonline-sketch.github.io/troubleshooting-lab/`
+
+| Variant | Query | Placement | Behavior |
+|---|---|---|---|
+| Members | `?tier=member&v=N` | Members-only Circle page (behind the access group) | Everything unlocked, no email gate |
+| Free — cold | `?v=N` | YouTube descriptions + any public link | Full free funnel; email gate at the finale |
+| Free — opted in | `?optedin=1&v=N` | Email sales copy + the Circle Resource Library (both audiences are already on the list) | Same free funnel, email gate skipped |
+
+`&v=N` is a cache-buster the browser/CDN key on (the root `index.html` shell is cached separately from `content.js?v=N`). **On every production push, bump both `content.js?v=N` and the `&v=N` in the embeds** so members get the new shell on first load instead of a stale cached one. The `?tier=member` unlock is soft — the real paywall is the Circle access group. See `funnel-plan-2026-07-10.md` for the full distribution map and rationale.
 
 ## Progress and the drip model
 
