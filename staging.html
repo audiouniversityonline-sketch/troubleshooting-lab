@@ -6740,6 +6740,33 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             </g>
           );
         })}
+
+        {/* Top grab-layer: every DISCONNECTED cable head, rendered above all
+            cable bodies and hover strips so it can always be picked up, even
+            when a neighbouring cable is drawn on top of it. Only while idle —
+            during a drag the in-hand end follows the cursor instead. */}
+        {!dragState && (
+          <g style={{ pointerEvents: 'auto' }}>
+            {(paths.stageCables || []).map(c => {
+              if (!c.to || !c.unplugged) return null;
+              const drag = c.xlr ? { type: 'mic', id: c.src } : { type: 'source', id: c.src };
+              return <circle key={'gh-s-' + c.src} className="cable-hit" cx={c.to.x} cy={c.to.y} r="11" fill="transparent"
+                onPointerDown={(e) => startDrag(e, drag)}
+                onPointerEnter={() => setHoverCable('src:' + c.src)} onPointerLeave={() => setHoverCable(null)}/>;
+            })}
+            {(paths.patchTails || []).map(t => {
+              if (!(t.loose && state.big16 && t.srcKey && window.SOURCES[t.srcKey])) return null;
+              return <circle key={'gh-t-' + t.srcKey} className="cable-hit" cx={t.x} cy={t.y} r="11" fill="transparent"
+                onPointerDown={(e) => startDrag(e, { type: 'source', id: t.srcKey })}
+                onPointerEnter={() => setHoverCable('src:' + t.srcKey)} onPointerLeave={() => setHoverCable(null)}/>;
+            })}
+            {(paths.outCables || []).map(c => (c.to && c.unplugged) ? (
+              <circle key={'gh-o-' + c.spk} className="cable-hit" cx={c.to.x} cy={c.to.y} r="11" fill="transparent"
+                onPointerDown={(e) => startDrag(e, { type: 'outpatch', id: c.spk })}
+                onPointerEnter={() => setHoverCable('out:' + c.spk)} onPointerLeave={() => setHoverCable(null)}/>
+            ) : null)}
+          </g>
+        )}
       </svg>
       )}
 
