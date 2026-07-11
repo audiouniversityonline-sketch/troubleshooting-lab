@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=145"></script>
+<script src="content-staging.js?v=146"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7009,6 +7009,11 @@ const MEMBER_URL = 'https://community.audiouniversityonline.com/troubleshooting-
 // it just stops posting to Kit, so the funnel never breaks.
 const KIT_FORM_ID = '9560384';
 
+// The free Soundcheck Checklist (public Circle resource). Shown on the mobile
+// success screen as the opt-in reward, so every completer gets it on the spot,
+// new or existing subscriber, with no dependency on Kit sending an email.
+const CHECKLIST_URL = 'https://community.audiouniversityonline.com/c/resources/soundcheck-checklist';
+
 const isValidEmail = (s) => typeof s === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 
 // Fire-and-forget POST to Kit's public form-subscription endpoint. Designed for
@@ -7169,7 +7174,7 @@ function MobileNotice({ onCapture }) {
           <>
             <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>BEST ON A COMPUTER</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>
-              This trainer uses a full mixing console, so it needs a desktop or laptop. Enter your email and we'll send you the link to open it on your computer.
+              The Lab doesn't work on mobile (the virtual mixer has too many knobs to fit on a small screen). Come back later on a desktop or laptop. In the meantime, check out the free Soundcheck Checklist, a guide to running a flawless soundcheck every time.
             </div>
             <input type="text" autoComplete="given-name" placeholder="First name" value={name}
               onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
@@ -7178,15 +7183,15 @@ function MobileNotice({ onCapture }) {
               onChange={(e) => { setVal(e.target.value); if (err) setErr(false); }} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
               style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', fontSize: 13, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid ' + (err ? '#e05a5a' : '#2c9d52'), outline: 'none' }}/>
             {err && <div style={{ fontSize: 10.5, color: '#e98a8a', marginTop: 6 }}>That doesn't look like a valid email address.</div>}
-            <button onClick={submit} className="mono ui-no-select" style={{ width: '100%', marginTop: 10, padding: '11px 16px', fontSize: 12, fontWeight: 800, letterSpacing: 1, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>SEND ME THE LINK →</button>
-            <div style={{ fontSize: 9.5, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.4 }}>No spam. Unsubscribe anytime.</div>
+            <button onClick={submit} className="mono ui-no-select" style={{ width: '100%', marginTop: 10, padding: '11px 16px', fontSize: 12, fontWeight: 800, letterSpacing: 1, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>GET THE CHECKLIST →</button>
           </>
         ) : (
           <>
             <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>YOU'RE IN</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-              Thanks{name ? ', ' + name : ''}. Check your inbox for the link, and open it on a desktop or laptop to start the lab.
+              Thanks{name ? ', ' + name : ''}. Here's your link to the Soundcheck Checklist. When you're at a computer, open this page again to apply those skills in the Lab.
             </div>
+            <a href={CHECKLIST_URL} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{ display: 'block', boxSizing: 'border-box', textDecoration: 'none', textAlign: 'center', width: '100%', marginTop: 12, padding: '11px 16px', fontSize: 12, fontWeight: 800, letterSpacing: 1, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>OPEN THE SOUNDCHECK CHECKLIST →</a>
           </>
         )}
       </div>
