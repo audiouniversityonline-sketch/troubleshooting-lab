@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=151"></script>
+<script src="content-staging.js?v=152"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6761,8 +6761,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                 onPointerDown={(e) => startDrag(e, { type: 'source', id: t.srcKey })}
                 onPointerEnter={() => setHoverCable('src:' + t.srcKey)} onPointerLeave={() => setHoverCable(null)}/>;
             })}
-            {(paths.outCables || []).map(c => (c.to && c.unplugged) ? (
-              <circle key={'gh-o-' + c.spk} className="cable-hit" cx={c.to.x} cy={c.to.y} r="11" fill="transparent"
+            {(paths.outCables || []).map(c => (c.from && c.unplugged) ? (
+              // Grab the LOOSE end (c.from, the stage-box jack side with the OPEN
+              // badge), which is the end that follows the cursor on a drag — not
+              // c.to (the fixed speaker end).
+              <circle key={'gh-o-' + c.spk} className="cable-hit" cx={c.from.x} cy={c.from.y} r="11" fill="transparent"
                 onPointerDown={(e) => startDrag(e, { type: 'outpatch', id: c.spk })}
                 onPointerEnter={() => setHoverCable('out:' + c.spk)} onPointerLeave={() => setHoverCable(null)}/>
             ) : null)}
@@ -9169,21 +9172,21 @@ function App() {
   const wedgeRinging = !!(feedback && feedback.wedgeRing);
   uE(() => { if (wedgeRinging) setEqPanelOpen(true); }, [wedgeRinging]);
 
-  // Fault warning modal. Pops, distortion, and PA imbalance announce
-  // themselves in a centered dismissible modal instead of stacking text into
-  // the brief card. Feedback is excluded — it has its own ring-out flow (the
-  // Monitor EQ auto-opens above). Keyed by a fault signature so a brand-new
-  // event reopens the modal, but dismissing an ongoing fault sticks until the
-  // engineer fixes it (or it clears on its own).
+  // Fault warning modal. Pops and distortion announce themselves in a centered
+  // dismissible modal instead of stacking text into the brief card. Feedback is
+  // excluded (it has its own ring-out flow, the Monitor EQ auto-opens above), and
+  // PA imbalance is excluded too: the small IMBALANCED tag in the objective area
+  // is enough, and the modal was more annoying than useful. Keyed by a fault
+  // signature so a brand-new event reopens the modal, but dismissing an ongoing
+  // fault sticks until the engineer fixes it (or it clears on its own).
   const [warnOpen, setWarnOpen] = uS(false);
   const warnDismissedSigRef = uR(null);
-  // Suppress the warning modal only for a real wedge ring (it has its own ring-out
-  // flow above). A mains-only howl still falls through to the clip/distortion
-  // warning, which is what actually points at the too-hot gain.
+  // Suppress the warning modal for a real wedge ring (its own ring-out flow above)
+  // and for PA imbalance (objective tag only). A mains-only howl still falls
+  // through to the clip/distortion warning, which points at the too-hot gain.
   const faultSig = wedgeRinging ? null
                 : state.phantomPop ? ('pop:' + state.phantomPop.at)
                 : (clipsStable && clipsStable.length) ? 'clip'
-                : paBalanceIssue ? 'bal'
                 : null;
   uE(() => {
     if (faultSig == null) { setWarnOpen(false); warnDismissedSigRef.current = null; return; }
