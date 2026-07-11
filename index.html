@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=67"></script>
+<script src="content.js?v=68"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7017,17 +7017,20 @@ const isValidEmail = (s) => typeof s === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$
 function submitToKit(email, firstName) {
   if (!KIT_FORM_ID) return Promise.resolve(false);
   try {
-    // `first_name` is Kit's (ConvertKit's) standard, built-in subscriber
-    // attribute, so it maps to the subscriber's first name regardless of how the
-    // form is configured. Custom fields would use `fields[...]`, but first name
-    // is not custom. Only sent when present so a blank never overwrites a name.
-    const payload = { email_address: String(email).trim() };
+    // Match Kit's own embed contract exactly: a form-urlencoded body with the
+    // built-in `email_address` and the name as `fields[first_name]`. A top-level
+    // `first_name` returns HTTP success but Kit ignores it, so names never
+    // landed on the subscriber. `fields[first_name]` is what Kit's hosted form
+    // posts. form-urlencoded is also a CORS "simple" request, so no preflight.
+    // Only send the name when present so a blank never overwrites an existing one.
+    const body = new URLSearchParams();
+    body.set('email_address', String(email).trim());
     const fn = (firstName || '').trim();
-    if (fn) payload.first_name = fn;
+    if (fn) body.set('fields[first_name]', fn);
     return fetch('https://app.kit.com/forms/' + KIT_FORM_ID + '/subscriptions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      body: body.toString(),
     }).then(() => true).catch(() => false);
   } catch (e) { return Promise.resolve(false); }
 }
@@ -7155,7 +7158,7 @@ function MobileNotice({ onCapture }) {
         background: 'rgba(14,36,21,0.7)', border: '1px solid var(--green)', borderRadius: 10,
         boxShadow: '0 0 0 1px rgba(74,222,128,0.18), 0 8px 28px rgba(0,0,0,0.6)',
       }}>
-        {TIER === 'member' ? (
+        {(TIER === 'member' || OPTED_IN_PARAM) ? (
           <>
             <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>BEST ON A COMPUTER</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
