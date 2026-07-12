@@ -1835,4 +1835,31 @@ window.PATCHING = [
     solution: 'The Bass and Keys cables were in each other\'s ports. Back on the ports the list calls for, the channels match the plan. When something shows up on the wrong fader, check the patch against the input list.',
     defaultInspect: 'pa',
   },
+  {
+    id: 'pt5',
+    title: 'Snakes and Sub-Snakes',
+    task: true,
+    requirePatch: true,
+    involves: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+    conditions: [],
+    symptom: 'This is the full 16-channel system. The band\'s mics reach the console in bundles called sub-snakes: the drums on one, the vocals on another, the instruments on a third. The kick drum came loose from the drum sub-snake, so channel 1 is dead. Open the Input List and reconnect it.',
+    hint: 'A sub-snake gathers a group of mics and carries them to the console on the main snake. The kick belongs on channel 1, the first input on the drum sub-snake. Reconnect its tail at the stage box, or click its PATCH chip.',
+    hints: [
+      { title: 'Open the input list', target: 'iolist', teach: 'On a big system the input list is your map: it groups the mics by sub-snake and gives each one its channel.', text: 'Open the Input List to see the drum sub-snake.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.kick === 1)) },
+      { title: 'Reconnect the kick', target: 'src-kick', teach: 'The kick is the first input on the drum sub-snake, and it lands on channel 1. Reconnecting its tail brings the channel back.', text: 'Reconnect the kick: drag its loose tail to the stage box, or click its PATCH chip.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.kick === 1) },
+    ],
+    sabotage: (s) => {
+      // The full 16-channel band. Rig off (line check before the show), and the
+      // kick drum's tail is loose at the drum sub-snake, so channel 1 is dead.
+      // requirePatch (big16PatchOk) latches when the kick is back on channel 1.
+      const b = bandState();
+      b.cables.kick = 0;
+      b.mixer = { on: false };
+      b.master = { ...b.master, mute: true, fader: 0 };
+      ['pa_l', 'pa_r', 'wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => { if (b.outputs[k]) b.outputs[k] = { ...b.outputs[k], on: false, volume: 0 }; });
+      return b;
+    },
+    solution: 'The kick was off the drum sub-snake, so channel 1 was dead. Back on its input, the sub-snake is whole again. On a big system the mics reach the console in groups, one sub-snake per section.',
+    defaultInspect: 'pa',
+  },
 ];
