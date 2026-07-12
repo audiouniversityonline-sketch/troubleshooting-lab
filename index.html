@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=71"></script>
+<script src="content.js?v=72"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7796,9 +7796,6 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
       }}>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>START HERE · DONE</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You can run a system now.</div>
-        <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You turned on the system, balanced the band, got the vocals in, built a monitor mix, and rang out the feedback. That is running sound.
-        </div>
         {tier === 'member' ? (
           <>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
@@ -8195,7 +8192,7 @@ function WalkthroughWrap({ open, onLessons, onExplore }) {
       <div style={{ width: 520, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, padding: '24px 26px', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: 15 }}>
         <div className="display" style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.1 }}>That's the whole console</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You know how every part of the console works. Next, put it together: set up a system from a cold start and run a full show, one step at a time. The first lesson is on us.
+          Now put it together: set up a system from a cold start and run a full show, one step at a time. The first lesson is on us.
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button onClick={onLessons} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '11px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>START RUN THE SHOW →</button>
