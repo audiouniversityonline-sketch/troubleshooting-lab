@@ -1722,10 +1722,10 @@ window.PATCHING = [
     hint: 'Open the Input List in the top bar. Drag each source cable onto its numbered stage-box port. The colors follow the snake code: 1 brown, 2 red, 3 orange, 4 yellow. Dropping on a taken port swaps the two.',
     hints: [
       { title: 'Open the input list', target: 'iolist', teach: 'The input list is your plan, not the live cabling. It names the source on every channel and the port it patches to. Open it first, every time.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
-      { title: 'Patch Vocal 1', target: 'src-vocal', teach: 'The list puts Vocal 1 on channel 1, so its cable goes to stage-box port 1.', text: 'Drag Vocal 1\'s cable onto stage-box port 1. You can also click its PATCH button to step it there.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1) },
-      { title: 'Patch Vocal 2', target: 'src-vocal2', teach: 'Vocal 2 is next on the list: channel 2, port 2.', text: 'Drag Vocal 2\'s cable to port 2.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal2 === 2) },
-      { title: 'Patch the Bass', target: 'src-guitar', teach: 'The bass DI lands on channel 3, port 3.', text: 'Drag the Bass cable to port 3.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.guitar === 3) },
-      { title: 'Patch the Keys', target: 'src-laptop', teach: 'Last on the list: the keyboard DI on channel 4, port 4.', text: 'Drag the Keys cable to port 4.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.laptop === 4) },
+      { title: 'Patch Vocal 1', target: ['iolist-ch1', 'src-vocal'], teach: 'The list puts Vocal 1 on channel 1, so its cable goes to stage-box port 1.', text: 'Drag Vocal 1\'s cable onto stage-box port 1. You can also click its PATCH button to step it there.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1) },
+      { title: 'Patch Vocal 2', target: ['iolist-ch2', 'src-vocal2'], teach: 'Vocal 2 is next on the list: channel 2, port 2.', text: 'Drag Vocal 2\'s cable to port 2.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal2 === 2) },
+      { title: 'Patch the Bass', target: ['iolist-ch3', 'src-guitar'], teach: 'The bass DI lands on channel 3, port 3.', text: 'Drag the Bass cable to port 3.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.guitar === 3) },
+      { title: 'Patch the Keys', target: ['iolist-ch4', 'src-laptop'], teach: 'Last on the list: the keyboard DI on channel 4, port 4.', text: 'Drag the Keys cable to port 4.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.laptop === 4) },
     ],
     sabotage: (s) => {
       // Only the inputs are loose. The snake fan-out, the returns, and the
@@ -1752,19 +1752,22 @@ window.PATCHING = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The inputs are patched, but the mix has no way out yet. Start at the speakers so you know which snake output feeds which one, then send the matching console output down the snake.',
-    hint: 'At the stage box, patch each speaker line to its out port: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4. Then send the console outputs into those same returns: Main L to 1, Main R to 2, AUX 1 to 3, AUX 2 to 4.',
+    symptom: 'The inputs are patched, but the mix has no way out yet. Start at the speakers so you know which return feeds which one, then connect the matching console output to that return.',
+    hint: 'At the stage box, patch each speaker line to its out port: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4. Then connect each console output to that same return: Main L to 1, Main R to 2, AUX 1 to 3, AUX 2 to 4.',
     hints: [
-      { title: 'Open the input list', target: 'iolist', teach: 'The input list also shows the outputs: which console output feeds each speaker. Open it for the plan.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass)) },
-      { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'Start at the stage: each speaker line plugs into a numbered out port on the stage box. That sets which snake output feeds which speaker.', text: 'Patch each speaker line to its out port: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
-      { title: 'Send the outputs down the snake', target: 'master-section', teach: 'Now match the console outputs to those returns. The mix leaves the console on its outputs and flows through the snake to the speakers.', text: 'Send the console outputs into the snake returns: Main L to 1, Main R to 2, AUX 1 to 3, AUX 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
+      { title: 'Open the input list', target: 'iolist', teach: 'The input list also maps the outputs: which console output feeds which speaker, and the snake return it rides. Open it for the plan.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass)) },
+      { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'iolist-out-mainL', 'iolist-out-mainR', 'iolist-out-aux1', 'iolist-out-aux2'], teach: 'Each speaker line plugs into a numbered out port on the stage box. The input list shows which output feeds which speaker.', text: 'Patch each speaker line to its out port: PA L to 1, PA R to 2, Wedge 1 to 3, Wedge 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
+      { title: 'Connect the console outputs', target: ['iolist-out-mainL', 'iolist-out-mainR', 'iolist-out-aux1', 'iolist-out-aux2'], teach: 'Now the console end: each output plugs into the same snake return that feeds its speaker, so the mix can travel back out.', text: 'Connect each console output to its snake return: Main L to 1, Main R to 2, AUX 1 to 3, AUX 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
     ],
     sabotage: (s) => {
-      // Inputs stay patched; only the return side is loose (console outputs and
-      // speaker lines). Rig off while patching, so connecting a speaker line
-      // cannot pop (patching a live system is taught later).
-      s.outFan = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
-      s.outPatch = { pa_l: null, pa_r: null, wedge: null, wedge2: null, wedge3: null, wedge4: null };
+      // Inputs stay patched; only the return side the MX-8 actually uses is loose:
+      // Main L/R + the two wedges (outFan returns 1-4, outPatch pa_l/pa_r/wedge/
+      // wedge2). Returns 5-6 (aux3/aux4) and wedges 3-4 stay on their default
+      // connection, so requirePatch (which checks all six) still latches once the
+      // four real outputs are patched, and the user is never asked to touch 5-6.
+      // Rig off while patching, so connecting a speaker line cannot pop.
+      s.outFan = { ...s.outFan, 1: null, 2: null, 3: null, 4: null };
+      s.outPatch = { ...s.outPatch, pa_l: null, pa_r: null, wedge: null, wedge2: null };
       s.mixer = { on: false };
       s.master = { ...s.master, mute: true, fader: 0 };
       s.outputs.pa_l = { ...s.outputs.pa_l, on: false, volume: 0 };
@@ -1773,7 +1776,7 @@ window.PATCHING = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
       return s;
     },
-    solution: 'Outputs down the snake returns and every speaker on its port. Inputs get the sound in; outputs get the mix back out to the audience and the stage.',
+    solution: 'Every speaker line on its out port and each console output on the matching return. The inputs get the sound in; the outputs carry the mix back out to the audience and the stage.',
     defaultInspect: 'pa',
   },
   {

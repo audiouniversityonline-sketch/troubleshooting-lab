@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=157"></script>
+<script src="content-staging.js?v=159"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8223,44 +8223,55 @@ function WalkthroughWrap({ open, onLessons, onExplore }) {
 // scale-to-fit transform. pointer-events:none so the user clicks straight
 // through the ring to the control.
 function WalkthroughSpotlight({ target }) {
-  const [rect, setRect] = uS(null);
+  // Draws ONE ring per target element (not a union box), so a step can glow two
+  // far-apart things — e.g. the Input List row AND the source card — without the
+  // ring ballooning to span everything in between.
+  const [rects, setRects] = uS([]);
   const targetKey = Array.isArray(target) ? target.join(',') : (target || '');
   uE(() => {
-    if (!target) { setRect(null); return; }
+    if (!target) { setRects([]); return; }
     const keys = Array.isArray(target) ? target : [target];
     const measure = () => {
-      let box = null;
+      const boxes = [];
       keys.forEach((k) => {
         const el = document.querySelector('[data-walk="' + k + '"]');
         if (!el) return;
         const r = el.getBoundingClientRect();
         if (r.width === 0 && r.height === 0) return;
-        box = box
-          ? { left: Math.min(box.left, r.left), top: Math.min(box.top, r.top), right: Math.max(box.right, r.right), bottom: Math.max(box.bottom, r.bottom) }
-          : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        boxes.push({ left: r.left, top: r.top, w: r.width, h: r.height });
       });
-      setRect((prev) => {
-        if (!box) return prev ? null : prev;
-        const next = { left: box.left, top: box.top, w: box.right - box.left, h: box.bottom - box.top };
-        if (prev && Math.abs(prev.left - next.left) < 0.5 && Math.abs(prev.top - next.top) < 0.5 && Math.abs(prev.w - next.w) < 0.5 && Math.abs(prev.h - next.h) < 0.5) return prev;
-        return next;
+      setRects((prev) => {
+        const same = boxes.length === prev.length && boxes.every((b, i) => {
+          const p = prev[i];
+          return p && Math.abs(p.left - b.left) < 0.5 && Math.abs(p.top - b.top) < 0.5 && Math.abs(p.w - b.w) < 0.5 && Math.abs(p.h - b.h) < 0.5;
+        });
+        return same ? prev : boxes;
       });
     };
     measure();
-    const id = setInterval(measure, 200);
+    // Re-measure every frame so a ring tracks a target that moves — e.g. the
+    // draggable Input List panel. setRects only re-renders when a box actually
+    // shifts (>0.5px), so an idle target costs nothing.
+    let raf;
+    const loop = () => { measure(); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
     window.addEventListener('resize', measure);
-    return () => { clearInterval(id); window.removeEventListener('resize', measure); };
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measure); };
   }, [targetKey]);
-  if (!target || !rect) return null;
+  if (!target || !rects.length) return null;
   const pad = 7;
   return (
-    <div style={{
-      position: 'fixed', left: rect.left - pad, top: rect.top - pad,
-      width: rect.w + pad * 2, height: rect.h + pad * 2,
-      border: '2px solid var(--green)', borderRadius: 8,
-      animation: 'walkPulse 1.6s ease-in-out infinite',
-      pointerEvents: 'none', zIndex: 88,
-    }}/>
+    <>
+      {rects.map((rect, i) => (
+        <div key={i} style={{
+          position: 'fixed', left: rect.left - pad, top: rect.top - pad,
+          width: rect.w + pad * 2, height: rect.h + pad * 2,
+          border: '2px solid var(--green)', borderRadius: 8,
+          animation: 'walkPulse 1.6s ease-in-out infinite',
+          pointerEvents: 'none', zIndex: 88,
+        }}/>
+      ))}
+    </>
   );
 }
 
@@ -8400,7 +8411,7 @@ function IoListPanel({ open, onClose, state }) {
           </tr></thead>
           <tbody>
             {inputRows.map((r) => (
-              <tr key={r.key}>
+              <tr key={r.key} data-walk={'iolist-ch' + r.chNum}>
                 <td style={td}>{chCell(r.snakeIdx, 'CH ' + r.chNum)}</td>
                 <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink)' }}>{r.source}</td>
                 <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink-2)' }}>{r.type}</td>
@@ -8415,7 +8426,7 @@ function IoListPanel({ open, onClose, state }) {
           </tr></thead>
           <tbody>
             {outputDefs.map((o) => (
-              <tr key={o.bus}>
+              <tr key={o.bus} data-walk={'iolist-out-' + o.bus}>
                 <td style={td}>{chCell(portFor(o.bus), o.label)}</td>
                 <td style={td}>{o.to}</td>
               </tr>
