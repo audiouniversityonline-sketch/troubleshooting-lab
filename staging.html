@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=153"></script>
+<script src="content-staging.js?v=154"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7810,7 +7810,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>START HERE · DONE</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You can run a system now.</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          You turned on the system, balanced the band, got a vocal into the mix, built the singer a monitor mix, and rang out feedback. That is running sound.
+          You turned on the system, balanced the band, got the vocals in, built a monitor mix, and rang out the feedback. That is running sound.
         </div>
         {tier === 'member' ? (
           <>
@@ -7826,7 +7826,7 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
         ) : (
           <>
             <div style={{ fontSize: 12.5, color: 'var(--ink)', lineHeight: 1.55 }}>
-              Now put it to work. Practice Mode gives you a broken system to fix, a new fault every time. Unlimited practice, the by-ear feedback training, and setting up a system from scratch are all part of the Audio University membership.
+              Now put it to work. Practice Mode gives you a broken system to fix, a new fault every time. Unlimited practice, the full Ear Training, and setting up a system from scratch come with Audio University membership.
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={onGoPractice} className="mono ui-no-select" style={{
