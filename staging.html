@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=161"></script>
+<script src="content-staging.js?v=162"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7845,10 +7845,13 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
 }
 
 // Free-tier email gate, shown once at the finale of the free Start Here
-// course. Friendly (green), not a lock: "Not now" skips to the completion
-// CTA. Submit fires the Kit signup, then shows the checklist link right on
-// screen (the delivery that works even for an already-subscribed address,
-// which Kit won't re-email) with a CONTINUE button into Practice Mode.
+// course. This is a REQUIRED ask by design (no skip): it only ever reaches
+// the cold public audience (YouTube). The email-list distribution links the
+// Circle page whose embed carries ?optedin=1, so subscribers never see it,
+// and members are excluded by tier. Submit fires the Kit signup, then shows
+// the checklist link right on screen (instant delivery, and it covers a cold
+// visitor who happens to be subscribed already, whom Kit won't re-email)
+// with a CONTINUE button into Practice Mode.
 function EmailGate({ open, onSubmit, onSkip }) {
   const [name, setName] = uS('');
   const [val, setVal] = uS('');
@@ -7932,10 +7935,6 @@ function EmailGate({ open, onSubmit, onSkip }) {
           background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
           border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer',
         }}>TRY PRACTICE MODE →</button>
-        <button onClick={onSkip} className="mono ui-no-select" style={{
-          background: 'none', border: 'none', padding: 0, alignSelf: 'center',
-          fontSize: 10.5, color: 'var(--ink-3)', cursor: 'pointer', textDecoration: 'underline',
-        }}>Not now →</button>
           </>
         )}
       </div>
@@ -11171,9 +11170,10 @@ function App() {
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
       {/* Free-tier email opt-in. Fires at the FINALE of the free Start Here
-          course (You're Running Sound), the moment of peak value. Submitting
-          saves progress and drops them to the CTA; "Not now" skips to the CTA
-          without granting anything. Members and subscribers never see it. */}
+          course, the moment of peak value. Required by design (no skip UI):
+          only the cold public audience reaches it. Email-list traffic lands
+          on the ?optedin=1 embed and members are excluded by tier, so
+          neither ever sees it. onSkip is dormant, nothing renders it. */}
       <EmailGate
         open={finaleEmail && TIER !== 'member' && !emailDone && !tourOpen}
         onSubmit={(email, name) => { captureEmail(email, name); setFinaleEmail(false); loadLevel(window.LEVELS.length); }}
