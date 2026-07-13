@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=86"></script>
+<script src="content.js?v=87"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8271,12 +8271,14 @@ function WalkthroughSpotlight({ target }) {
     return () => { clearInterval(id); window.removeEventListener('resize', measure); };
   }, [targetKey]);
   if (!target || !rect) return null;
-  const pad = 7;
+  // Short targets (table rows, chips) get a tight ring: a 7px halo around a
+  // ~24px row overlaps the neighboring rows and reads as clutter.
+  const pad = rect.h < 40 ? 2 : 7;
   return (
     <div style={{
       position: 'fixed', left: rect.left - pad, top: rect.top - pad,
       width: rect.w + pad * 2, height: rect.h + pad * 2,
-      border: '2px solid var(--green)', borderRadius: 8,
+      border: '2px solid var(--green)', borderRadius: pad < 7 ? 5 : 8,
       animation: 'walkPulse 1.6s ease-in-out infinite',
       pointerEvents: 'none', zIndex: 88,
     }}/>
@@ -8367,8 +8369,12 @@ function IoListPanel({ open, onClose, state }) {
   // this is the PLAN (the paperwork): when the board is unpatched (Patch the
   // System starts with every return null) fall back to the canonical default so
   // each output still shows its home return channel — Main L on return 1, etc.
-  const liveOutFan = s.outFan && Object.values(s.outFan).some(Boolean) ? s.outFan : (window.DEFAULT_OUT_FAN || {});
-  const portFor = (busKey) => { const p = Object.keys(liveOutFan).find((pp) => liveOutFan[pp] === busKey); return p ? +p : null; };
+  // The Input List is the PLAN (what belongs where), not the live cabling —
+  // same rule as the input rows. The Return column always shows the return
+  // each output is MEANT to ride, even while those returns sit unpatched
+  // (Patch the Outputs starts with them disconnected on purpose).
+  const planOutFan = window.DEFAULT_OUT_FAN || s.outFan || {};
+  const portFor = (busKey) => { const p = Object.keys(planOutFan).find((pp) => planOutFan[pp] === busKey); return p ? +p : null; };
   // The MX-8 runs two wedges (Vocal 1, Vocal 2); the 16-ch board runs four,
   // one per performer (Vocal 1, bass, keys, drummer). Only list the wedges the
   // board actually has, with the right owner.
@@ -8430,15 +8436,19 @@ function IoListPanel({ open, onClose, state }) {
         {sectionTitle('OUTPUTS · TO THE SPEAKERS')}
         <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
           <thead><tr>
-            <th style={th}>Signal</th><th style={th}>Goes to</th>
+            <th style={th}>Return</th><th style={th}>Signal</th><th style={th}>Goes to</th>
           </tr></thead>
           <tbody>
-            {outputDefs.map((o) => (
-              <tr key={o.bus}>
-                <td style={td}>{chCell(portFor(o.bus), o.label)}</td>
-                <td style={td}>{o.to}</td>
-              </tr>
-            ))}
+            {outputDefs.map((o) => {
+              const p = portFor(o.bus);
+              return (
+                <tr key={o.bus}>
+                  <td style={td}>{chCell(p, p ? 'OUT ' + p : '—')}</td>
+                  <td style={td}>{o.label}</td>
+                  <td style={td}>{o.to}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -9099,6 +9109,12 @@ function App() {
   // the lesson is the WORKFLOW (solo → listen → unsolo → bring up), so
   // we record that the workflow was followed rather than just the end state.
   const pflCheckedRef = uR(false);
+  // Latched true the first time THIS level pops the speakers, and it survives
+  // the Reset that the pop forces (Reset re-runs loadLevel on the same index).
+  // Lets a mistake-first lesson keep its "try it" step checked after the pop
+  // wipes the board — the student did the step; the pop WAS the lesson.
+  // Cleared only when the level actually changes.
+  const hasPoppedRef = uR(false);
 
   // Which channels have been PFL'd at some point this attempt (channel number
   // -> true). Drives requirePflEach (Mic Inputs / DI Boxes: PFL each input
@@ -9239,6 +9255,7 @@ function App() {
     // Block the win if the user popped the speakers getting here. The lesson
     // is the procedure, not the end state. Reset clears phantomPop.
     const blocked = !!state.phantomPop;
+    if (blocked) hasPoppedRef.current = true;
     // Non-signal-flow requirements (e.g. "all PFL buttons must be off" on
     // the PFL-monitoring level). Each is a state predicate that must hold
     // alongside the regular signal-flow conditions.
@@ -10371,6 +10388,9 @@ function App() {
     // workflow rather than counting an earlier solo as a check.
     pflCheckedRef.current = false;
     pflChannelsRef.current = {};
+    // The popped latch survives a same-level Reset (the pop forces one) and
+    // clears only when the player moves to a different level.
+    if (i !== levelIdx) hasPoppedRef.current = false;
     // Reset the per-speaker verify latches so each attempt starts unchecked.
     verifiedRef.current = {};
     // Fresh attempt: move counter and hint state restart, and the diff
@@ -10811,7 +10831,10 @@ function App() {
   // Guided lessons and the walkthrough teach ON the stage (patching, power-up,
   // cables), so they always show it; the toggle is only offered elsewhere. The
   // pref itself sticks, so leaving a lesson restores the hidden view.
-  const stageHideable = !isMobile && !level.isWalkthrough && !level.isLesson;
+  // EXCEPT on the 16-channel board: there is no readable combined view at that
+  // scale, so even lessons run one full-width panel at a time and the STAGE /
+  // MIXER toggle in the top bar swaps between them (Kyle 2026-07-13).
+  const stageHideable = !isMobile && !level.isWalkthrough && (!level.isLesson || !!state.big16);
   // The 16-input band has no stage graphic yet (step 2 rebuilds the stage +
   // sub-snakes for it), so it stays on the front-of-house view: stage forced
   // hidden, and the SHOW STAGE toggle is withheld until that stage exists.
@@ -10891,6 +10914,10 @@ function App() {
   // Drop the zoom whenever the view, level, or board changes, and on Escape, so
   // a stale pan/scale never lingers over a screen it wasn't computed for.
   React.useEffect(() => { setZoom(null); }, [stage16Open, levelIdx, state.big16, effStageHidden]);
+  // A 16-channel LESSON opens on the STAGE view: that's where its work starts
+  // (sub-snakes, mic lines, speakers), and the student toggles to MIXER when
+  // the board is the next stop. Everything else keeps the console-first default.
+  React.useEffect(() => { setStage16Open(!!(state.big16 && level.isLesson)); }, [levelIdx, state.big16]);
   React.useEffect(() => {
     if (!zoom) return;
     const onKey = (e) => { if (e.key === 'Escape') setZoom(null); };
@@ -11103,6 +11130,7 @@ function App() {
     state, audio: audioBaseline, powerStatus, gainStatus, verifyStatus, pflEachStatus,
     zeroStatus, patchStatus, feedback, audioOn, adjustBase: adjustBaseRef.current, adjustLatched: adjustLatchRef.current,
     pflChannels: pflChannelsRef.current, pflChecked: pflCheckedRef.current,
+    hasPopped: hasPoppedRef.current,
   };
   const hintDefs = level.hints || (level.hint ? [{ text: level.hint, done: () => false }] : []);
   const pendingHints = hintDefs
@@ -11312,7 +11340,14 @@ function App() {
                           goalLabel: (level.isPractice && practiceInfoRef.current && practiceInfoRef.current.goalKey) ? practiceInfoRef.current.goalLabel : null,
                           falseSignoffs: falseSignoffRef.current,
                         } : null}
-                        coaching={(!level.isStartHere && window.detectGainStagingMistakes) ? window.detectGainStagingMistakes(state, audio, level) : []}/>
+                        coaching={(!level.isStartHere && window.detectGainStagingMistakes)
+                          /* Coaching reads the SETTLED baseline, not the live envelope: on
+                             per-frame `audio` a loud syllable pushed a level over a coaching
+                             threshold and the quiet after dipped back under, so the note
+                             flickered with the music. audioBaseline is fixed for a given
+                             knob setting (the same signal the guide steps and objectives
+                             read), so a note appears and leaves only when a control moves. */
+                          ? window.detectGainStagingMistakes(state, audioBaseline, level) : []}/>
                     : level.isWalkthrough
                     ? <WalkthroughPanel step={walkStep} steps={walkSteps} total={walkSteps.length} state={state} active={walkPhase === 'steps'} onNext={walkNext} onSkip={walkSkip} lastLesson={MIXER_INDEXES.length > 0 && MIXER_INDEXES[MIXER_INDEXES.length - 1] === levelIdx}/>
                     : guideSteps
