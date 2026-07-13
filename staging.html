@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=165"></script>
+<script src="content-staging.js?v=166"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8541,7 +8541,7 @@ function FaultCatalog({ open, onClose, tier }) {
         {tier !== 'member' && (
           <div style={{ marginTop: 14, borderTop: '1px solid #2a2a2e', paddingTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 11, color: 'var(--ink)', lineHeight: 1.5, flex: 1, minWidth: 180 }}>
-              The console tour and the Start Here course are free, plus a taste of Practice Mode and Ear Training. The full lesson library and unlimited practice come with Audio University membership.
+              Start Here is free, plus a taste of Practice Mode and Ear Training. The full lesson library and unlimited practice come with Audio University membership.
             </div>
             <a href={joinUrl('catalog')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
               padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
