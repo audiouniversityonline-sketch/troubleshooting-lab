@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=72"></script>
+<script src="content.js?v=73"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7165,9 +7165,9 @@ function MobileNotice({ onCapture }) {
       }}>
         {(TIER === 'member' || OPTED_IN_PARAM) ? (
           <>
-            <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>BEST ON A COMPUTER</div>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>DESKTOP ONLY</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-              This trainer uses a full mixing console, so it needs a desktop or laptop. Open this page on a computer to jump into the lab.
+              The Lab doesn't work on mobile (the virtual mixer has too many knobs to fit on a small screen). Come back later on a desktop or laptop.
             </div>
           </>
         ) : !sent ? (
