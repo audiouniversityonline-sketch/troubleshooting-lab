@@ -410,11 +410,11 @@ window.LEVELS = [
     symptom: 'Send Vocal 1 to Wedge 1.',
     hint: 'Wedge 1 is on and turned up. Turn up AUX 1 on the Vocal 1 channel to send it there.',
     hints: [
-      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', teach: 'A wedge is a separate mix from the main outputs. AUX 1 feeds Wedge 1 and does not touch the PA.', text: 'Turn up AUX 1 on the Vocal 1 channel to send it to Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
+      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', teach: 'A wedge is a separate mix from the main outputs. AUX 1 feeds Wedge 1 and does not touch the PA.', text: 'Turn up AUX 1 on the Vocal 1 channel to send it to Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
     ],
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
-      { source: 'vocal', dest: 'wedge', min: 0.35 },
+      { source: 'vocal', dest: 'wedge', min: 0.3 },
     ],
     sabotage: (s) => {
       // System set up: vocal live in the PA, wedge up (kept from Test the
@@ -446,7 +446,7 @@ window.LEVELS = [
     hint: 'Turn up AUX 1 on the Vocal 1 channel to raise it in Wedge 1. When it rings, look at the Wedge 1 monitor EQ: the ringing frequency glows. Pull that band down far enough to stop the ring. Cuts cost a little level, so keep them small.',
     hints: [
       { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'As you send more level from a microphone to a wedge, it can start to ring. That is called microphone feedback.', text: 'Bring AUX 1 on the Vocal 1 channel up until Wedge 1 reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
-      { title: 'Ring it out', target: 'out-wedge1', teach: 'Feedback rings at one frequency. On the wedge Monitor EQ that band glows. Pull just that band down a touch and the ring stops while the level stays up.', text: 'When it rings, pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback },
+      { title: 'Ring it out', target: 'out-wedge1', teach: 'Feedback rings at one frequency. On the wedge Monitor EQ that band glows. Pull just that band down a touch and the ring stops while the level stays up.', text: 'When it rings, pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     // Wedge min 0.8 under the real-dB loop (2026-07-02): the ring point on
     // the primed wedge sits at a send of ~0.66, and 0.8 lands about 1.2 dB
@@ -508,7 +508,7 @@ window.LEVELS = [
       { source: 'vocal2', dest: 'pa', min: 0.25 },
       { source: 'guitar', dest: 'pa', min: 0.25 },
       { source: 'laptop', dest: 'pa', min: 0.25 },
-      { source: 'vocal',  dest: 'wedge', min: 0.35 },
+      { source: 'vocal',  dest: 'wedge', min: 0.3 },
     ],
     topology: { paRig: 'powered' },
     symptom: 'Final exam. Nothing is powered on yet. Run the whole job in order: power on, test every speaker with playback, then bring the band in. Keep it clean the whole way.',
@@ -519,7 +519,7 @@ window.LEVELS = [
       { title: 'Power what needs it', target: ['ch2-phantom', 'ch3-phantom'], teach: '', text: 'Turn +48V on (while muted) for the condenser (ch 2) and active DI (ch 3).', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom && ctx.state.channels[2] && ctx.state.channels[2].phantom },
       { title: 'Check every input', target: null, teach: '', text: 'Check every input in PFL before you bring it up: the four band channels and the playback.', done: (ctx) => ctx.pflChannels && [1, 2, 3, 4, 7].every((ch) => ctx.pflChannels[ch]) },
       { title: 'Bring the band up', target: null, teach: '', text: 'Bring the band up clean, faders at unity: vocals, bass, and keys in the PA.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.25) && hintReaches(ctx, 'vocal2', 'pa', 0.25) && hintReaches(ctx, 'guitar', 'pa', 0.25) && hintReaches(ctx, 'laptop', 'pa', 0.25) },
-      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', teach: '', text: 'Last step: send Vocal 1 to Wedge 1 by opening AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
+      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', teach: '', text: 'Last step: send Vocal 1 to Wedge 1 by opening AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
     ],
     sabotage: (s) => {
       // Cold venue. Everything off, console zeroed, nothing set.
@@ -709,11 +709,11 @@ window.START_HERE = [
     symptom: 'The singer\'s voice is in the PA, but she cannot hear herself on stage. Send her voice to her monitor wedge.',
     hint: 'Wedge 1 is on and turned up. Turn up AUX 1 on the Vocal 1 channel to send her voice to it.',
     hints: [
-      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', teach: 'Auxiliary sends can create mixes that are separate from what goes to the main outputs. In this case, AUX 1 feeds Wedge 1, which is a monitor mix for the performer on stage.', text: 'Turn up AUX 1 on the Vocal 1 channel to send it to Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
+      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', teach: 'Auxiliary sends can create mixes that are separate from what goes to the main outputs. In this case, AUX 1 feeds Wedge 1, which is a monitor mix for the performer on stage.', text: 'Turn up AUX 1 on the Vocal 1 channel to send it to Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
     ],
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
-      { source: 'vocal', dest: 'wedge', min: 0.35 },
+      { source: 'vocal', dest: 'wedge', min: 0.3 },
     ],
     sabotage: (s) => {
       s.master.fader = 0.75; s.master.mute = false;
@@ -738,7 +738,7 @@ window.START_HERE = [
     hint: 'Turn up AUX 1 on the Vocal 1 channel to raise it in Wedge 1. When it rings, look at the Wedge 1 monitor EQ: the ringing frequency glows. Pull that band down far enough to stop the ring. Cuts cost a little level, so keep them small.',
     hints: [
       { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'As you send more level from a microphone to a wedge, it can start to ring. That is called microphone feedback.', text: 'Bring AUX 1 on the Vocal 1 channel up until Wedge 1 reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
-      { title: 'Ring it out', target: 'out-wedge1', teach: 'Feedback rings at one frequency. On the wedge Monitor EQ that band glows. Pull just that band down a touch and the ring stops while the level stays up.', text: 'When it rings, pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback },
+      { title: 'Ring it out', target: 'out-wedge1', teach: 'Feedback rings at one frequency. On the wedge Monitor EQ that band glows. Pull just that band down a touch and the ring stops while the level stays up.', text: 'When it rings, pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
@@ -820,10 +820,13 @@ function bandUp16(s) {
     c.fader = 0.6;
     c.gain = window.healthyGain(d ? d.dbu : null);
     c.phantom = !!(d && (d.kind === 'condenser' || d.diActive));
+    // Same as bandUp: sends are per-song, zero them for identical rep starts.
+    c.aux1 = 0; c.aux2 = 0; c.aux3 = 0; c.aux4 = 0;
   }
   const pb = pbPlayback(s);
   if (pb >= 0) { s.channels[pb].mute = true; s.channels[pb].fader = 0; s.channels[pb].gain = 0; }
   s.master.mute = false; s.master.fader = 0.75;
+  s.master.aux1 = 0.75; s.master.aux2 = 0.75; s.master.aux3 = 0.75; s.master.aux4 = 0.75;
   ['pa_l', 'pa_r', 'wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => {
     if (s.outputs[k]) { s.outputs[k].on = true; s.outputs[k].mute = false; s.outputs[k].volume = 0.6; }
   });
@@ -838,9 +841,14 @@ function bandUp(s) {
     s.channels[i].gain = window.HEALTHY_GAIN_BY_CH[i]; // per-source healthy input: every channel nominal, ~0.81 baseline
     // Condenser (ch2) and active DI (ch3) need +48V to pass signal.
     s.channels[i].phantom = (i === 1 || i === 2);
+    // Monitor sends are per-song, not room tuning: zero them so every rep
+    // (and every shared ?rep= link) starts identical no matter what the
+    // lessons left behind (the Start Here finale exits with AUX 1 cranked).
+    s.channels[i].aux1 = 0; s.channels[i].aux2 = 0; s.channels[i].aux3 = 0; s.channels[i].aux4 = 0;
   }
   s.channels[6].mute = true; s.channels[6].fader = 0; s.channels[6].gain = 0;
   s.master.mute = false; s.master.fader = 0.75;
+  s.master.aux1 = 0.75; s.master.aux2 = 0.75; s.master.aux3 = 0.75; s.master.aux4 = 0.75;
   s.outputs.pa_l.on = true; s.outputs.pa_l.mute = false; s.outputs.pa_l.volume = 0.6;
   s.outputs.pa_r.on = true; s.outputs.pa_r.mute = false; s.outputs.pa_r.volume = 0.6;
   s.outputs.wedge.on = true; s.outputs.wedge.mute = false; s.outputs.wedge.volume = 0.6;
@@ -1573,12 +1581,12 @@ window.MONITOR_WORLD = [
     symptom: 'A wedge is a separate mix from the main outputs. Send Vocal 1 to Wedge 1.',
     hint: 'Wedge 1 is on and turned up. Send Vocal 1 to it with AUX 1 on the Vocal 1 channel. The room mix does not change.',
     hints: [
-      { title: 'Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'A wedge is a separate mix for the stage. AUX 1 feeds Wedge 1, so opening it on a channel adds that channel to Wedge 1 without touching the main outputs.', text: 'Send Vocal 1 to Wedge 1 with AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
+      { title: 'Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'A wedge is a separate mix for the stage. AUX 1 feeds Wedge 1, so opening it on a channel adds that channel to Wedge 1 without touching the main outputs.', text: 'Send Vocal 1 to Wedge 1 with AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
       { source: 'vocal', dest: 'pa', min: 0.3 },
-      { source: 'vocal', dest: 'wedge', min: 0.35 },
+      { source: 'vocal', dest: 'wedge', min: 0.3 },
     ],
     sabotage: (s) => mwBoard(s),
     solution: 'AUX 1 up on the Vocal 1 channel sends it to Wedge 1. The monitor send is a separate mix from the main outputs.',
@@ -1596,7 +1604,7 @@ window.MONITOR_WORLD = [
     ],
     involves: [1, 2, 3, 4],
     conditions: [
-      { source: 'vocal', dest: 'wedge', min: 0.35 },
+      { source: 'vocal', dest: 'wedge', min: 0.3 },
       { source: 'vocal2', dest: 'wedge', min: 0.22 },
       { source: 'laptop', dest: 'wedge', min: 0.18 },
     ],
@@ -1633,13 +1641,13 @@ window.MONITOR_WORLD = [
     symptom: 'Both vocal monitors at once. Wedge 1 is Vocal 1\'s monitor; Wedge 2 is Vocal 2\'s. Get each singer up in their own wedge.',
     hint: 'Wedge 1 runs off AUX 1, Wedge 2 off AUX 2. Bring Vocal 1 up on AUX 1 for their wedge, and Vocal 2 up on AUX 2 for theirs. Each singer is loudest in their own monitor.',
     hints: [
-      { title: 'Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'Each singer hears their own monitor. Vocal 1 is loudest in Wedge 1, on AUX 1.', text: 'Vocal 1 in Wedge 1: AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.35) },
+      { title: 'Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'Each singer hears their own monitor. Vocal 1 is loudest in Wedge 1, on AUX 1.', text: 'Vocal 1 in Wedge 1: AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
       { title: 'Vocal 2 in Wedge 2', target: 'ch2-aux', teach: '', text: 'Same on the other monitor: AUX 2 on the Vocal 2 channel.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge2', 0.35) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
       { source: 'vocal', dest: 'pa', min: 0.3 },
-      { source: 'vocal', dest: 'wedge', min: 0.35 },
+      { source: 'vocal', dest: 'wedge', min: 0.3 },
       { source: 'vocal2', dest: 'pa', min: 0.3 },
       { source: 'vocal2', dest: 'wedge2', min: 0.35 },
     ],
@@ -1672,7 +1680,7 @@ window.MONITOR_WORLD = [
     hint: 'Bring AUX 1 on the Vocal 1 channel up. When it rings, open the Wedge 1 Monitor EQ: the ringing band glows. Pull that band down far enough to stop the ring, no more.',
     hints: [
       { title: 'Push it until it rings', target: 'ch1-aux', teach: '', text: 'Find its limit: push AUX 1 on the Vocal 1 channel until Wedge 1 is strong and starts to ring.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.5) },
-      { title: 'Ring it out', target: 'out-wedge1', teach: 'The ring is one frequency, and that band glows on the Wedge 1 Monitor EQ. Cut just that band, enough to kill the ring, and the level stays up.', text: 'Ring it out: pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback },
+      { title: 'Ring it out', target: 'out-wedge1', teach: 'The ring is one frequency, and that band glows on the Wedge 1 Monitor EQ. Cut just that band, enough to kill the ring, and the level stays up.', text: 'Ring it out: pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [

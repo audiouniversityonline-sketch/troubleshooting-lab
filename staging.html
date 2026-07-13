@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=167"></script>
+<script src="content-staging.js?v=168"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7169,21 +7169,21 @@ function MobileNotice({ onCapture, optedIn }) {
           <>
             <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>DESKTOP ONLY</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-              The Lab doesn't work on mobile (the virtual mixer has too many knobs to fit on a small screen). Come back later on a desktop or laptop.
+              The Lab doesn't work on mobile (the virtual mixer has too many knobs to fit on a small screen). Come back later on a desktop or laptop. Already on a computer? Make this window bigger and the Lab will load.
             </div>
           </>
         ) : !sent ? (
           <>
             <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>DESKTOP ONLY</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55, marginBottom: 12 }}>
-              The Lab doesn't work on mobile (the virtual mixer has too many knobs to fit on a small screen). Come back later on a desktop or laptop. In the meantime, check out the free Soundcheck Checklist, a guide to running a flawless soundcheck every time.
+              The Lab doesn't work on mobile (the virtual mixer has too many knobs to fit on a small screen). Come back later on a desktop or laptop. Already on a computer? Make this window bigger and the Lab will load. In the meantime, check out the free Soundcheck Checklist, a guide to running a flawless soundcheck every time.
             </div>
             <input type="text" autoComplete="given-name" placeholder="First name" value={name}
               onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', fontSize: 13, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid #2c9d52', outline: 'none', marginBottom: 8 }}/>
+              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', fontSize: 16, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid #2c9d52', outline: 'none', marginBottom: 8 }}/>
             <input type="email" inputMode="email" autoComplete="email" placeholder="you@email.com" value={val}
               onChange={(e) => { setVal(e.target.value); if (err) setErr(false); }} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', fontSize: 13, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid ' + (err ? '#e05a5a' : '#2c9d52'), outline: 'none' }}/>
+              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', fontSize: 16, background: '#0a0a0c', color: 'var(--ink)', borderRadius: 6, border: '1px solid ' + (err ? '#e05a5a' : '#2c9d52'), outline: 'none' }}/>
             {err && <div style={{ fontSize: 10.5, color: '#e98a8a', marginTop: 6 }}>That doesn't look like a valid email address.</div>}
             <button onClick={submit} className="mono ui-no-select" style={{ width: '100%', marginTop: 10, padding: '11px 16px', fontSize: 12, fontWeight: 800, letterSpacing: 1, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>GET THE CHECKLIST →</button>
           </>
