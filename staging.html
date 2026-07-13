@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=168"></script>
+<script src="content-staging.js?v=169"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7388,6 +7388,12 @@ if (Array.isArray(window.PATCHING)) {
   window.PATCHING.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isPatching: true }));
 }
 
+// Power course (members). Same shape as Patching: its own POWER picker band,
+// member-gated via isLesson.
+if (Array.isArray(window.POWER)) {
+  window.POWER.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isPower: true }));
+}
+
 // A custom scenario opened from a ?scenario= link gets appended as its own
 // scenario. It behaves like a challenge (hint behind a button, a debrief, no
 // answer key), wins on the authored conditions, and its sabotage just lays down
@@ -7479,6 +7485,8 @@ const START_HERE_INDEX = SCENARIOS.findIndex((s) => s.isStartHere);
 const START_HERE_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isStartHere);
 // Patching course lesson indices, for the "PATCHING · 01 / 03" top-bar label.
 const PATCHING_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isPatching);
+// Power course lesson indices, for the "POWER · 01 / 05" top-bar label.
+const POWER_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isPower);
 const SH_FINALE_ID = 105;
 // Where a visitor lands with no resume target: members go to lesson 1 of Run
 // the show; the free tier (lessons locked) lands on Free Play, never on a
@@ -7505,6 +7513,7 @@ function bandOf(l) {
   if (l.isWalkthrough) return 'PLAY';  // the guided tour, entered directly, never a picker row
   if (l.isMonitor) return 'MONITOR';   // Monitor World course (members)
   if (l.isPatching) return 'PATCHING'; // Patching course (members)
+  if (l.isPower) return 'POWER';       // Power Up / Power Down course (members)
   if (l.isSandbox) return 'PLAY';      // free, no-goal exploration
   if (l.isLibrary) return 'LIBRARY';   // curated, browsable real-world scenarios
   if (l.isChallenge) return 'DRILL';   // Practice + Feedback Mode + any future packs
@@ -11508,11 +11517,11 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // never fights a manual mode switch.
   uE(() => { setMode(curMode); }, [levelIdx]);
   const isMember = TIER === 'member';
-  const lessons = []; const libraries = []; const monitors = []; const patching = []; const startHere = [];
+  const lessons = []; const libraries = []; const monitors = []; const patching = []; const power = []; const startHere = [];
   SCENARIOS.forEach((s, i) => {
     if (s.isStartHere) { startHere.push({ s, i }); return; }
     const b = bandOf(s);
-    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i });
+    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i });
   });
   const practiceIdx = SCENARIOS.findIndex((s) => s.isPractice);
   const feedbackIdx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
@@ -11551,6 +11560,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   const COURSES = [];
   if (startHere.length) COURSES.push({ key: 'starthere', label: 'START HERE', color: 'var(--green)', tag: 'FREE', free: true, blurb: 'Start here to learn the essential skills, one step at a time.', rows: startHere });
   if (patching.length > 0) COURSES.push({ key: 'patching', label: 'PATCHING', color: 'var(--cool)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Read the input list, patch the system, and find the fault when a cable is wrong.', rows: patching });
+  if (power.length > 0) COURSES.push({ key: 'power', label: 'POWER', color: 'var(--amber)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Power the system up and down in the right order, and find the dead box when part of it stays silent.', rows: power });
   COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a system from nothing and run a full show. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MONITOR WORLD', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build a separate monitor mix for each performer, and ring it out so it stays clean.', rows: monitors });
   return (
@@ -11757,6 +11767,8 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
               ? 'MONITOR WORLD · MEMBERS'
               : level.isPatching
               ? `PATCHING · ${String(PATCHING_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(PATCHING_INDEXES.length).padStart(2, '0')}`
+              : level.isPower
+              ? `POWER · ${String(POWER_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(POWER_INDEXES.length).padStart(2, '0')}`
               : level.isStartHere
               ? `START HERE · ${String(START_HERE_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(START_HERE_INDEXES.length).padStart(2, '0')}`
               : `LEVEL ${String(levelIdx + 1).padStart(2, '0')} / ${String(window.LEVELS.length).padStart(2, '0')}`}
@@ -11990,7 +12002,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   })();
   const workChip = (
     <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : level.isPatching ? 'PATCHING' : level.isMonitor ? 'MONITOR WORLD' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
+      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : level.isPatching ? 'PATCHING' : level.isPower ? 'POWER' : level.isMonitor ? 'MONITOR WORLD' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
     </div>
   );
 

@@ -1874,3 +1874,154 @@ window.PATCHING = [
     defaultInspect: 'pa',
   },
 ];
+
+// ── POWER course (staging prototype) ─────────────────────────────────────
+// Power Up / Power Down as its own mini-course: the order discipline first
+// (up, then down), a recovery lesson for finding a system half-powered in the
+// wrong order, then two dead-system fault hunts (MX-8, then the 16-channel
+// board). Wins ride requirePowerOn / requirePowerOff, which are board-aware.
+// Step checks read ctx.powerStatus, the same board-aware map the objective
+// checklist renders from, so the steps and the win can never disagree.
+window.POWER = [
+  {
+    id: 'pw1',
+    title: 'Power Up in Order',
+    task: true,
+    requirePowerOn: true,
+    involves: [1, 2, 3, 4],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    symptom: 'A system powers up from the console outward: console first, speakers last. The console makes a small thump when it switches on, and with the speakers still off, that thump has nothing to play through. Bring the whole system up in order.',
+    hint: 'Console first. Then the wedges, then the two PA speakers. The MAIN fader stays down the whole time: power is its own step, and levels come later at soundcheck.',
+    hints: [
+      { title: 'Console on first', target: 'mixer-power', teach: 'The console thumps when it powers on. Switch it on first, while every speaker is still off, and the thump has nothing to play through.', text: 'Turn the console on.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console) },
+      { title: 'Wedges on', target: ['out-wedge1', 'out-wedge2'], teach: 'With the console on and settled, the speakers come up. Wedges or PA first does not matter: the rule is console before any speaker.', text: 'Turn on Wedge 1 and Wedge 2.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedges) },
+      { title: 'PA on', target: ['out-pa-l', 'out-pa-r'], teach: 'The PA speakers are the loudest boxes in the room, so they get the same care: they only switch on once the console is up.', text: 'Turn on both PA speakers.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage) },
+    ],
+    sabotage: (s) => {
+      // Load-in, fully patched, everything dark. The MAIN fader rests down and
+      // muted: that is the correct resting state, and this lesson ends with it
+      // still down. Levels are soundcheck's job, not power-up's.
+      s.mixer = { on: false };
+      s.master = { ...s.master, mute: true, fader: 0 };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: false };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: false };
+      s.outputs.wedge = { ...s.outputs.wedge, on: false };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false };
+      s.outputs.wedge3 = { ...s.outputs.wedge3, on: false };
+      s.outputs.wedge4 = { ...s.outputs.wedge4, on: false };
+      return s;
+    },
+    solution: 'Console on first, then the wedges and the two PA speakers. The console\'s switch-on thump happened while no speaker could play it. The MAIN fader stays down until soundcheck.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pw2',
+    title: 'Power Down in Order',
+    task: true,
+    requirePowerOff: true,
+    involves: [1, 2, 3, 4],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    symptom: 'The show is over and the band has packed up. Power down in the reverse order you powered up: level down first, then the speakers, and the console last.',
+    hint: 'Pull the MAIN fader down, switch off every speaker, then switch the console off last. Speakers go first on the way down for the same reason the console went first on the way up: the console thumps when it switches, and no live speaker should be around to play it.',
+    hints: [
+      { title: 'Master down', target: 'master-section', teach: 'Level down first. It clears the system of signal before you start switching anything off.', text: 'Pull the MAIN fader all the way down.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.masterDown) },
+      { title: 'Speakers off', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'Speakers switch off first on the way down. Once they are dead, nothing the console does on its way out can reach the audience.', text: 'Switch off both PA speakers and both wedges.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedgesOff && ctx.powerStatus.paOff) },
+      { title: 'Console off last', target: 'mixer-power', teach: 'The console goes last for the same reason it went first this morning: its switch thump needs a dead system around it.', text: 'Switch the console off.', done: (ctx) => !!(ctx.powerStatus && !ctx.powerStatus.console) },
+    ],
+    sabotage: (s) => {
+      // End of the night: system up and healthy, ready to be taken down.
+      s.mixer = { on: true };
+      s.master = { ...s.master, mute: false, fader: 0.75 };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: true, volume: 0.6 };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: true, volume: 0.6 };
+      s.outputs.wedge = { ...s.outputs.wedge, on: true, volume: 0.6 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, volume: 0.6 };
+      s.outputs.wedge3 = { ...s.outputs.wedge3, on: false, volume: 0 };
+      s.outputs.wedge4 = { ...s.outputs.wedge4, on: false, volume: 0 };
+      return s;
+    },
+    solution: 'MAIN fader down, speakers off, console off last. The mirror of power-up: the console switch thump only ever happens with the speakers dead.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pw3',
+    title: 'The Wrong Order',
+    task: true,
+    requirePowerOn: true,
+    involves: [1, 2, 3, 4],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    symptom: 'You walk in and someone has already switched the PA speakers on, with the console still off. If you switch the console on now, its thump goes straight through the live PA. Get the system fully powered without the pop.',
+    hint: 'Make it safe first: PA speakers off. Then the console on. Then bring the speakers back up: wedges and PA.',
+    hints: [
+      { title: 'Make it safe', target: ['out-pa-l', 'out-pa-r'], teach: 'A live speaker downstream of a dead console is a trap: the console thump would play through it at full level. Switch the PA off before you touch anything else.', text: 'Switch both PA speakers off.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paOff) },
+      { title: 'Console on', target: 'mixer-power', teach: 'Now the console switches on into a dead system, the same as a normal power-up.', text: 'Turn the console on.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console) },
+      { title: 'Speakers back', target: ['out-wedge1', 'out-wedge2', 'out-pa-l', 'out-pa-r'], teach: 'Finish the normal order: speakers last.', text: 'Turn on the wedges and both PA speakers.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedges && ctx.powerStatus.paStage) },
+    ],
+    sabotage: (s) => {
+      // Someone else's half-done power-up, in the wrong order: PA live,
+      // console dark. Flipping the console on from here pops the mains,
+      // and the engine will say so. That warning is the lesson.
+      s.mixer = { on: false };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: true, volume: 0.6 };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: true, volume: 0.6 };
+      s.outputs.wedge = { ...s.outputs.wedge, on: false };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false };
+      s.outputs.wedge3 = { ...s.outputs.wedge3, on: false };
+      s.outputs.wedge4 = { ...s.outputs.wedge4, on: false };
+      return s;
+    },
+    solution: 'Speakers off, console on, speakers back on. When you find a system half-powered in the wrong order, make it safe first: nothing switches on upstream of a live speaker.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pw4',
+    title: 'Show Time, No Sound',
+    task: true,
+    requirePowerOn: true,
+    involves: [1, 2, 3, 4],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    symptom: 'Show time. The band is playing and every meter on the console is moving, but the audience hears nothing. Find out why and fix it.',
+    hint: 'The console meters are alive, so signal is reaching the console and leaving it. Work downstream from there: the problem is power at the speakers.',
+    hints: [
+      { title: 'Find the dead link', target: null, teach: 'Meters are the map. Signal on every channel and the master means the console and everything upstream of it is fine. Whatever is wrong lives after the console.', text: 'The band plays, the meters move, the audience hears nothing. Walk the path downstream from the console.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage) },
+    ],
+    sabotage: (s) => {
+      // The band is up and playing; both PA speakers were never switched on.
+      // Everything upstream is healthy, so the meters tell the whole story.
+      bandUp(s);
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: false };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: false };
+      return s;
+    },
+    solution: 'The console meters were alive, so everything upstream of the speakers was working. Both PA speakers were switched off. When the console looks healthy and the audience hears nothing, check power at the speakers first.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pw5',
+    title: 'Dead Stage',
+    task: true,
+    requirePowerOn: true,
+    involves: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+    conditions: [],
+    symptom: 'Sixteen channels, full band, mid-show. One side of the audience is quiet, and the drummer says her wedge is dead. Find every dead box and bring it back.',
+    hint: 'Two separate boxes are off. Check the PA pair first, then walk the wedges. A power problem reads as a healthy console and a silent speaker.',
+    hints: [
+      { title: 'Bring every box back', target: null, teach: 'On a bigger stage the same rule holds: healthy console, silent speaker, check its power. And there can be more than one.', text: 'Find both dead boxes: one PA side, one wedge.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges) },
+    ],
+    sabotage: (s) => {
+      // The 16-channel board, band playing, two independent power faults:
+      // the right PA side and the drummer's wedge (Wedge 4).
+      const b = window.bandState();
+      bandUp(b);
+      b.outputs.pa_r = { ...b.outputs.pa_r, on: false };
+      b.outputs.wedge4 = { ...b.outputs.wedge4, on: false };
+      return b;
+    },
+    solution: 'Both boxes came back with a switch: the right PA side and the drummer\'s wedge. Nothing upstream was ever wrong. On any size stage, a healthy console plus a silent speaker means check power first.',
+    defaultInspect: 'pa',
+  },
+];
