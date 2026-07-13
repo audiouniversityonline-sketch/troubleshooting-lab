@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=85"></script>
+<script src="content.js?v=86"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -11451,7 +11451,7 @@ function App() {
                 return cause === 'plug' ? 'cable plugged into a live channel'
                   : cause === 'patch_live' ? 'patch changed on a live channel'
                   : cause === 'speaker_patch' ? 'speaker line moved while live'
-                  : cause === 'amp_loud' ? 'amp switched on with the master up'
+                  : cause === 'amp_loud' ? ((state.topology && state.topology.paRig) === 'amp+passive' ? 'amp switched on with the master up' : 'speaker switched on with the master up')
                   : cause === 'mixer_pop' ? 'console switched on into live speakers'
                   : cause === 'mixer_off_pop' ? 'console switched off into live speakers'
                   : cause === 'phantom_cans' ? '+48V popped your headphones in PFL'
@@ -12054,10 +12054,12 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
                 }}/>
               </div>
               {/* Range conditions (a max with or without a min) get the target
-                  spelled out on its own line so the row label never truncates. */}
+                  spelled out on its own line so the row label never truncates,
+                  and the failing DIRECTION is named so a corridor never reads
+                  as a mystery (too loud vs not enough). */}
               {s.c.max != null && !s.pass && (
                 <div className="mono" style={{ marginLeft: 14, fontSize: 9, fontWeight: 700, letterSpacing: 0.4, color: s.lvl > s.c.max ? 'var(--amber)' : 'var(--ink-3)' }}>
-                  {s.lvl > s.c.max ? 'TOO LOUD · ' : ''}KEEP {s.targetTxt}
+                  {s.lvl > s.c.max ? 'TOO LOUD · ' : (s.c.min != null && s.lvl < s.c.min ? 'NOT ENOUGH · ' : '')}KEEP {s.targetTxt}
                 </div>
               )}
             </div>
