@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=166"></script>
+<script src="content-staging.js?v=167"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1464,12 +1464,11 @@ function detectGainStagingMistakes(state, audio, level) {
   const involved = (window.deriveInvolves ? window.deriveInvolves(level) : []) || [];
   // Healthy chanIn band (linear amplitude, baseline / steady-state).
   // Tuned to the existing app's chanIn calibration so default gain settings
-  // (chanIn ≈ 0.955) sit comfortably inside the healthy band and intentional
-  // overshoots fire coaching. Above clip-block threshold (~1.05), the clip
-  // detector takes over — coaching here only covers the "hot but not yet
-  // clipping" window where a transient peak would clip.
+  // (chanIn ≈ 0.955) sit comfortably inside the healthy band. Only LOW-side
+  // coaching fires here; a hot-but-not-clipping meter is not scolded (the
+  // meter is the skill, and actual clipping is the clip detector's job).
+  // The hot_channel rule was removed at Kyle's direction on launch day.
   const COLD = 0.55;              // ~3.5 dB under nominal: audibly weak input
-  const HOT  = dbuToLin(10);      // +10 dBu average: peaks are already flirting with the clip point
 
   // Per-involved-channel checks
   for (const chNum of involved) {
@@ -1492,11 +1491,6 @@ function detectGainStagingMistakes(state, audio, level) {
       mistakes.push({
         kind: 'source_limited',
         message: 'GAIN on Channel ' + chNum + ' is near max but the channel meter is still sitting low. The source itself is the limit. Real fix is at the source: get the performer closer to the mic, switch to a more sensitive mic, or check placement. Until then, use the fader to balance the channel against the band.',
-      });
-    } else if (lvl > HOT) {
-      mistakes.push({
-        kind: 'hot_channel',
-        message: 'Channel ' + chNum + '\'s meter is sitting near the top. It looks safe right now, but a singer leaning in or a drum hit can easily be 10 dB louder than what you\'re seeing, and that peak will distort. Turn GAIN down until the meter sits in the healthy zone with room to spare.',
       });
     }
   }
