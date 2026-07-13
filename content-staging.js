@@ -2025,3 +2025,173 @@ window.POWER = [
     defaultInspect: 'pa',
   },
 ];
+
+// ── INPUT SETUP course (staging prototype) ───────────────────────────────
+// Bringing an input up the right way, every time: PFL first, gain by the
+// meter, know what needs power. Foundation first (the discipline, mics,
+// DIs), then two fault hunts (a channel gained by ear, a condenser that
+// lost its phantom mid-set). Wins ride the same gates Run the Show uses:
+// requirePflCheck / requirePflEach, gainStructure -> ctx.gainStatus, and
+// audibility conditions, so the steps and the win share predicates.
+window.INPUT_SETUP = [
+  {
+    id: 'is1',
+    title: 'Gain by the Meter',
+    task: true,
+    requirePflCheck: true,
+    gainStructure: { refChannel: 1, unity: 0.75, faderTol: 0.06, inputBand: [0.645, 4.566] },
+    conditions: [
+      { source: 'vocal', dest: 'pa', min: 0.3 },
+    ],
+    topology: { paRig: 'powered' },
+    symptom: 'One channel, done right. The lead vocal is patched and the system is up, but the channel is muted with its gain low. Bring it in the way you will bring in every input for the rest of your career: check it in PFL, set the gain by the meter, then open the channel at unity.',
+    hint: 'PFL the channel first and set the GAIN so the input meter sits strong in the healthy zone with room to spare before the red. Then disengage PFL, unmute, and bring the fader up to unity, the U mark. Gain is set by the meter, not by ear.',
+    hints: [
+      { title: 'Check it in PFL', target: 'ch1-pfl', teach: 'PFL sends the channel to your headphones and its meter before the audience hears anything. Every input starts here.', text: 'Press PFL on channel 1.', done: (ctx) => !!(ctx.pflChecked || (ctx.state.channels[0] && ctx.state.channels[0].solo)) },
+      { title: 'Set the gain', target: 'ch1-gain', teach: 'GAIN sets how hard the source hits the console. Watch the input meter: strong in the healthy zone, room to spare before the red. The meter decides, not your ear.', text: 'Turn GAIN until the input meter sits in the healthy zone.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.input) },
+      { title: 'Open the channel at unity', target: 'ch1-fader', teach: 'With the gain right, the fader lives at unity, the U mark. That is the position the console is built to run at, and it leaves you room to ride up or down during the show.', text: 'Disengage PFL, unmute channel 1, and bring the fader to unity.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.fader && hintReaches(ctx, 'vocal', 'pa', 0.3)) },
+    ],
+    sabotage: (s) => {
+      // System up and healthy; only the lead vocal is down. Gain starts low so
+      // the meter work is real, not a formality.
+      s.channels[0].mute = true; s.channels[0].fader = 0; s.channels[0].gain = window.HEALTHY_GAIN_BY_CH[0] * 0.4; s.channels[0].phantom = false;
+      s.master.mute = false; s.master.fader = 0.75;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
+      return s;
+    },
+    solution: 'PFL first, gain by the meter, then the fader to unity. That order is the whole discipline: the meter proves the level before the audience ever hears the channel.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'is2',
+    title: 'Power What Needs It',
+    task: true,
+    requirePflEach: [1, 2],
+    conditions: [
+      { source: 'vocal', dest: 'pa', min: 0.3 },
+      { source: 'vocal2', dest: 'pa', min: 0.3 },
+    ],
+    topology: { paRig: 'powered' },
+    symptom: 'Two vocal mics, two kinds of mic. Channel 1 is a dynamic and works on its own. Channel 2 is a condenser and is dead until it gets +48V phantom power. Know your source before you bring it up.',
+    hint: 'The dynamic on channel 1 needs no power: PFL, gain, bring it up. The condenser on channel 2 needs +48V first. Switch phantom on while the channel is muted and not in PFL, then treat it like any input.',
+    hints: [
+      { title: 'The dynamic first', target: 'ch1-strip', teach: 'A dynamic mic makes its own signal, no power needed. The everyday workhorse: bring it up the normal way.', text: 'Channel 1: PFL, set the gain by the meter, unmute, fader to unity.', done: (ctx) => !!(hintReaches(ctx, 'vocal', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[1]) },
+      { title: 'Power the condenser', target: 'ch2-phantom', teach: 'A condenser has electronics inside that need +48V phantom power. Until it gets power, the channel meter reads nothing at all. Switch phantom while the channel is muted, so the turn-on thump never reaches the speakers.', text: 'Channel 2 is a condenser. With the channel muted, switch on +48V.', done: (ctx) => !!(ctx.state.channels[1] && ctx.state.channels[1].phantom) },
+      { title: 'Bring in channel 2', target: 'ch2-strip', teach: 'Powered, a condenser is just another input: PFL, gain by the meter, up to unity.', text: 'Channel 2: PFL, set the gain, unmute, fader to unity.', done: (ctx) => !!(hintReaches(ctx, 'vocal2', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[2]) },
+    ],
+    sabotage: (s) => {
+      // System up; both vocal channels down with half-healthy gain, phantom off
+      // everywhere, so the condenser difference is discovered, not assumed.
+      s.channels[0].mute = true; s.channels[0].fader = 0; s.channels[0].gain = window.HEALTHY_GAIN_BY_CH[0] * 0.5; s.channels[0].phantom = false;
+      s.channels[1].mute = true; s.channels[1].fader = 0; s.channels[1].gain = window.HEALTHY_GAIN_BY_CH[1] * 0.5; s.channels[1].phantom = false;
+      s.master.mute = false; s.master.fader = 0.75;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
+      return s;
+    },
+    solution: 'The dynamic came up the normal way. The condenser needed +48V first, switched on while the channel was muted. Know the source: dynamics power themselves, condensers do not.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'is3',
+    title: 'The Direct Boxes',
+    task: true,
+    requirePflEach: [3, 4],
+    conditions: [
+      { source: 'guitar', dest: 'pa', min: 0.3 },
+      { source: 'laptop', dest: 'pa', min: 0.3 },
+    ],
+    topology: { paRig: 'powered' },
+    symptom: 'Instruments do not plug into a mic input on their own: a DI box (direct injection) converts their signal to what the console expects. The bass on channel 3 runs an active DI, the keys on channel 4 a passive one. One of them needs power, and it is not obvious which from the fader.',
+    hint: 'An active DI has electronics inside that need +48V phantom, exactly like a condenser. A passive DI needs nothing. The bass DI on channel 3 is active: phantom on while muted, then bring it up. The keys DI on channel 4 is passive: straight up. The source cards on stage say which is which.',
+    hints: [
+      { title: 'Power the active DI', target: 'ch3-phantom', teach: 'Active DI means electronics inside, and electronics need +48V. Dead until powered, exactly like a condenser. Muted first, then phantom.', text: 'Channel 3 runs an active DI. With the channel muted, switch on +48V.', done: (ctx) => !!(ctx.state.channels[2] && ctx.state.channels[2].phantom) },
+      { title: 'Bring in the bass', target: 'ch3-strip', teach: '', text: 'Channel 3: PFL, set the gain by the meter, unmute, fader to unity.', done: (ctx) => !!(hintReaches(ctx, 'guitar', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[3]) },
+      { title: 'Bring in the keys', target: 'ch4-strip', teach: 'A passive DI is just a transformer in a box: no power, no fuss. Straight up the normal way.', text: 'Channel 4 is a passive DI: PFL, gain, unmute, unity. No power needed.', done: (ctx) => !!(hintReaches(ctx, 'laptop', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[4]) },
+    ],
+    sabotage: (s) => {
+      // System up; both DI channels down, phantom off, half-healthy gain. The
+      // vocals sit set-but-muted so the board reads like a build in progress.
+      s.channels[0].mute = true; s.channels[0].fader = 0.72; s.channels[0].gain = window.HEALTHY_GAIN_BY_CH[0]; s.channels[0].phantom = false;
+      s.channels[1].mute = true; s.channels[1].fader = 0.72; s.channels[1].gain = window.HEALTHY_GAIN_BY_CH[1]; s.channels[1].phantom = true;
+      s.channels[2].mute = true; s.channels[2].fader = 0; s.channels[2].gain = window.HEALTHY_GAIN_BY_CH[2] * 0.5; s.channels[2].phantom = false;
+      s.channels[3].mute = true; s.channels[3].fader = 0; s.channels[3].gain = window.HEALTHY_GAIN_BY_CH[3] * 0.5; s.channels[3].phantom = false;
+      s.master.mute = false; s.master.fader = 0.75;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
+      return s;
+    },
+    solution: 'The active DI on the bass needed +48V, switched on while muted. The passive DI on the keys needed nothing. Active means electronics, and electronics need power.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'is4',
+    title: 'Gained by Ear',
+    task: true,
+    requirePflCheck: true,
+    gainStructure: { refChannel: 4, unity: 0.75, faderTol: 0.06, inputBand: [0.645, 4.566] },
+    conditions: [
+      { source: 'laptop', dest: 'pa', min: 0.3 },
+    ],
+    topology: { paRig: 'powered' },
+    symptom: 'The keys are weak in the mix even though the fader is pushed way past unity. Someone set this channel by ear: the input gain is nearly off, and the fader is cranked to make up for it. That trick also turns up the console\'s own noise. Set the channel right, by the meter.',
+    hint: 'Look at where the level is actually made: the input meter on channel 4 is barely registering while the fader sits near the top. Fix it at the source. PFL the channel, bring the GAIN up until the input meter sits healthy, then bring the fader back down to unity.',
+    hints: [
+      { title: 'Read the strip', target: 'ch4-strip', teach: 'A fader near the top with an input meter near the bottom is the signature of a channel gained by ear. The fader is amplifying a starved signal, and the console\'s own noise comes up with it.', text: 'Check channel 4: input meter low, fader cranked. The problem is at the GAIN.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.input) },
+      { title: 'Gain up, by the meter', target: 'ch4-gain', teach: 'The level belongs at the input. PFL the channel and raise the GAIN until the meter sits strong in the healthy zone.', text: 'PFL channel 4 and bring the GAIN up to the healthy zone.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.input) },
+      { title: 'Fader back to unity', target: 'ch4-fader', teach: 'With the input healthy, the fader comes back to the U mark. Same loudness in the audience, none of the extra noise, and you have your fader travel back.', text: 'Bring the channel 4 fader back down to unity.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.fader) },
+    ],
+    sabotage: (s) => {
+      // The classic by-ear compensation: gain starved, fader slammed. The
+      // channel is audible enough that nothing looks "broken" from the audience,
+      // which is exactly why the meter is the tell.
+      s.channels[3].mute = false; s.channels[3].fader = 1.0; s.channels[3].gain = 0.06; s.channels[3].phantom = false;
+      s.master.mute = false; s.master.fader = 0.75;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
+      return s;
+    },
+    solution: 'The level was being made at the fader instead of the gain. GAIN up until the input meter sat healthy, fader back to unity. The input meter, not the fader position, tells you where a channel\'s level really comes from.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'is5',
+    title: 'The Dead Condenser',
+    task: true,
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'pa', min: 0.3 },
+      { source: 'vocal2', dest: 'pa', min: 0.3 },
+      { source: 'guitar', dest: 'pa', min: 0.3 },
+      { source: 'laptop', dest: 'pa', min: 0.3 },
+    ],
+    topology: { paRig: 'powered' },
+    symptom: 'Mid-set, Vocal 2 drops out of the mix. The band plays on. Channel 2\'s input meter reads nothing while every other channel is moving. Get her back without popping anything.',
+    hint: 'A dead input meter on a live board points at the channel itself, not the mix. Channel 2 is a condenser: check its +48V. Mute the channel before you switch phantom, then unmute. Switching +48V on an open channel pops the system.',
+    hints: [
+      { title: 'Mute, then power', target: 'ch2-phantom', teach: 'The input meter on channel 2 is dead while the rest of the board moves: the channel lost its power source. Condensers die instantly without +48V. Mute the channel first, then switch phantom back on. On an open channel that switch is a pop through every speaker.', text: 'Mute channel 2, then switch +48V back on.', done: (ctx) => !!(ctx.state.channels[1] && ctx.state.channels[1].phantom) },
+      { title: 'Bring her back', target: 'ch2-mute', teach: 'Powered again, the channel is exactly as it was set. Unmute and she is back in the mix.', text: 'Unmute channel 2.', done: (ctx) => !!hintReaches(ctx, 'vocal2', 'pa', 0.3) },
+    ],
+    sabotage: (s) => {
+      // The whole band live and healthy, except channel 2's phantom is off:
+      // a condenser with no +48V reads nothing at all. The one-channel-dead,
+      // meters-as-map hunt, with the pop discipline built into the fix.
+      s.channels[0].mute = false; s.channels[0].fader = 0.72; s.channels[0].gain = window.HEALTHY_GAIN_BY_CH[0]; s.channels[0].phantom = false;
+      s.channels[1].mute = false; s.channels[1].fader = 0.72; s.channels[1].gain = window.HEALTHY_GAIN_BY_CH[1]; s.channels[1].phantom = false;
+      s.channels[2].mute = false; s.channels[2].fader = 0.72; s.channels[2].gain = window.HEALTHY_GAIN_BY_CH[2]; s.channels[2].phantom = true;
+      s.channels[3].mute = false; s.channels[3].fader = 0.72; s.channels[3].gain = window.HEALTHY_GAIN_BY_CH[3]; s.channels[3].phantom = false;
+      s.master.mute = false; s.master.fader = 0.75;
+      s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
+      s.outputs.wedge.on = true; s.outputs.wedge.volume = 0.6; s.outputs.wedge.mute = false;
+      s.outputs.wedge2.on = true; s.outputs.wedge2.volume = 0.6; s.outputs.wedge2.mute = false;
+      return s;
+    },
+    solution: 'Channel 2\'s +48V was off, and a condenser without phantom reads nothing at all. Muted, powered, unmuted: back in the mix without a pop. A dead input meter on a live board means look at the channel, and on a condenser, look at its power first.',
+    defaultInspect: 'pa',
+  },
+];
