@@ -1530,7 +1530,7 @@ window.SCENARIO_LIBRARY = [
   },
   {
     id: 'pa-side-quiet',
-    title: 'One side of the room is quiet',
+    title: 'One side of the audience is quiet',
     symptom: 'The right side of the audience is getting a lot less than the left. Even out the two main speakers so the whole audience hears the same mix.',
     hint: 'This is a PA output level, not a channel. Check the two mains against each other.',
     solution: 'PA Right was turned down well below PA Left, so half the audience got a thin mix. Matching the two main outputs evened out the coverage. Keep your main sides level so the whole audience hears the same thing.',
@@ -1597,10 +1597,10 @@ window.MONITOR_WORLD = [
     title: 'A bit of everyone',
     task: true,
     symptom: 'A wedge is more than one channel. Vocal 1 is already in Wedge 1. Add Vocal 2 and a little keys, both under Vocal 1.',
-    hint: 'Vocal 1 is already in Wedge 1. Add Vocal 2 with AUX 1 on the Vocal 2 channel, and a touch of keys with AUX 1 on the Keyboard channel. Keep both under Vocal 1.',
+    hint: 'Vocal 1 is already in Wedge 1. Add Vocal 2 with AUX 1 on the Vocal 2 channel, and a touch of keys with AUX 1 on the Keys channel. Keep both under Vocal 1.',
     hints: [
       { title: 'Add Vocal 2', target: 'ch2-aux', teach: 'A monitor usually needs a bit of each vocal. AUX 1 on Vocal 2 adds it to Wedge 1, tucked under Vocal 1.', text: 'Add Vocal 2 to Wedge 1: AUX 1 on the Vocal 2 channel.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge', 0.22) },
-      { title: 'Add a little keys', target: 'ch4-aux', teach: 'A little of a tuned instrument helps with pitch. Keep the keys well under the vocals.', text: 'Add a touch of keys: AUX 1 on the Keyboard channel.', done: (ctx) => hintReaches(ctx, 'laptop', 'wedge', 0.18) },
+      { title: 'Add a little keys', target: 'ch4-aux', teach: 'A little of a tuned instrument helps with pitch. Keep the keys well under the vocals.', text: 'Add a touch of keys: AUX 1 on the Keys channel.', done: (ctx) => hintReaches(ctx, 'laptop', 'wedge', 0.18) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
@@ -1608,8 +1608,8 @@ window.MONITOR_WORLD = [
       { source: 'vocal2', dest: 'wedge', min: 0.22 },
       { source: 'laptop', dest: 'wedge', min: 0.18 },
     ],
-    sabotage: (s) => { mwBoard(s); s.channels[0].aux1 = 0.55; return s; },
-    solution: 'Wedge 1 is Vocal 1 up front, with Vocal 2 and a little keys underneath.',
+    sabotage: (s) => { mwBoard(s); s.channels[0].aux1 = 0.6; return s; },
+    solution: 'Wedge 1 is Vocal 1 up front, with Vocal 2 and a little keys underneath. The performer\'s own source leads; everything else sits under it.',
     defaultInspect: 'wedge',
   },
   {
@@ -1621,7 +1621,7 @@ window.MONITOR_WORLD = [
     hints: [
       { title: 'Vocal 2 up front', target: 'ch2-aux', teach: 'Wedge 2 runs off AUX 2. Vocal 2 goes up first and loudest in its own wedge.', text: 'Vocal 2 up front: AUX 2 on the Vocal 2 channel.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge2', 0.35) },
       { title: 'Add Vocal 1', target: 'ch1-aux', teach: '', text: 'Add the other vocal, tucked under this one: AUX 2 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge2', 0.22) },
-      { title: 'A little keys', target: 'ch4-aux', teach: '', text: 'Add a little keys, well under the vocals: AUX 2 on the Keyboard channel.', done: (ctx) => hintReaches(ctx, 'laptop', 'wedge2', 0.18) },
+      { title: 'A little keys', target: 'ch4-aux', teach: '', text: 'Add a little keys, well under the vocals: AUX 2 on the Keys channel.', done: (ctx) => hintReaches(ctx, 'laptop', 'wedge2', 0.18) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
@@ -1652,14 +1652,14 @@ window.MONITOR_WORLD = [
       { source: 'vocal2', dest: 'wedge2', min: 0.35 },
     ],
     sabotage: (s) => mwBoard(s),
-    solution: 'Two wedges, two singers. Vocal 1 up in Wedge 1, Vocal 2 up in Wedge 2. Each performer hears their own monitor.',
+    solution: 'Two wedges, two singers. Vocal 1 up in Wedge 1, Vocal 2 up in Wedge 2. Each performer hears themselves loudest in their own monitor.',
     defaultInspect: 'wedge',
   },
   {
     id: 'mw5',
     title: 'Keep the stage quiet',
     task: true,
-    symptom: 'Wedge 1 is cranked: loud enough to start a volume war and ring. Bring Vocal 1 back to a useful level, loud enough to hear, not blasting.',
+    symptom: 'Wedge 1 is cranked: loud enough to start a volume war and ring with feedback. Bring Vocal 1 back to a useful level, loud enough to hear, not blasting.',
     hint: 'Pull AUX 1 on the Vocal 1 channel down to where it is clear without dominating the stage. If it is ringing, bringing it down stops that too.',
     hints: [
       { title: 'Pull Wedge 1 back', target: 'ch1-aux', teach: 'A quieter stage means less feedback and a cleaner room mix. Bring the send down to where it is still audible, not so far it is gone. As it drops, the ringing stops.', text: 'Bring AUX 1 on the Vocal 1 channel down to a sensible level, not cranked and not gone.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.22 && l <= 0.40; } },
@@ -1680,7 +1680,7 @@ window.MONITOR_WORLD = [
     hint: 'Bring AUX 1 on the Vocal 1 channel up. When it rings, open the Wedge 1 Monitor EQ: the ringing band glows. Pull that band down far enough to stop the ring, no more.',
     hints: [
       { title: 'Push it until it rings', target: 'ch1-aux', teach: '', text: 'Find its limit: push AUX 1 on the Vocal 1 channel until Wedge 1 is strong and starts to ring.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.5) },
-      { title: 'Ring it out', target: 'out-wedge1', teach: 'The ring is one frequency, and that band glows on the Wedge 1 Monitor EQ. Cut just that band, enough to kill the ring, and the level stays up.', text: 'Ring it out: pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
+      { title: 'Ring it out', target: 'out-wedge1', teach: 'The monitor EQ splits the wedge\'s sound into narrow frequency bands, low to high. The ring lives in one of them, and that band glows. Cut just that band, enough to kill the ring, and the level stays up.', text: 'Ring it out: pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
@@ -1693,7 +1693,7 @@ window.MONITOR_WORLD = [
       s.channels[0].highpass = false;
       return s;
     },
-    solution: 'Push Vocal 1 up, then ring it out: pull the glowing band down on the monitor EQ to cut the ringing frequency. A few small cuts buy a lot of level.',
+    solution: 'Push Vocal 1 up, then ring it out: pull the glowing band down on the monitor EQ to cut the ringing frequency. A few small cuts buy a lot of level: when the free headroom is spent, the monitor EQ is how you buy more.',
     defaultInspect: 'wedge',
     // Tighter than the old 0.6 (which let a player cut 40% of the wedge and
     // still "pass" tone — exactly the shotgun-cutting the ring-out teaches

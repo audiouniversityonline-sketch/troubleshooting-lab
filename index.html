@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=84"></script>
+<script src="content.js?v=85"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -2458,8 +2458,8 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       </div>
 
       <div style={{ display: 'flex', gap: 3, marginTop: 1 }}>
-        <BP active={ch.highpass} onClick={() => set({ highpass: !ch.highpass })} label="HPF" color="var(--cool)" width={32} height={12} fontSize={7}
-          tip="High-pass filter. Cuts the low rumble below the useful range of this source."/>
+        {walk('hpf', <BP active={ch.highpass} onClick={() => set({ highpass: !ch.highpass })} label="HPF" color="var(--cool)" width={32} height={12} fontSize={7}
+          tip="High-pass filter. Cuts everything below a set low point. Right for voices; leave it off for bass and kick."/>)}
       </div>
 
       <div data-walk={'ch' + (idx + 1) + '-aux'} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'center', gap: 5, maxWidth: 78 }}>
@@ -2856,7 +2856,7 @@ function DigitalChannelEditor({ ch, idx, srcLabel, pflLevel, onChange, onPhantom
         <div style={tile}>
           <div className="mono" style={tileLabel}>LOW CUT</div>
           <BP active={ch.highpass} onClick={() => set({ highpass: !ch.highpass })} label={ch.highpass ? 'ON · 100 Hz' : 'OFF'} color="var(--cool)" width={66} height={20} fontSize={8}
-            tip="High-pass filter. Rolls off the low rumble below the useful range of this source." />
+            tip="High-pass filter. Cuts everything below a set low point. Right for voices; leave it off for bass and kick." />
         </div>
 
         <div style={tile}>
@@ -8589,7 +8589,7 @@ const hotBtn = {
 // can act. Feedback keeps its own flow (the Monitor EQ auto-opens to the
 // ring-out), so it isn't routed through here. The brief card's status pill
 // still shows the live state after this is dismissed.
-function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset, onClose }) {
+function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset, onClose, passivePA }) {
   if (!open) return null;
   const clipping = clips && clips.length > 0;
   const audienceLive = ((audio?.outputs?.pa_l || 0) + (audio?.outputs?.pa_r || 0)) > 0.05;
@@ -8608,9 +8608,19 @@ function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset,
     ) : cause === 'speaker_patch' ? (
       <>You moved a speaker's line while the <b style={{ color: 'var(--hot)' }}>speaker was live</b>. Plugging or unplugging a powered speaker makes a pop, and the speaker's own amplifier plays it at full level.</>
     ) : cause === 'amp_loud' ? (
-      <>You turned the <b style={{ color: 'var(--hot)' }}>amp on</b> with the master up. Sound hit the speakers at full level the moment they came on. In a real venue that's painfully loud and can damage the system.</>
+      // Rig-aware: on the powered rig there is no amp, the speaker itself is
+      // the thing that switched on. Same physics, right vocabulary.
+      passivePA ? (
+        <>You turned the <b style={{ color: 'var(--hot)' }}>amp on</b> with the master up. Sound hit the speakers at full level the moment they came on. In a real venue that's painfully loud and can damage the system.</>
+      ) : (
+        <>You turned a <b style={{ color: 'var(--hot)' }}>speaker on</b> with the master up. Sound hit it at full level the moment it came on. In a real venue that's painfully loud and can damage the system.</>
+      )
     ) : cause === 'mixer_pop' ? (
-      <>You turned the <b style={{ color: 'var(--hot)' }}>console on</b> while the amp was already on. A console makes an electrical pop when it powers up, and the amp sent that pop straight to the speakers. Muting the master doesn't prevent this, because the pop is electrical, not sound from the mix.</>
+      passivePA ? (
+        <>You turned the <b style={{ color: 'var(--hot)' }}>console on</b> while the amp was already on. A console makes an electrical pop when it powers up, and the amp sent that pop straight to the speakers. Muting the master doesn't prevent this, because the pop is electrical, not sound from the mix.</>
+      ) : (
+        <>You turned the <b style={{ color: 'var(--hot)' }}>console on</b> while speakers were already on. A console makes an electrical pop when it powers up, and the live speakers played it at full volume. Muting the master doesn't prevent this, because the pop is electrical, not sound from the mix.</>
+      )
     ) : cause === 'mixer_off_pop' ? (
       <>You turned the <b style={{ color: 'var(--hot)' }}>console off</b> while speakers were still on. A console makes an electrical pop when it powers down, the same as when it powers up, and the live speakers played that pop at full level. Pulling the master down doesn't prevent this, because the pop is electrical, not sound from the mix.</>
     ) : cause === 'phantom_cans' ? (
@@ -8625,9 +8635,17 @@ function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset,
     ) : cause === 'speaker_patch' ? (
       <>The correct order: <b>turn the speaker off</b> (or its volume all the way down) → move the line → bring the speaker back.</>
     ) : cause === 'amp_loud' ? (
-      <>The correct order: <b>pull the master down</b> → turn the amp on → bring the master back up slowly.</>
+      passivePA ? (
+        <>The correct order: <b>pull the master down</b> → turn the amp on → bring the master back up slowly.</>
+      ) : (
+        <>The correct order: <b>pull the master down</b> → turn the speaker on → bring the master back up slowly.</>
+      )
     ) : cause === 'mixer_pop' ? (
-      <>The correct order: <b>console on first</b>, before any amp. Then master down, amp on, master back up.</>
+      passivePA ? (
+        <>The correct order: <b>console on first</b>, before any amp. Then master down, amp on, master back up.</>
+      ) : (
+        <>The correct order: <b>console on first</b>, before any speaker. Then master down, speakers on, master back up.</>
+      )
     ) : cause === 'mixer_off_pop' ? (
       <>The correct order is power-on in reverse: master fader down → <b>speakers and wedges off</b> → console off last.</>
     ) : cause === 'phantom_cans' ? (
@@ -11180,6 +11198,7 @@ function App() {
       <WarningModal
         open={warnOpen}
         phantomPop={state.phantomPop} clips={clipsStable} paBalanceIssue={paBalanceIssue} audio={audio}
+        passivePA={(state.topology && state.topology.paRig) === 'amp+passive'}
         onReset={restart}
         onClose={() => { warnDismissedSigRef.current = faultSig; setWarnOpen(false); }}
       />
