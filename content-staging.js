@@ -1599,14 +1599,16 @@ window.MONITOR_WORLD = [
     symptom: 'A wedge is more than one channel. Vocal 1 is already in Wedge 1. Add Vocal 2 and a little keys, both under Vocal 1.',
     hint: 'Vocal 1 is already in Wedge 1. Add Vocal 2 with AUX 1 on the Vocal 2 channel, and a touch of keys with AUX 1 on the Keys channel. Keep both under Vocal 1.',
     hints: [
-      { title: 'Add Vocal 2', target: 'ch2-aux', teach: 'A monitor usually needs a bit of each vocal. AUX 1 on Vocal 2 adds it to Wedge 1, tucked under Vocal 1.', text: 'Add Vocal 2 to Wedge 1: AUX 1 on the Vocal 2 channel.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge', 0.22) },
-      { title: 'Add a little keys', target: 'ch4-aux', teach: 'A little of a tuned instrument helps with pitch. Keep the keys well under the vocals.', text: 'Add a touch of keys: AUX 1 on the Keys channel.', done: (ctx) => hintReaches(ctx, 'laptop', 'wedge', 0.18) },
+      { title: 'Add Vocal 2', target: 'ch2-aux', teach: 'A monitor usually needs a bit of each vocal. AUX 1 on Vocal 2 adds it to Wedge 1, tucked under Vocal 1: audible, not competing.', text: 'Add Vocal 2 to Wedge 1, under Vocal 1: AUX 1 on the Vocal 2 channel.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal2; var l = c ? (c.wedge || 0) : 0; return l >= 0.22 && l <= 0.30; } },
+      { title: 'Add a little keys', target: 'ch4-aux', teach: 'A little of a tuned instrument helps with pitch. Keep the keys well under the vocals.', text: 'Add a touch of keys, well under the vocals: AUX 1 on the Keys channel.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.laptop; var l = c ? (c.wedge || 0) : 0; return l >= 0.18 && l <= 0.26; } },
     ],
     involves: [1, 2, 3, 4],
+    // "Under Vocal 1" is graded, not just described: Vocal 1 rests at ~0.33,
+    // so the supporting sends carry ceilings that keep them genuinely under.
     conditions: [
       { source: 'vocal', dest: 'wedge', min: 0.3 },
-      { source: 'vocal2', dest: 'wedge', min: 0.22 },
-      { source: 'laptop', dest: 'wedge', min: 0.18 },
+      { source: 'vocal2', dest: 'wedge', min: 0.22, max: 0.30 },
+      { source: 'laptop', dest: 'wedge', min: 0.18, max: 0.26 },
     ],
     sabotage: (s) => { mwBoard(s); s.channels[0].aux1 = 0.6; return s; },
     solution: 'Wedge 1 is Vocal 1 up front, with Vocal 2 and a little keys underneath. The performer\'s own source leads; everything else sits under it.',
@@ -1620,15 +1622,16 @@ window.MONITOR_WORLD = [
     hint: 'Wedge 2 runs off AUX 2. Bring up AUX 2 on the Vocal 2 channel, then add Vocal 1 and a little keys on AUX 2.',
     hints: [
       { title: 'Vocal 2 up front', target: 'ch2-aux', teach: 'Wedge 2 runs off AUX 2. Vocal 2 goes up first and loudest in its own wedge.', text: 'Vocal 2 up front: AUX 2 on the Vocal 2 channel.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge2', 0.35) },
-      { title: 'Add Vocal 1', target: 'ch1-aux', teach: '', text: 'Add the other vocal, tucked under this one: AUX 2 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge2', 0.22) },
-      { title: 'A little keys', target: 'ch4-aux', teach: '', text: 'Add a little keys, well under the vocals: AUX 2 on the Keys channel.', done: (ctx) => hintReaches(ctx, 'laptop', 'wedge2', 0.18) },
+      { title: 'Add Vocal 1', target: 'ch1-aux', teach: '', text: 'Add the other vocal, tucked under this one: AUX 2 on the Vocal 1 channel.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal; var l = c ? (c.wedge2 || 0) : 0; return l >= 0.22 && l <= 0.30; } },
+      { title: 'A little keys', target: 'ch4-aux', teach: '', text: 'Add a little keys, well under the vocals: AUX 2 on the Keys channel.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.laptop; var l = c ? (c.wedge2 || 0) : 0; return l >= 0.18 && l <= 0.26; } },
     ],
     involves: [1, 2, 3, 4],
+    // Same graded hierarchy as mw2: Vocal 2 leads at 0.35+, the support stays under.
     conditions: [
       { source: 'vocal2', dest: 'pa', min: 0.3 },
       { source: 'vocal2', dest: 'wedge2', min: 0.35 },
-      { source: 'vocal', dest: 'wedge2', min: 0.22 },
-      { source: 'laptop', dest: 'wedge2', min: 0.18 },
+      { source: 'vocal', dest: 'wedge2', min: 0.22, max: 0.30 },
+      { source: 'laptop', dest: 'wedge2', min: 0.18, max: 0.26 },
     ],
     sabotage: (s) => mwBoard(s),
     solution: 'Wedge 2 is Vocal 2 up front, with Vocal 1 and a little keys underneath. Same idea as Wedge 1, on its own send.',
@@ -1657,27 +1660,36 @@ window.MONITOR_WORLD = [
   },
   {
     id: 'mwHpf',
-    title: 'Clean up the lows',
+    title: 'The Low Ring',
     task: true,
-    requireHpfOn: [1, 2],
+    requireHpfOn: [1],
     involves: [1, 2, 3, 4],
     conditions: [
-      { source: 'vocal', dest: 'wedge', min: 0.25 },
-      { source: 'vocal2', dest: 'wedge2', min: 0.25 },
+      { source: 'vocal', dest: 'wedge', min: 0.3 },
     ],
-    symptom: 'Both singers have working monitors, but their wedges carry a layer of low rumble under the voices: stage noise and mic handling, far below anything a voice needs. Clean it up without touching a single send.',
-    hint: 'The high-pass filter (HPF) cuts everything below a set low frequency. A voice lives well above that point, so on a vocal channel it removes only rumble. Engage HPF on channels 1 and 2: the rumble goes, the vocals stay put.',
+    toneGate: 0.85,
+    symptom: 'Vocal 1\'s wedge is growling right now: a low, boomy ring, far below her voice, at a level she actually needs. Stop the ring without giving up her level.',
+    hint: 'Pulling the send down stops the ring but loses her the monitor, and it rings again the moment you bring her back. The ring lives below the voice, so the tool is the high-pass filter (HPF): it cuts everything under a set low point. Engage it on channel 1 and the ring dies with the level still up.',
     hints: [
-      { title: 'HPF the lead vocal', target: 'ch1-hpf', teach: 'A voice lives well above the low end. Everything below it in the wedge is rumble the singer does not need, and energy the wedge wastes reproducing it. The HPF button cuts it off.', text: 'Engage HPF on channel 1.', done: (ctx) => !!(ctx.state.channels[0] && ctx.state.channels[0].highpass) },
-      { title: 'HPF Vocal 2', target: 'ch2-hpf', teach: 'Same move on the other vocal channel.', text: 'Engage HPF on channel 2.', done: (ctx) => !!(ctx.state.channels[1] && ctx.state.channels[1].highpass) },
+      { title: 'Cut the lows, keep the level', target: 'ch1-hpf', teach: 'Pulling the send down stops the ring and loses her the monitor. This ring lives far below her voice, so take the lows out of the loop instead: the high-pass filter (HPF) cuts everything under a set low point, and her voice is not down there.', text: 'Engage HPF on channel 1 and keep the send where she needs it.', done: (ctx) => !!(ctx.state.channels[0] && ctx.state.channels[0].highpass && !ctx.feedback) },
     ],
     sabotage: (s) => {
+      // This wedge's resonance sits at 100 Hz, exactly where an HPF works.
+      // +8.9 dB (2.8x) puts the ring onset at ~0.30 contribution: the level
+      // the win demands cannot be held without the HPF (pull the send down
+      // and it rings again on the way back up). The board loads mid-ring at
+      // ~0.35, inside the band where the HPF's -4.4 dB of low relief kills
+      // even a sustained ring, and with the HPF in there is comfortable room
+      // up to ~0.49 before it can ring again. Every other band sits at -6 dB
+      // and can never ring here, so the ring is always the low one.
       mwBoard(s);
-      s.channels[0].aux1 = 0.6; s.channels[0].highpass = false;
-      s.channels[1].aux2 = 0.6; s.channels[1].highpass = false;
+      const prof = new Array(25).fill(0.5); prof[2] = 2.8;
+      s.outputs.wedge.fbProfile = prof;
+      s.channels[0].aux1 = 0.62;
+      s.channels[0].highpass = false;
       return s;
     },
-    solution: 'HPF engaged on both vocal channels. The wedges lost the rumble and kept the voices. Any channel that is mostly voice earns an HPF in the monitors; on a bass or kick those lows are the instrument, so it stays off there.',
+    solution: 'The ring lived below the voice, so the HPF killed it without touching a single send: everything under the filter point dropped out of the loop, and her voice was never down there. When a wedge rings low and boomy, reach for the HPF before the EQ. On a bass or kick channel those lows are the instrument, so the filter stays off there.',
     defaultInspect: 'wedge',
   },
   {
@@ -1931,6 +1943,35 @@ window.PATCHING = [
       return s;
     },
     solution: 'The Bass and Keys cables were in each other\'s ports. The wrong sound under a fader is how a cross-patch announces itself: check the patch against the Input List and swap it back with both channels muted. Catch it at soundcheck and the show never knows.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'ptSwap',
+    title: 'Pan Left, Hear Right',
+    task: true,
+    requirePatch: true,
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'pa', min: 0.3 },
+    ],
+    symptom: 'Soundcheck. Something is off left to right: solo instruments seem to come from the wrong side of the stage. Prove it with the pan knob, then fix what you find without popping anything.',
+    hint: 'Pan Vocal 1 hard left and watch the stage: the right PA plays it. The two PA lines are crossed at the stage box. Moving a live speaker\'s line pops it, so switch both PA speakers off, swap the two lines back, then bring the speakers up and pan the vocal back to center.',
+    hints: [
+      { title: 'Test it with the pan knob', target: 'ch1-pan', teach: 'PAN places a channel between the left and right PA speakers, which makes it a test tool: pan Vocal 1 hard left and only the left side should play it. Watch the SIG lights on the two PA speakers. If the right side answers, the main lines are crossed.', text: 'Turn PAN on channel 1 hard left and watch which PA side plays it.', done: (ctx) => { const c1 = ctx.state.channels[0]; return !!((c1 && c1.pan <= 0.2) || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass)); } },
+      { title: 'Make it safe, then swap', target: ['out-pa-l', 'out-pa-r'], teach: 'Moving a live speaker\'s line pops it at full level. Switch both PA speakers off first, then drag either PA line onto its correct out port: the two swap back in one move.', text: 'Switch both PA speakers off, then swap the two PA lines at the stage box.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass) },
+      { title: 'Line check the fix', target: ['out-pa-l', 'out-pa-r'], teach: 'Speakers back on, pan back to center, and left is left again. Run the same pan test after any fix: it takes ten seconds.', text: 'Switch the PA back on and return PAN on channel 1 to center.', done: (ctx) => { const c1 = ctx.state.channels[0]; return !!(c1 && c1.pan > 0.4 && c1.pan < 0.6 && ctx.powerStatus && ctx.powerStatus.paStage && hintReaches(ctx, 'vocal', 'pa', 0.3)); } },
+    ],
+    sabotage: (s) => {
+      // A healthy show with the two PA lines crossed at the stage box: PA L
+      // sits on out 2 and PA R on out 1. Sound is fine in mono, both meters
+      // read the same, and nothing looks wrong: only the pan test exposes it.
+      // Swapping a live speaker's line pops (speaker_patch), so the fix is
+      // speakers off, swap, speakers back.
+      mwBoard(s);
+      s.outPatch = { ...s.outPatch, pa_l: 2, pa_r: 1 };
+      return s;
+    },
+    solution: 'The two PA lines were crossed at the stage box. The pan test proves it in seconds: pan a channel hard one way and see which side answers. Both meters read the same on a left-right swap, so the meters never catch this one; the pan knob does. Speakers off, swap, speakers back.',
     defaultInspect: 'pa',
   },
   {
