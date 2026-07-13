@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=80"></script>
+<script src="content.js?v=81"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7163,7 +7163,11 @@ function MobileNotice({ onCapture, optedIn }) {
         background: 'rgba(14,36,21,0.7)', border: '1px solid var(--green)', borderRadius: 10,
         boxShadow: '0 0 0 1px rgba(74,222,128,0.18), 0 8px 28px rgba(0,0,0,0.6)',
       }}>
-        {(TIER === 'member' || OPTED_IN_PARAM || optedIn) ? (
+        {/* sent must win over optedIn: submitting the form flips emailDone
+            (and so the optedIn prop) on the same render, and without this
+            guard the plain notice would replace the YOU'RE IN view before
+            the visitor ever saw the on-screen checklist link. */}
+        {(!sent && (TIER === 'member' || OPTED_IN_PARAM || optedIn)) ? (
           <>
             <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>DESKTOP ONLY</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
