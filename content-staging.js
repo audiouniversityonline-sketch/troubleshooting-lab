@@ -1656,6 +1656,31 @@ window.MONITOR_WORLD = [
     defaultInspect: 'wedge',
   },
   {
+    id: 'mwHpf',
+    title: 'Clean up the lows',
+    task: true,
+    requireHpfOn: [1, 2],
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'wedge', min: 0.25 },
+      { source: 'vocal2', dest: 'wedge2', min: 0.25 },
+    ],
+    symptom: 'Both singers have working monitors, but their wedges carry a layer of low rumble under the voices: stage noise and mic handling, far below anything a voice needs. Clean it up without touching the mix.',
+    hint: 'The high-pass filter (HPF) cuts everything below the useful range of a source. A vocal wedge only needs the voice. Engage HPF on channels 1 and 2: the rumble goes, the vocals stay exactly where they are.',
+    hints: [
+      { title: 'HPF the lead vocal', target: 'ch1-strip', teach: 'A voice lives well above the low end. Everything below it in the wedge is rumble the singer does not need, and energy the wedge wastes reproducing it. The HPF button cuts it off.', text: 'Engage HPF on channel 1.', done: (ctx) => !!(ctx.state.channels[0] && ctx.state.channels[0].highpass) },
+      { title: 'HPF Vocal 2', target: 'ch2-strip', teach: 'Same move on the other vocal channel. Any channel that is mostly voice earns an HPF in the monitors.', text: 'Engage HPF on channel 2.', done: (ctx) => !!(ctx.state.channels[1] && ctx.state.channels[1].highpass) },
+    ],
+    sabotage: (s) => {
+      mwBoard(s);
+      s.channels[0].aux1 = 0.6; s.channels[0].highpass = false;
+      s.channels[1].aux2 = 0.6; s.channels[1].highpass = false;
+      return s;
+    },
+    solution: 'HPF engaged on both vocal channels. The wedges lost the rumble and kept the voices. A monitor send only needs the range its source actually uses.',
+    defaultInspect: 'wedge',
+  },
+  {
     id: 'mw5',
     title: 'Keep the stage quiet',
     task: true,
@@ -1670,6 +1695,64 @@ window.MONITOR_WORLD = [
     ],
     sabotage: (s) => { mwBoard(s); s.channels[0].aux1 = 0.9; return s; },
     solution: 'Pull the send back to a useful level. A quieter stage means less feedback and a cleaner mix.',
+    defaultInspect: 'wedge',
+  },
+  {
+    id: 'mwMoreMe',
+    title: 'More me',
+    task: true,
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'wedge', min: 0.3 },
+      { source: 'vocal2', dest: 'wedge', min: 0, max: 0.12 },
+      { source: 'guitar', dest: 'wedge', min: 0, max: 0.12 },
+      { source: 'laptop', dest: 'wedge', min: 0, max: 0.12 },
+    ],
+    symptom: 'The singer turns around mid-song and mouths "more me." Her wedge is already loud: the whole band is in it. Give her what she is asking for without making the wedge any louder.',
+    hint: 'When a wedge is already working hard, "more me" rarely means push the vocal up. It means everything else comes down. Pull the other sends out of Wedge 1 until her voice sits on top, then add a touch of vocal only if she still needs it.',
+    hints: [
+      { title: 'Everyone else down', target: ['ch2-aux', 'ch3-aux', 'ch4-aux'], teach: 'A monitor mix is headroom you spend. Her voice is buried because the band is spending all of it. Pulling the other sends down makes the voice louder to her without the wedge working any harder.', text: 'Pull AUX 1 down on channels 2, 3, and 4 until they sit under the voice.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; if (!a) return false; var g = (a.guitar && a.guitar.wedge) || 0; var l = (a.laptop && a.laptop.wedge) || 0; var v2 = (a.vocal2 && a.vocal2.wedge) || 0; return g <= 0.12 && l <= 0.12 && v2 <= 0.12; } },
+      { title: 'Voice on top', target: 'ch1-aux', teach: 'Now the voice has room. If she still wants more, a small push finishes the job.', text: 'Set Vocal 1 in Wedge 1 to a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
+    ],
+    sabotage: (s) => {
+      mwBoard(s);
+      s.channels[0].aux1 = 0.35;
+      s.channels[1].aux1 = 0.3;
+      s.channels[2].aux1 = 0.4;
+      s.channels[3].aux1 = 0.4;
+      return s;
+    },
+    solution: '"More me" was everyone else coming down. The voice ended on top, the wedge got no louder, and the stage got cleaner. Push the singer up only after the rest is out of the way.',
+    defaultInspect: 'wedge',
+  },
+  {
+    id: 'mwShare',
+    title: 'One wedge, two singers',
+    task: true,
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'wedge', min: 0.2, max: 0.38 },
+      { source: 'vocal2', dest: 'wedge', min: 0.2, max: 0.45 },
+      { source: 'guitar', dest: 'wedge', min: 0, max: 0.1 },
+      { source: 'laptop', dest: 'wedge', min: 0, max: 0.1 },
+    ],
+    symptom: 'Wedge 2 died during load-in, so both singers work off Wedge 1 tonight. Vocal 1 is set like she owns it, and Vocal 2 cannot hear herself at all. Make one wedge work for two people.',
+    hint: 'A shared wedge is a budget. Two voices fit only if each takes less than it would alone. Bring Vocal 1 down from full, bring Vocal 2 up beside her, and keep the band out of the way.',
+    hints: [
+      { title: 'Vocal 1 makes room', target: 'ch1-aux', teach: 'Set like a solo wedge, her level leaves no space for a second voice. Sharing means she comes down to make room, not because she matters less.', text: 'Bring AUX 1 on the Vocal 1 channel down from cranked to a moderate level.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.2 && l <= 0.38; } },
+      { title: 'Vocal 2 joins', target: 'ch2-aux', teach: 'Now there is budget for the second voice, at a level that sits beside the first.', text: 'Bring AUX 1 on the Vocal 2 channel up next to Vocal 1.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge', 0.2) },
+      { title: 'Keep the band out', target: ['ch3-aux', 'ch4-aux'], teach: 'On a shared vocal wedge, the band is a guest at best. Every bit of bass and keys in it is space the voices no longer have.', text: 'Keep the bass and keys sends low in Wedge 1.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; if (!a) return false; var g = (a.guitar && a.guitar.wedge) || 0; var l = (a.laptop && a.laptop.wedge) || 0; return g <= 0.1 && l <= 0.1; } },
+    ],
+    sabotage: (s) => {
+      mwBoard(s);
+      s.outputs.wedge2.on = false; s.outputs.wedge2.volume = 0;
+      s.channels[0].aux1 = 0.75;
+      s.channels[1].aux1 = 0;
+      s.channels[2].aux1 = 0.25;
+      s.channels[3].aux1 = 0;
+      return s;
+    },
+    solution: 'Vocal 1 came down to make room, Vocal 2 came up beside her, and the band stayed out. A shared wedge is a budget: two voices fit when each takes less than it would alone.',
     defaultInspect: 'wedge',
   },
   {
