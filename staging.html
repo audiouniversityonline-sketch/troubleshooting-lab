@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=160"></script>
+<script src="content-staging.js?v=161"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -2474,9 +2474,9 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
         <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="AUX2" size={26} color="var(--cool)"
           tip={big16 ? "How much of this channel goes to Wedge 2, the bass player's monitor. Doesn't change the PA." : "How much of this channel goes to Wedge 2, the second singer's monitor. Doesn't change the PA."} />
         <K value={ch.aux3 || 0} onChange={(v) => { set({ aux3: v }); if (big16) insp('wedge3'); }} label="AUX3" size={26} color="var(--green)"
-          tip={big16 ? "How much of this channel goes to Wedge 3, the keys player's monitor. Doesn't change the PA." : "AUX 3 send. Spare on this board — it isn't patched to a wedge."} />
+          tip={big16 ? "How much of this channel goes to Wedge 3, the keys player's monitor. Doesn't change the PA." : "AUX 3 send. Spare on this board. It isn't patched to a wedge."} />
         <K value={ch.aux4 || 0} onChange={(v) => { set({ aux4: v }); if (big16) insp('wedge4'); }} label="AUX4" size={26} color="var(--amber)"
-          tip={big16 ? "How much of this channel goes to Wedge 4, the drummer's monitor. Doesn't change the PA." : "AUX 4 send. Spare on this board — it isn't patched to a wedge."} />
+          tip={big16 ? "How much of this channel goes to Wedge 4, the drummer's monitor. Doesn't change the PA." : "AUX 4 send. Spare on this board. It isn't patched to a wedge."} />
       </div>
 
       {walk('pan', <K value={ch.pan} onChange={(v) => set({ pan: v })} label={ch.stereo ? 'BAL' : 'PAN'} size={32} color="var(--ink)" detentAt={0.5}
@@ -2873,9 +2873,9 @@ function DigitalChannelEditor({ ch, idx, srcLabel, pflLevel, onChange, onPhantom
             <K value={ch.aux2} onChange={(v) => { set({ aux2: v }); insp('wedge2'); }} label="WEDGE 2" size={32} color="var(--cool)"
               tip={big16 ? 'How much of this channel goes to Wedge 2, the bass player\'s monitor. Does not change the PA.' : 'How much of this channel goes to Wedge 2, the second singer\'s monitor. Does not change the PA.'} />
             <K value={ch.aux3 || 0} onChange={(v) => { set({ aux3: v }); if (big16) insp('wedge3'); }} label={big16 ? 'WEDGE 3' : 'AUX 3'} size={32} color="var(--green)"
-              tip={big16 ? 'How much of this channel goes to Wedge 3, the keys player\'s monitor. Does not change the PA.' : 'AUX 3 send. Spare on this board — it isn\'t patched to a wedge.'} />
+              tip={big16 ? 'How much of this channel goes to Wedge 3, the keys player\'s monitor. Does not change the PA.' : 'AUX 3 send. Spare on this board. It isn\'t patched to a wedge.'} />
             <K value={ch.aux4 || 0} onChange={(v) => { set({ aux4: v }); if (big16) insp('wedge4'); }} label={big16 ? 'WEDGE 4' : 'AUX 4'} size={32} color="var(--amber)"
-              tip={big16 ? 'How much of this channel goes to Wedge 4, the drummer\'s monitor. Does not change the PA.' : 'AUX 4 send. Spare on this board — it isn\'t patched to a wedge.'} />
+              tip={big16 ? 'How much of this channel goes to Wedge 4, the drummer\'s monitor. Does not change the PA.' : 'AUX 4 send. Spare on this board. It isn\'t patched to a wedge.'} />
           </div>
         </div>
 
@@ -7141,7 +7141,7 @@ function rampParam(param, ctx, target) {
 // tells them to open it on a computer. onCapture sends to Kit like every other
 // gate. NOTE: the "we'll send you the link" promise needs a Kit welcome
 // automation that emails the link; the capture itself works regardless.
-function MobileNotice({ onCapture }) {
+function MobileNotice({ onCapture, optedIn }) {
   const [name, setName] = uS('');
   const [val, setVal] = uS('');
   const [err, setErr] = uS(false);
@@ -7167,7 +7167,7 @@ function MobileNotice({ onCapture }) {
         background: 'rgba(14,36,21,0.7)', border: '1px solid var(--green)', borderRadius: 10,
         boxShadow: '0 0 0 1px rgba(74,222,128,0.18), 0 8px 28px rgba(0,0,0,0.6)',
       }}>
-        {(TIER === 'member' || OPTED_IN_PARAM) ? (
+        {(TIER === 'member' || OPTED_IN_PARAM || optedIn) ? (
           <>
             <div className="mono" style={{ fontSize: 9, color: 'var(--green)', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>DESKTOP ONLY</div>
             <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.55 }}>
@@ -7844,21 +7844,28 @@ function CompletionCta({ open, onClose, tier, onGoPractice }) {
   );
 }
 
-// Free-tier email gate, shown before the first Essentials lesson. Friendly
-// (green, "let's start"), not a lock: there's a "skip for now" link. Sends the
-// address to Kit on submit and lets the viewer straight in either way.
+// Free-tier email gate, shown once at the finale of the free Start Here
+// course. Friendly (green), not a lock: "Not now" skips to the completion
+// CTA. Submit fires the Kit signup, then shows the checklist link right on
+// screen (the delivery that works even for an already-subscribed address,
+// which Kit won't re-email) with a CONTINUE button into Practice Mode.
 function EmailGate({ open, onSubmit, onSkip }) {
   const [name, setName] = uS('');
   const [val, setVal] = uS('');
   const [err, setErr] = uS(false);
   const [nameErr, setNameErr] = uS(false);
+  const [sent, setSent] = uS(false);
   if (!open) return null;
   const go = () => {
     const okName = name.trim().length > 0;
     const okEmail = isValidEmail(val);
     setNameErr(!okName); setErr(!okEmail);
     if (!okName || !okEmail) return;
-    onSubmit(val.trim(), name.trim());
+    // Fire the Kit signup right away so the lead lands even if the tab closes
+    // on the confirmation view. onSubmit (profile capture + the jump to
+    // Practice) runs on CONTINUE.
+    submitToKit(val.trim(), name.trim());
+    setSent(true);
   };
   return (
     <div style={{
@@ -7873,6 +7880,24 @@ function EmailGate({ open, onSubmit, onSkip }) {
       }}>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--green)', letterSpacing: 2, fontWeight: 700 }}>FREE · NEXT STEP</div>
         <div className="display" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>You're ready for Practice Mode</div>
+        {sent ? (
+          <>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
+              Thanks{name.trim() ? ', ' + name.trim() : ''}. Here's your link to the Soundcheck Checklist:
+            </div>
+            <a href={CHECKLIST_URL} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
+              display: 'block', textAlign: 'center', padding: '11px 18px', fontSize: 12, fontWeight: 800, letterSpacing: 1,
+              background: '#16161a', color: 'var(--green)', border: '1px solid #2c9d52', borderRadius: 6,
+              cursor: 'pointer', textDecoration: 'none',
+            }}>OPEN THE SOUNDCHECK CHECKLIST →</a>
+            <button onClick={() => onSubmit(val.trim(), name.trim())} className="mono ui-no-select" style={{
+              width: '100%', padding: '11px 18px', fontSize: 12, fontWeight: 800, letterSpacing: 1,
+              background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+              border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer',
+            }}>CONTINUE TO PRACTICE MODE →</button>
+          </>
+        ) : (
+          <>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
           In Practice Mode, you'll practice finding and solving problems in the sound system. First, we want to send you the Soundcheck Checklist, so you can remember these steps every show. Enter your email and we'll send you the checklist. Then we can continue to Practice Mode and Ear Training Mode.
         </div>
@@ -7907,6 +7932,12 @@ function EmailGate({ open, onSubmit, onSkip }) {
           background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
           border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer',
         }}>TRY PRACTICE MODE →</button>
+        <button onClick={onSkip} className="mono ui-no-select" style={{
+          background: 'none', border: 'none', padding: 0, alignSelf: 'center',
+          fontSize: 10.5, color: 'var(--ink-3)', cursor: 'pointer', textDecoration: 'underline',
+        }}>Not now →</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -7977,9 +8008,9 @@ const WALK_LEAD = 0; // lead vocal channel — the strip the whole tour anchors 
 const WALK_STEPS = [
   {
     act: 'The outputs', title: 'The master section', target: 'master-section',
-    teach: "Every output has one control here in the master section. The MAIN fader is the overall volume to the audience. The mute above it cuts the mains. Each AUX master sets the level of one aux output: AUX 1 to Wedge 1, AUX 2 to Wedge 2, and so on.",
+    teach: "Every output has one control here in the master section. The MAIN fader is the overall volume to the audience. The mute above it cuts the mains. Each AUX master sets the level of one aux output: AUX 1 to Wedge 1, AUX 2 to Wedge 2. AUX 3 and AUX 4 are spare sends on this board.",
     prompt: "Bring the MAIN fader down, then back up. Try an AUX master too.",
-    takeaway: "Every output has its own control in the master section: the MAIN fader for the audience, the mute to cut it, and an AUX master for each wedge.",
+    takeaway: "Every output has its own control in the master section: the MAIN fader for the audience, the mute to cut it, and an AUX master for each aux output.",
     test: (s, b) => Math.abs((s.master.fader ?? 0) - b.mfader) > 0.08
       || Math.abs((s.master.aux1 ?? 0.75) - b.maux1) > 0.05 || Math.abs((s.master.aux2 ?? 0.75) - b.maux2) > 0.05
       || Math.abs((s.master.aux3 ?? 0.75) - b.maux3) > 0.05 || Math.abs((s.master.aux4 ?? 0.75) - b.maux4) > 0.05
@@ -8016,9 +8047,9 @@ const WALK_STEPS = [
   },
   {
     act: 'The aux sends', title: 'The monitor send', target: 'ch1-aux',
-    teach: "The AUX send knobs set how much of this channel goes to each aux output: AUX 1 to Wedge 1, AUX 2 to Wedge 2, AUX 3 to Wedge 3, AUX 4 to Wedge 4. That is how you build a separate mix for each person on stage. Turn AUX 1 up and this channel gets louder in Wedge 1, while the main mix stays the same.",
-    prompt: "Turn the lead vocal's AUX 1 up, and you are listening at Wedge 1. Then try AUX 2, AUX 3, and AUX 4. Each one feeds its own wedge.",
-    takeaway: "Each aux send goes out its own output to its own speaker: AUX 1 to Wedge 1, AUX 2 to Wedge 2, AUX 3 to Wedge 3, AUX 4 to Wedge 4. The room mix stays separate.",
+    teach: "The AUX send knobs set how much of this channel goes to each aux output: AUX 1 to Wedge 1, AUX 2 to Wedge 2. That is how you build a separate mix for each person on stage. Turn AUX 1 up and this channel gets louder in Wedge 1, while the main mix stays the same. AUX 3 and AUX 4 are spare sends on this board.",
+    prompt: "Turn the lead vocal's AUX 1 up, and you are listening at Wedge 1. Then try AUX 2. It feeds Wedge 2.",
+    takeaway: "Each aux send goes out its own output to its own speaker: AUX 1 to Wedge 1, AUX 2 to Wedge 2. The main mix stays separate.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].aux1 ?? 0) - b.aux1) > 0.04
       || Math.abs((s.channels[WALK_LEAD].aux2 ?? 0) - b.aux2) > 0.04
       || Math.abs((s.channels[WALK_LEAD].aux3 ?? 0) - b.aux3) > 0.04
@@ -8205,10 +8236,12 @@ function WalkthroughWrap({ open, onLessons, onExplore }) {
       <div style={{ width: 520, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, padding: '24px 26px', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', gap: 15 }}>
         <div className="display" style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.1 }}>That's the whole console</div>
         <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.55 }}>
-          Now put it together: set up a system from a cold start and run a full show, one step at a time. The first lesson is on us.
+          {TIER === 'member'
+            ? 'Now put it together: set up a system from a cold start and run a full show, one step at a time.'
+            : 'Now put it together: the free Start Here course takes you from a cold start to ringing out feedback, one step at a time.'}
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button onClick={onLessons} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '11px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>START RUN THE SHOW →</button>
+          <button onClick={onLessons} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '11px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c', border: '1px solid #2c9d52', borderRadius: 6, cursor: 'pointer' }}>{TIER === 'member' ? 'START RUN THE SHOW →' : 'START THE FREE COURSE →'}</button>
           <button onClick={onExplore} className="mono ui-no-select" style={{ flex: '1 1 0', padding: '11px 14px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.6, background: '#16161a', color: 'var(--cool)', border: '1px solid #38383e', borderRadius: 6, cursor: 'pointer' }}>▶ EXPLORE THE BOARD</button>
         </div>
       </div>
@@ -8503,7 +8536,7 @@ function FaultCatalog({ open, onClose, tier }) {
         {tier !== 'member' && (
           <div style={{ marginTop: 14, borderTop: '1px solid #2a2a2e', paddingTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 11, color: 'var(--ink)', lineHeight: 1.5, flex: 1, minWidth: 180 }}>
-              The Mixer Tutorial is free. Run the Show, Practice Mode, and Ear Training are part of the Audio University membership.
+              The console tour and the Start Here course are free, plus a taste of Practice Mode and Ear Training. The full lesson library and unlimited practice come with Audio University membership.
             </div>
             <a href={joinUrl('catalog')} target="_blank" rel="noopener noreferrer" className="mono ui-no-select" style={{
               padding: '8px 16px', fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8,
@@ -9241,7 +9274,12 @@ function App() {
     const poweredUp = !level.requirePowerOn || (() => {
       const o = state.outputs;
       const consoleOn = state.mixer ? state.mixer.on !== false : true;
-      const wedgesOn = !!(o.wedge && o.wedge.on) && !!(o.wedge2 && o.wedge2.on) && !!(o.wedge3 && o.wedge3.on) && !!(o.wedge4 && o.wedge4.on);
+      // MX-8 has two wedges; the 16-ch board has four. Only require the wedges
+      // that exist (mirrors the powerStatus checklist), or "Wedges on" can
+      // never pass on the small board where W3/W4 aren't rendered.
+      const wedgesOn = state.big16
+        ? (!!(o.wedge && o.wedge.on) && !!(o.wedge2 && o.wedge2.on) && !!(o.wedge3 && o.wedge3.on) && !!(o.wedge4 && o.wedge4.on))
+        : (!!(o.wedge && o.wedge.on) && !!(o.wedge2 && o.wedge2.on));
       // Passive rig: the power amp is the PA's switch. Active rig: each PA
       // speaker is its own powered box. Check whichever applies.
       const passive = (state.topology && state.topology.paRig) === 'amp+passive';
@@ -9257,11 +9295,12 @@ function App() {
     const poweredDown = !level.requirePowerOff || (() => {
       const o = state.outputs;
       const consoleOff = state.mixer ? state.mixer.on === false : false;
-      // All FOUR wedges (symmetric with poweredUp's wedgesOn and with the
-      // brief's "Wedges off" objective row). Checking only wedge+wedge2 let a
-      // player win Power-Down with Wedge 3 / Wedge 4 still powered on while the
-      // objective row stayed red — the win and the checklist disagreed.
-      const wedgesOff = !(o.wedge && o.wedge.on) && !(o.wedge2 && o.wedge2.on) && !(o.wedge3 && o.wedge3.on) && !(o.wedge4 && o.wedge4.on);
+      // Board-aware like wedgesOn: on the 16-ch board all four wedges must be
+      // off; the MX-8 only has W1/W2 (W3/W4 aren't rendered there, so a state
+      // that left them "on" would otherwise be unwinnable).
+      const wedgesOff = state.big16
+        ? (!(o.wedge && o.wedge.on) && !(o.wedge2 && o.wedge2.on) && !(o.wedge3 && o.wedge3.on) && !(o.wedge4 && o.wedge4.on))
+        : (!(o.wedge && o.wedge.on) && !(o.wedge2 && o.wedge2.on));
       const passive = (state.topology && state.topology.paRig) === 'amp+passive';
       const paOff = passive
         ? !(o.amp && o.amp.on)
@@ -9338,10 +9377,15 @@ function App() {
       const cablesOk = c.vocal === 1 && c.vocal2 === 2 && c.guitar === 3 && c.laptop === 4;
       const fo = state.fanOut || [1, 2, 3, 4];
       const fanOutOk = fo.length === 4 && fo[0] === 1 && fo[1] === 2 && fo[2] === 3 && fo[3] === 4;
+      // MX-8 uses four returns only (L, R, AUX 1 -> Wedge 1, AUX 2 -> Wedge 2).
+      // W3/W4 and the AUX 3/4 returns don't exist on this board; requiring them
+      // here made every requirePatch lesson unwinnable while the on-screen
+      // patchStatus checklist (four slots) showed all green. Keep in lockstep
+      // with patchStatus.
       const ofn = state.outFan || window.DEFAULT_OUT_FAN;
-      const outFanOk = ofn[1] === 'mainL' && ofn[2] === 'mainR' && ofn[3] === 'aux1' && ofn[4] === 'aux2' && ofn[5] === 'aux3' && ofn[6] === 'aux4';
+      const outFanOk = ofn[1] === 'mainL' && ofn[2] === 'mainR' && ofn[3] === 'aux1' && ofn[4] === 'aux2';
       const op = state.outPatch || window.DEFAULT_OUT_PATCH;
-      const outOk = op.pa_l === 1 && op.pa_r === 2 && op.wedge === 3 && op.wedge2 === 4 && op.wedge3 === 5 && op.wedge4 === 6;
+      const outOk = op.pa_l === 1 && op.pa_r === 2 && op.wedge === 3 && op.wedge2 === 4;
       return cablesOk && fanOutOk && outFanOk && outOk;
     })());
     // Start Here: a lesson can require the app sound to be on (requireSound) and
@@ -10704,11 +10748,11 @@ function App() {
     setPathChosen(true);
     dismissTour();
     setWalkPhase(null);
-    // Run the Show is free now, so "Start Run the Show" drops a free viewer into
-    // lesson 1 (the email gate catches them after the first win, not here). We no
-    // longer soft-skip the email gate when the tutorial ends, so that ask still
-    // fires. "Explore" just lands on Free Play.
-    if (route === 'lessons') { loadLevel(0); return; }
+    // Members start Run the Show at lesson 1. Free viewers go to the free
+    // Start Here course (HOME_INDEX); Run the Show is member-locked, so
+    // routing them to lesson 0 would land on a paywall right after the tour
+    // promised them a course. "Explore" just lands on Free Play.
+    if (route === 'lessons') { loadLevel(TIER === 'member' ? 0 : HOME_INDEX); return; }
     loadLevel(SANDBOX_INDEX >= 0 ? SANDBOX_INDEX : 0, undefined, true);
   };
   // Fault-freshness coverage for the picker + debrief (members only). Recomputed
@@ -10918,7 +10962,7 @@ function App() {
     return () => ro.disconnect();
   }, [isMobile]);
 
-  if (isMobile) return <MobileNotice onCapture={captureEmail}/>;
+  if (isMobile) return <MobileNotice onCapture={captureEmail} optedIn={emailDone}/>;
 
   // Verify-each checklist status for the brief. A speaker shows checked if it
   // was already latched (verifiedRef) OR is playing right now, so the display
@@ -12130,7 +12174,7 @@ function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, fe
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div className="mono" style={{ fontSize: 8, color: 'var(--cool)', letterSpacing: 1.4, fontWeight: 700 }}>◎ DEBRIEF</div>
             <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
-              <b style={{ color: 'var(--ink)' }}>{debrief.goalLabel}</b> — done.
+              <b style={{ color: 'var(--ink)' }}>{debrief.goalLabel}</b>. Done.
             </div>
             <div style={{ fontSize: 9.5, color: 'var(--ink-2)', lineHeight: 1.4 }}>
               Hints: {debrief.hints > 0 ? <b style={{ color: 'var(--amber)' }}>{debrief.hints} used</b> : <b style={{ color: 'var(--green)' }}>none</b>}.
