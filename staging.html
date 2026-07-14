@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=180"></script>
+<script src="content-staging.js?v=181"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5032,8 +5032,8 @@ function ChannelAnchors({ state, setState, channelRefs, masterLRef, masterRRef, 
     { ref: masterRRef, x: masterLeft - 45, label: 'MAIN R', dest: 'MAIN · R', color: chipColorFor('mainR') },
     { ref: aux1Ref,    x: masterLeft - 15, label: 'AUX 1',  dest: 'WEDGE 1', color: chipColorFor('aux1') },
     { ref: aux2Ref,    x: masterLeft + 15, label: 'AUX 2',  dest: 'WEDGE 2', color: chipColorFor('aux2') },
-    { ref: aux3Ref,    x: masterLeft + 45, label: 'AUX 3',  dest: 'WEDGE 3', color: chipColorFor('aux3') },
-    { ref: aux4Ref,    x: masterLeft + 75, label: 'AUX 4',  dest: 'WEDGE 4', color: chipColorFor('aux4') },
+    { ref: aux3Ref,    x: masterLeft + 45, label: 'AUX 3',  dest: state.big16 ? 'WEDGE 3' : 'SPARE', color: chipColorFor('aux3') },
+    { ref: aux4Ref,    x: masterLeft + 75, label: 'AUX 4',  dest: state.big16 ? 'WEDGE 4' : 'SPARE', color: chipColorFor('aux4') },
   ];
   outputs.forEach(o => {
     anchors.push(chip('out-' + o.label, o.ref, o.x, o.label, o.dest, o.color));
@@ -8206,7 +8206,11 @@ function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
             ? '⚠ That sent a pop to the speakers. Reset, then mute the channel before touching the cable.'
             : phantomPop.cause === 'speaker_patch'
               ? '⚠ That popped the speaker. Reset, then switch the speaker off before moving its line.'
-              : '⚠ That sent a pop to the speakers. Reset and switch +48V with the channel muted.'}
+              : (phantomPop.cause === 'mixer_pop' || phantomPop.cause === 'mixer_off_pop')
+                ? '⚠ That popped the speakers. Reset, then bring the console up before the speakers and down after them.'
+                : phantomPop.cause === 'amp_loud'
+                  ? '⚠ That hit the speakers at full level. Reset, then pull the master down before you switch a speaker on.'
+                  : '⚠ That sent a pop to the speakers. Reset and switch +48V with the channel muted.'}
         </div>
       )}
 
@@ -8218,7 +8222,7 @@ function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
             {active.text}
           </div>
         </>
-      ) : (
+      ) : popped ? null : (
         <div style={{ fontSize: 12, color: 'var(--green)', lineHeight: 1.5, padding: '7px 10px', background: '#0e2415', border: '1px solid #1e3a2a', borderRadius: 6 }}>
           ✓ That's the whole setup. Nice work.
         </div>
@@ -8367,17 +8371,22 @@ function WalkthroughSpotlight({ target }) {
           // - console jacks + sub-snake heads: tails and lines arrive from
           //   ABOVE, so the arrow points up from BELOW the connection point.
           if (rect.key.indexOf('conn-stage-') === 0) {
+            // Sit to the RIGHT of the port-number column (jack + gap + number,
+            // ~13px past the jack) so the arrow never covers the number the
+            // step copy names. Short (13px) so that on steps targeting
+            // adjacent ports the arrows on 13px-pitch rows don't stack into a
+            // blob. Points left, back at the jack.
             return (
               <div key={i} style={{
-                position: 'fixed', left: rect.left + rect.w + 3,
-                top: rect.top + rect.h / 2 - 11,
-                width: 26, height: 22, pointerEvents: 'none',
+                position: 'fixed', left: rect.left + rect.w + 13,
+                top: rect.top + rect.h / 2 - 6.5,
+                width: 17, height: 13, pointerEvents: 'none',
                 zIndex: rect.inPanel ? 95 : 88,
                 animation: 'walkArrowBobXL 1.1s ease-in-out infinite',
-                filter: 'drop-shadow(0 0 6px rgba(74,222,128,0.85))',
+                filter: 'drop-shadow(0 0 5px rgba(74,222,128,0.9))',
               }}>
-                <svg viewBox="0 0 26 22" width="26" height="22" style={{ display: 'block' }}>
-                  <path d="M0 11 L13 1 L13 6.5 L26 6.5 L26 15.5 L13 15.5 L13 21 Z" fill="var(--green)"/>
+                <svg viewBox="0 0 17 13" width="17" height="13" style={{ display: 'block' }}>
+                  <path d="M0 6.5 L8 1 L8 4 L17 4 L17 9 L8 9 L8 12 Z" fill="var(--green)"/>
                 </svg>
               </div>
             );
