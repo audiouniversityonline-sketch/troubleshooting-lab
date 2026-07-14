@@ -104,13 +104,19 @@
     0%, 100% { box-shadow: 0 0 0 2px rgba(74,222,128,0.22), 0 0 10px 2px rgba(74,222,128,0.30); }
     50%      { box-shadow: 0 0 0 3px rgba(74,222,128,0.50), 0 0 22px 6px rgba(74,222,128,0.55); }
   }
+  /* The walkthrough's pointing arrow — bobs toward a connection point. Cable
+     jacks are too small for a ring; an arrow says "right here" instead. */
+  @keyframes walkArrowBob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(5px); }
+  }
 </style>
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=176"></script>
+<script src="content-staging.js?v=177"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8302,12 +8308,12 @@ function WalkthroughSpotlight({ target }) {
         // the panel too; every other ring stays under it (a ring for a control
         // the panel happens to cover should not draw on top of the paperwork).
         const inPanel = !!el.closest('[data-iolist-card]');
-        boxes.push({ left: r.left, top: r.top, w: r.width, h: r.height, inPanel });
+        boxes.push({ key: k, left: r.left, top: r.top, w: r.width, h: r.height, inPanel });
       });
       setRects((prev) => {
         const same = boxes.length === prev.length && boxes.every((b, i) => {
           const p = prev[i];
-          return p && Math.abs(p.left - b.left) < 0.5 && Math.abs(p.top - b.top) < 0.5 && Math.abs(p.w - b.w) < 0.5 && Math.abs(p.h - b.h) < 0.5 && p.inPanel === b.inPanel;
+          return p && p.key === b.key && Math.abs(p.left - b.left) < 0.5 && Math.abs(p.top - b.top) < 0.5 && Math.abs(p.w - b.w) < 0.5 && Math.abs(p.h - b.h) < 0.5 && p.inPanel === b.inPanel;
         });
         return same ? prev : boxes;
       });
@@ -8329,6 +8335,27 @@ function WalkthroughSpotlight({ target }) {
   return (
     <>
       {rects.map((rect, i) => {
+        // Connection points (cable jacks, data-walk "conn-*") get a bobbing
+        // arrow instead of a ring: the jacks sit in a tight row, so a box
+        // around one blurs into its neighbors, but an arrow says "right here".
+        // Everything else — sources, buttons, list rows — keeps the ring.
+        if (rect.key && rect.key.indexOf('conn-') === 0) {
+          const above = rect.top > 70;
+          return (
+            <div key={i} style={{
+              position: 'fixed', left: rect.left + rect.w / 2 - 11,
+              top: above ? rect.top - 36 : rect.top + rect.h + 10,
+              width: 22, height: 26, pointerEvents: 'none',
+              zIndex: rect.inPanel ? 95 : 88,
+              animation: 'walkArrowBob 1.1s ease-in-out infinite',
+              filter: 'drop-shadow(0 0 6px rgba(74,222,128,0.85))',
+            }}>
+              <svg viewBox="0 0 22 26" width="22" height="26" style={{ display: 'block', transform: above ? 'none' : 'rotate(180deg)' }}>
+                <path d="M11 26 L1 13 L6.5 13 L6.5 0 L15.5 0 L15.5 13 L21 13 Z" fill="var(--green)"/>
+              </svg>
+            </div>
+          );
+        }
         const pad = padFor(rect.h);
         return (
           <div key={i} style={{
@@ -8475,7 +8502,7 @@ function IoListPanel({ open, onClose, state }) {
           <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
         </div>
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.55, marginTop: 8 }}>
-          Every mic and instrument on stage runs through a cable to a channel on the console. The colored dot is that cable's color, so you can trace it to the board. This is the map of what is connected where.
+          Every mic and instrument on stage runs through the snake before it reaches the console. Each channel of the snake is color-coded, so you can trace it from the stage to the board. This is the map of what is connected where.
         </div>
         {sectionTitle('INPUTS · FROM THE STAGE')}
         <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">

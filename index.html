@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=88"></script>
+<script src="content.js?v=89"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8431,7 +8431,7 @@ function IoListPanel({ open, onClose, state }) {
           <button onClick={onClose} className="mono ui-no-select" style={{ padding: '4px 10px', fontSize: 10, fontWeight: 800, color: 'var(--ink-2)', background: '#0a0a0c', border: '1px solid #38383e', borderRadius: 4, cursor: 'pointer' }}>✕ CLOSE</button>
         </div>
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.55, marginTop: 8 }}>
-          Every mic and instrument on stage runs through a cable to a channel on the console. The colored dot is that cable's color, so you can trace it to the board. This is the map of what is connected where.
+          Every mic and instrument on stage runs through the snake before it reaches the console. Each channel of the snake is color-coded, so you can trace it from the stage to the board. This is the map of what is connected where.
         </div>
         {sectionTitle('INPUTS · FROM THE STAGE')}
         <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
