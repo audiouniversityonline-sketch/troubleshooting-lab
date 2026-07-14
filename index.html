@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=87"></script>
+<script src="content.js?v=88"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1229,8 +1229,8 @@ function detectClipping(audio, state) {
   // overdriven by its own volume knob.
   if (audio && audio.outputs) {
     const speakers = [
-      { key: 'pa_l',   label: 'PA L',     fix: 'Turn the PA L volume down.' },
-      { key: 'pa_r',   label: 'PA R',     fix: 'Turn the PA R volume down.' },
+      { key: 'pa_l',   label: 'Main L',   fix: 'Turn the Main L volume down.' },
+      { key: 'pa_r',   label: 'Main R',   fix: 'Turn the Main R volume down.' },
       { key: 'wedge',  label: 'Wedge 1',  fix: 'Turn the Wedge 1 volume down.' },
       { key: 'wedge2', label: 'Wedge 2',  fix: 'Turn the Wedge 2 volume down.' },
       { key: 'wedge3', label: 'Wedge 3',  fix: 'Turn the Wedge 3 volume down.' },
@@ -1437,8 +1437,8 @@ function detectPaBalanceIssue(s) {
       stage: 'pa_balance',
       label: 'PA Balance',
       fix: lActive
-        ? 'PA R is off. Turn it on and match PA L\'s level so the audience hears a balanced stereo mix.'
-        : 'PA L is off. Turn it on and match PA R\'s level so the audience hears a balanced stereo mix.',
+        ? 'Main R is off. Turn it on and match Main L\'s level so the audience hears a balanced stereo mix.'
+        : 'Main L is off. Turn it on and match Main R\'s level so the audience hears a balanced stereo mix.',
     };
   }
   const diff = Math.abs(pl.volume - pr.volume);
@@ -1446,7 +1446,7 @@ function detectPaBalanceIssue(s) {
     return {
       stage: 'pa_balance',
       label: 'PA Balance',
-      fix: `PA L: ${Math.round(pl.volume * 100)}%, PA R: ${Math.round(pr.volume * 100)}%. Match them so the audience hears a balanced stereo mix.`,
+      fix: `Main L: ${Math.round(pl.volume * 100)}%, Main R: ${Math.round(pr.volume * 100)}%. Match them so the audience hears a balanced stereo mix.`,
     };
   }
   return null;
@@ -1512,7 +1512,7 @@ function detectGainStagingMistakes(state, audio, level) {
   if (paLv > 0.90 || paRv > 0.90) {
     mistakes.push({
       kind: 'hot_speakers',
-      message: 'The PA speaker volume is turned up too high. Speaker level gets set once when the system is tuned for the room, then left alone. Changing it mid-show changes how everything sounds and raises the chance of feedback. If one channel is too quiet, fix that channel. If the whole mix needs to be louder, use the master fader.',
+      message: 'A main speaker\'s volume is turned up too high. Speaker level gets set once when the system is tuned for the room, then left alone. Changing it mid-show changes how everything sounds and raises the chance of feedback. If one channel is too quiet, fix that channel. If the whole mix needs to be louder, use the master fader.',
     });
   }
 
@@ -2476,7 +2476,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       {walk('pan', <K value={ch.pan} onChange={(v) => set({ pan: v })} label={ch.stereo ? 'BAL' : 'PAN'} size={32} color="var(--ink)" detentAt={0.5}
         tip={ch.stereo
           ? 'Balance for the stereo channel: favors the left or right side of the PA. Double-click to center.'
-          : 'Pan. Places this channel between the left and right PA speakers. Double-click to center.'} />)}
+          : 'Pan. Places this channel between the left and right main speakers. Double-click to center.'} />)}
 
       <div style={{ display: 'flex', gap: 3 }}>
         {walk('mute', <BP active={ch.mute} onClick={() => set({ mute: !ch.mute })} label="MUTE" color="var(--hot)" width={28} height={14} fontSize={7}
@@ -2876,7 +2876,7 @@ function DigitalChannelEditor({ ch, idx, srcLabel, pflLevel, onChange, onPhantom
         <div style={tile}>
           <div className="mono" style={tileLabel}>{ch.stereo ? 'BALANCE' : 'PAN'}</div>
           <K value={ch.pan} onChange={(v) => set({ pan: v })} label="" size={42} color="var(--ink)" detentAt={0.5}
-            tip={ch.stereo ? 'Balance for the stereo channel. Double-click to center.' : 'Pan between the left and right PA. Double-click to center.'} />
+            tip={ch.stereo ? 'Balance for the stereo channel. Double-click to center.' : 'Pan between the left and right main speakers. Double-click to center.'} />
         </div>
 
         <div style={{ ...tile, flex: 1, minWidth: 96, alignItems: 'flex-start' }}>
@@ -3020,8 +3020,8 @@ function DigitalIORow({ state, setState, channelRefs, masterLRef, masterRRef, au
     inputs.push(jack(el => channelRefs.current[i + 1] = el, label, `→ CH ${i + 1}`, color, 'in-' + i));
   }
   const outputs = [
-    jack(masterLRef, 'MAIN L', 'PA · L', chipColorFor('mainL'), 'o-l'),
-    jack(masterRRef, 'MAIN R', 'PA · R', chipColorFor('mainR'), 'o-r'),
+    jack(masterLRef, 'MAIN L', 'MAIN · L', chipColorFor('mainL'), 'o-l'),
+    jack(masterRRef, 'MAIN R', 'MAIN · R', chipColorFor('mainR'), 'o-r'),
     jack(aux1Ref, 'AUX 1', 'WED 1', chipColorFor('aux1'), 'o-1'),
     jack(aux2Ref, 'AUX 2', 'WED 2', chipColorFor('aux2'), 'o-2'),
     jack(aux3Ref, 'AUX 3', 'WED 3', chipColorFor('aux3'), 'o-3'),
@@ -3576,7 +3576,7 @@ function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePowe
       <div className="mono" style={{
         fontSize: 7, letterSpacing: 1.5, fontWeight: 700,
         color: on ? 'var(--ink-3)' : '#ff8676',
-      }}>PA · {side}</div>
+      }}>MAIN · {side}</div>
       <div style={{
         width: 36, height: 36, borderRadius: '50%',
         background: 'radial-gradient(circle at 40% 35%, #4a4a52 0%, #1a1a1d 60%, #0a0a0c 100%)',
@@ -4645,7 +4645,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
       padding: '8px 12px 10px',
       display: 'flex', flexDirection: 'column', gap: 4,
     }}>
-      <ZoneHeader label="Stage" sublabel="band, sources, PA + wedges · downstage ↓ audience" badge="LIVE AREA" badgeColor="var(--green)"/>
+      <ZoneHeader label="Stage" sublabel="band, sources, mains + wedges · downstage ↓ audience" badge="LIVE AREA" badgeColor="var(--green)"/>
 
       <div style={{ position: 'relative', minHeight: big16 ? 860 : 480 }}>
         {/* DRUM RISER — a labelled platform outline around the whole kit cluster
@@ -4949,7 +4949,7 @@ function ChannelAnchors({ state, setState, channelRefs, masterLRef, masterRRef, 
   // Uniform chip style for every label across the top — inputs and outputs
   // share the same visual so the whole thing reads as one bar.
   const chip = (key, attachRef, x, label, dest, color) => (
-    <div key={key} ref={attachRef}
+    <div key={key} ref={attachRef} data-walk={'conn-' + key}
       className="ui-no-select"
       style={{
         position: 'absolute', top: -28, left: x, transform: 'translateX(-50%)',
@@ -5013,8 +5013,8 @@ function ChannelAnchors({ state, setState, channelRefs, masterLRef, masterRRef, 
   // Six console outputs now: Main L/R plus an aux send per wedge. Spaced tight
   // and centered over the master so the six chips don't overrun its width.
   const outputs = [
-    { ref: masterLRef, x: masterLeft - 75, label: 'MAIN L', dest: 'PA · L',  color: chipColorFor('mainL') },
-    { ref: masterRRef, x: masterLeft - 45, label: 'MAIN R', dest: 'PA · R',  color: chipColorFor('mainR') },
+    { ref: masterLRef, x: masterLeft - 75, label: 'MAIN L', dest: 'MAIN · L', color: chipColorFor('mainL') },
+    { ref: masterRRef, x: masterLeft - 45, label: 'MAIN R', dest: 'MAIN · R', color: chipColorFor('mainR') },
     { ref: aux1Ref,    x: masterLeft - 15, label: 'AUX 1',  dest: 'WEDGE 1', color: chipColorFor('aux1') },
     { ref: aux2Ref,    x: masterLeft + 15, label: 'AUX 2',  dest: 'WEDGE 2', color: chipColorFor('aux2') },
     { ref: aux3Ref,    x: masterLeft + 45, label: 'AUX 3',  dest: 'WEDGE 3', color: chipColorFor('aux3') },
@@ -6649,12 +6649,22 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           // straight UP into the speaker from below (so the wedge cable reads as
           // "straight down, then over"). The one upstage wedge (W4, by the kit)
           // instead leads out and bends across to it.
-          const leadX = c.from.x - c.lead;
-          const railY = (paths.frontRailY || c.from.y) + (c.lead - 12) * 0.5;
           const d = isDragged
             ? window._cableCurve(portEnd, c.to)
             : (c.to.y > 480
-                ? `M ${c.from.x} ${c.from.y} L ${leadX} ${c.from.y} L ${leadX} ${railY} L ${c.to.x} ${railY} L ${c.to.x} ${c.to.y}`
+                // Mains ride the SAME port-ordered lane scheme as the wedges
+                // below (one formula for the whole front row): own vertical
+                // lane out of the box, own floor lane 8px from its neighbours,
+                // then straight up into the speaker bottom. Two formulas here
+                // used to land Main L's floor run 2px from Wedge 1's — a long
+                // stacked pair you could not tell apart (Kyle 2026-07-13).
+                ? window._polyRound([
+                    c.from,
+                    { x: 656 + c.portId * 33, y: c.from.y },
+                    { x: 656 + c.portId * 33, y: 500 + c.portId * 8 },
+                    { x: c.to.x, y: 500 + c.portId * 8 },
+                    c.to,
+                  ], 8)
                 // upstage wedge, up by the drummer. In the 16-ch band stage (big16)
                 // don't cross the field — run the perimeter: out of the box, LEFT
                 // along the OUT lane to a clear vertical corridor (the OH R /
@@ -6679,8 +6689,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                     : window._polyRound([
                         c.from,
                         { x: 656 + c.portId * 33, y: c.from.y },             // step left to this return's own widely-spaced lane
-                        { x: 656 + c.portId * 33, y: 490 + c.portId * 7 },   // straight down, well clear of its neighbours
-                        { x: c.to.x, y: 490 + c.portId * 7 },                // along the floor to the speaker
+                        { x: 656 + c.portId * 33, y: 500 + c.portId * 8 },   // straight down, well clear of its neighbours
+                        { x: c.to.x, y: 500 + c.portId * 8 },                // along the floor to the speaker
                         c.to,                                                 // up into the speaker bottom
                       ], 8)));
           const live = !c.unplugged && !isDragged && retLive(c.portId);
@@ -8249,19 +8259,21 @@ function WalkthroughSpotlight({ target }) {
     const keys = Array.isArray(target) ? target : [target];
     const measure = () => {
       let box = null;
+      let inPanel = false;
       keys.forEach((k) => {
         const el = document.querySelector('[data-walk="' + k + '"]');
         if (!el) return;
         const r = el.getBoundingClientRect();
         if (r.width === 0 && r.height === 0) return;
+        if (el.closest('[data-iolist-card]')) inPanel = true;
         box = box
           ? { left: Math.min(box.left, r.left), top: Math.min(box.top, r.top), right: Math.max(box.right, r.right), bottom: Math.max(box.bottom, r.bottom) }
           : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
       });
       setRect((prev) => {
         if (!box) return prev ? null : prev;
-        const next = { left: box.left, top: box.top, w: box.right - box.left, h: box.bottom - box.top };
-        if (prev && Math.abs(prev.left - next.left) < 0.5 && Math.abs(prev.top - next.top) < 0.5 && Math.abs(prev.w - next.w) < 0.5 && Math.abs(prev.h - next.h) < 0.5) return prev;
+        const next = { left: box.left, top: box.top, w: box.right - box.left, h: box.bottom - box.top, inPanel };
+        if (prev && Math.abs(prev.left - next.left) < 0.5 && Math.abs(prev.top - next.top) < 0.5 && Math.abs(prev.w - next.w) < 0.5 && Math.abs(prev.h - next.h) < 0.5 && prev.inPanel === next.inPanel) return prev;
         return next;
       });
     };
@@ -8280,7 +8292,10 @@ function WalkthroughSpotlight({ target }) {
       width: rect.w + pad * 2, height: rect.h + pad * 2,
       border: '2px solid var(--green)', borderRadius: pad < 7 ? 5 : 8,
       animation: 'walkPulse 1.6s ease-in-out infinite',
-      pointerEvents: 'none', zIndex: 88,
+      // Rings for targets inside the Input List panel (zIndex 90) render above
+      // it; everything else stays under, so a ring never draws over paperwork
+      // that happens to cover its control.
+      pointerEvents: 'none', zIndex: rect.inPanel ? 95 : 88,
     }}/>
   );
 }
@@ -8379,8 +8394,8 @@ function IoListPanel({ open, onClose, state }) {
   // one per performer (Vocal 1, bass, keys, drummer). Only list the wedges the
   // board actually has, with the right owner.
   const outputDefs = [
-    { bus: 'mainL', label: 'Main L', to: 'The left PA speaker (the audience)' },
-    { bus: 'mainR', label: 'Main R', to: 'The right PA speaker (the audience)' },
+    { bus: 'mainL', label: 'Main L', to: 'The left main speaker (the audience)' },
+    { bus: 'mainR', label: 'Main R', to: 'The right main speaker (the audience)' },
     { bus: 'aux1', label: 'Aux 1', to: "Wedge 1 (Vocal 1's monitor)" },
     { bus: 'aux2', label: 'Aux 2', to: s.big16 ? "Wedge 2 (the bass player's monitor)" : "Wedge 2 (Vocal 2's monitor)" },
     ...(s.big16 ? [
@@ -8400,7 +8415,7 @@ function IoListPanel({ open, onClose, state }) {
   };
   const dock = pos ? { left: pos.left, top: pos.top } : { right: 12, top: 64 };
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 80, pointerEvents: 'none' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 90, pointerEvents: 'none' }}>
       <div data-iolist-card style={{
         position: 'fixed', ...dock,
         width: 400, maxWidth: '94vw', maxHeight: '78vh', overflow: 'auto',
@@ -9947,6 +9962,14 @@ function App() {
           (pb.chordOscs || []).forEach(o => o.stop(startTime));
           pb.lfo && pb.lfo.stop(startTime);
         } catch (_) {}
+        // The real recording gets the same treatment as the stage stems: the
+        // CLEAN clip curve (dead linear below the knee) instead of the synth
+        // tanh, which soft-compresses program material even at rest and reads
+        // as pumping on a full mix. The file, peak-normalized to 0.6, now sits
+        // entirely under the knee and passes through untouched; it only
+        // saturates when the channel is genuinely overdriven.
+        if (pb.shaper) pb.shaper.curve = clipCurve;
+        pb.skipEnvelope = true;
         pb.musicSel = musicGain;
         pb.musicSrc = src; pb.musicClipGain = clipGain;
       })
@@ -11100,7 +11123,7 @@ function App() {
     return {
       console: state.mixer ? state.mixer.on !== false : true,
       paStage: passive ? !!(o.amp && o.amp.on) : (!!(o.pa_l && o.pa_l.on) && !!(o.pa_r && o.pa_r.on)),
-      paLabel: passive ? 'Power amp on' : 'PA speakers on',
+      paLabel: passive ? 'Power amp on' : 'Main speakers on',
       // MX-8 has two wedges; the 16-ch board has four. Only require the wedges
       // that exist, or "Wedges on" could never pass on the small board.
       wedges: state.big16
@@ -11109,7 +11132,7 @@ function App() {
       masterDown: state.master.fader <= 0.1,
       wedgesOff: !(o.wedge && o.wedge.on) && !(o.wedge2 && o.wedge2.on) && !(o.wedge3 && o.wedge3.on) && !(o.wedge4 && o.wedge4.on),
       paOff: passive ? !(o.amp && o.amp.on) : (!(o.pa_l && o.pa_l.on) && !(o.pa_r && o.pa_r.on)),
-      paOffLabel: passive ? 'Power amp off' : 'PA speakers off',
+      paOffLabel: passive ? 'Power amp off' : 'Main speakers off',
     };
   })();
 
@@ -11314,6 +11337,16 @@ function App() {
                   <StableSlot levelKey={levelIdx}>
                   {solved
                     ? <SolvedCard level={level} onNext={next} hasNext={levelIdx + 1 < SCENARIOS.length && !isLocked(SCENARIOS[levelIdx + 1])}
+                        courseDone={(() => {
+                          // Solving the LAST lesson of a member course is a course
+                          // pass, and the debrief says so instead of quietly
+                          // rolling into the next course's first lesson.
+                          const names = { MONITOR: 'Monitor World' };
+                          const b = bandOf(level);
+                          if (!names[b]) return null;
+                          const nxt = SCENARIOS[levelIdx + 1];
+                          return (nxt && bandOf(nxt) === b) ? null : names[b];
+                        })()}
                         feedbackLabel={!level.isFeedbackMode ? null
                           : TIER === 'member' ? 'NEXT ROUND →'
                           : etExhausted ? 'JOIN TO KEEP TRAINING →'
@@ -11406,7 +11439,7 @@ function App() {
           const anyPfl = mixerOn && state.channels.some(c => c.solo);
           const listening = anyPfl ? 'pfl' : state.inspect;
           const slots = [
-            { id: 'pa',     label: 'MAIN PA' },
+            { id: 'pa',     label: 'MAINS' },
             { id: 'wedge',  label: 'WEDGE 1' },
             { id: 'wedge2', label: 'WEDGE 2' },
             // W3/W4 only on the 16-ch board.
@@ -11912,7 +11945,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
     else if (c.max != null) pass = lvl <= c.max;
     else if (c.min != null) pass = lvl >= c.min;
     else pass = lvl >= 0.3;
-    const destLabel = c.dest === 'pa' ? 'PA' : c.dest === 'pa_l' ? 'PA · L' : c.dest === 'pa_r' ? 'PA · R' : c.dest === 'wedge' ? 'WEDGE 1' : c.dest === 'wedge2' ? 'WEDGE 2' : c.dest === 'wedge3' ? 'WEDGE 3' : c.dest === 'wedge4' ? 'WEDGE 4' : c.dest.toUpperCase();
+    const destLabel = c.dest === 'pa' ? 'MAINS' : c.dest === 'pa_l' ? 'MAIN · L' : c.dest === 'pa_r' ? 'MAIN · R' : c.dest === 'wedge' ? 'WEDGE 1' : c.dest === 'wedge2' ? 'WEDGE 2' : c.dest === 'wedge3' ? 'WEDGE 3' : c.dest === 'wedge4' ? 'WEDGE 4' : c.dest.toUpperCase();
     const srcLabel = window.SOURCES[c.source]?.label || c.source;
     const targetTxt = c.max != null && c.min == null ? `≤ ${Math.round(c.max * 100)}%` :
                       c.min != null && c.max == null ? `≥ ${Math.round(c.min * 100)}%` :
@@ -11943,7 +11976,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   }
   if (level.requirePowerOn && powerStatus) {
     extras.push({ label: 'Console powered on', pass: !!powerStatus.console, color: 'var(--cool)' });
-    extras.push({ label: powerStatus.paLabel || 'PA on', pass: !!powerStatus.paStage, color: 'var(--cool)' });
+    extras.push({ label: powerStatus.paLabel || 'Main speakers on', pass: !!powerStatus.paStage, color: 'var(--cool)' });
     extras.push({ label: 'Wedges on', pass: !!powerStatus.wedges, color: 'var(--cool)' });
   }
   if (level.requireZeroed && zeroStatus) {
@@ -11952,7 +11985,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   if (level.requirePowerOff && powerStatus) {
     if (!level.requireZeroed) extras.push({ label: 'Master fader down', pass: !!powerStatus.masterDown, color: 'var(--cool)' });
     extras.push({ label: 'Wedges off', pass: !!powerStatus.wedgesOff, color: 'var(--cool)' });
-    extras.push({ label: powerStatus.paOffLabel || 'PA speakers off', pass: !!powerStatus.paOff, color: 'var(--cool)' });
+    extras.push({ label: powerStatus.paOffLabel || 'Main speakers off', pass: !!powerStatus.paOff, color: 'var(--cool)' });
     extras.push({ label: 'Console off (last)', pass: !powerStatus.console, color: 'var(--cool)' });
   }
   if (level.verifyEach && verifyStatus) {
@@ -12181,7 +12214,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   );
 }
 
-function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, feedbackGuidedDone, coaching, debrief, onPracticeAgain, onGoFeedback, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak }) {
+function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, feedbackGuidedDone, coaching, debrief, onPracticeAgain, onGoFeedback, onGoEssentials, practiceFreeLeft, onCopyRepLink, repCopied, rank, rankClean, rankUp, liveShow, dropouts, coverage, streak, courseDone }) {
   return (
     <div style={{
       background: 'linear-gradient(180deg,#0e2415 0%, #0e1a14 100%)',
@@ -12366,13 +12399,27 @@ function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, fe
           </>)}
         </>
       ) : hasNext ? (
-        <button onClick={onNext} className="mono ui-no-select" style={{
-          width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
-          background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
-          border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
-        }}>NEXT LEVEL →</button>
+        <>
+          {courseDone && (
+            <div className="mono" style={{ width: '100%', padding: '7px 10px', fontSize: 10, fontWeight: 800, letterSpacing: 1, background: 'rgba(74,222,128,0.12)', color: 'var(--green)', border: '1px solid var(--green)', borderRadius: 3, textAlign: 'center' }}>
+              ✓ YOU PASSED THE {courseDone.toUpperCase()} COURSE
+            </div>
+          )}
+          <button onClick={onNext} className="mono ui-no-select" style={{
+            width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+            background: 'linear-gradient(180deg, var(--green), #2c9d52)', color: '#0a0a0c',
+            border: '1px solid #2c9d52', borderRadius: 3, cursor: 'pointer',
+          }}>{courseDone ? 'NEXT COURSE →' : 'NEXT LEVEL →'}</button>
+        </>
       ) : (
-        <div className="mono" style={{ width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1, background: '#0a0a0c', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, textAlign: 'center' }}>ALL LEVELS COMPLETE</div>
+        <>
+          {courseDone && (
+            <div className="mono" style={{ width: '100%', padding: '7px 10px', fontSize: 10, fontWeight: 800, letterSpacing: 1, background: 'rgba(74,222,128,0.12)', color: 'var(--green)', border: '1px solid var(--green)', borderRadius: 3, textAlign: 'center' }}>
+              ✓ YOU PASSED THE {courseDone.toUpperCase()} COURSE
+            </div>
+          )}
+          <div className="mono" style={{ width: '100%', padding: '6px 10px', fontSize: 10, fontWeight: 700, letterSpacing: 1, background: '#0a0a0c', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, textAlign: 'center' }}>ALL LEVELS COMPLETE</div>
+        </>
       )}
       {onCopyRepLink && (
         <button onClick={onCopyRepLink} className="mono ui-no-select" title="Copy a link that loads this exact problem for anyone" style={{
