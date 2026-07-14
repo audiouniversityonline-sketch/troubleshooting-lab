@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=89"></script>
+<script src="content.js?v=90"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8151,7 +8151,11 @@ function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
 
       {popped && (
         <div style={{ fontSize: 11, color: 'var(--hot)', lineHeight: 1.45, padding: '6px 9px', background: 'rgba(255,70,48,0.1)', border: '1px solid rgba(255,70,48,0.4)', borderRadius: 6 }}>
-          ⚠ That sent a pop to the speakers. Reset and switch +48V with the channel muted.
+          {(phantomPop.cause === 'plug' || phantomPop.cause === 'patch_live')
+            ? '⚠ That sent a pop to the speakers. Reset, then mute the channel before touching the cable.'
+            : phantomPop.cause === 'speaker_patch'
+              ? '⚠ That popped the speaker. Reset, then switch the speaker off before moving its line.'
+              : '⚠ That sent a pop to the speakers. Reset and switch +48V with the channel muted.'}
         </div>
       )}
 

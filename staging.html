@@ -120,7 +120,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=178"></script>
+<script src="content-staging.js?v=179"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4266,7 +4266,7 @@ function SubSnakeHead({ label, items, subJackRefs, outRef }) {
               <div style={{ width: 3, height: 3, borderRadius: '50%', background: it.empty ? '#222' : it.color }}/>
             </div>
             <div className="mono" style={{ fontSize: 5, color: '#c8c8d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>{it.empty ? '—' : it.label}</div>
-            <div className="mono" style={{ fontSize: 5, color: it.localCh === it.stageCh ? 'var(--ink-3)' : 'var(--amber)', fontWeight: 700, lineHeight: 1.1 }}>{it.empty ? '' : '→' + it.stageCh}</div>
+            <div className="mono" style={{ fontSize: 5, color: it.localCh === it.stageCh ? 'var(--ink-3)' : 'var(--amber)', fontWeight: 700, lineHeight: 1.1 }}>{it.empty ? '' : (it.stageCh ? '→' + it.stageCh : 'loose')}</div>
           </div>
         ))}
       </div>
@@ -8191,7 +8191,11 @@ function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
 
       {popped && (
         <div style={{ fontSize: 11, color: 'var(--hot)', lineHeight: 1.45, padding: '6px 9px', background: 'rgba(255,70,48,0.1)', border: '1px solid rgba(255,70,48,0.4)', borderRadius: 6 }}>
-          ⚠ That sent a pop to the speakers. Reset and switch +48V with the channel muted.
+          {(phantomPop.cause === 'plug' || phantomPop.cause === 'patch_live')
+            ? '⚠ That sent a pop to the speakers. Reset, then mute the channel before touching the cable.'
+            : phantomPop.cause === 'speaker_patch'
+              ? '⚠ That popped the speaker. Reset, then switch the speaker off before moving its line.'
+              : '⚠ That sent a pop to the speakers. Reset and switch +48V with the channel muted.'}
         </div>
       )}
 
@@ -9236,6 +9240,10 @@ function App() {
   // of the attempt, so the student verifies them one at a time. Reset on
   // level change. Keyed by dest (pa_l, pa_r, wedge, wedge2).
   const verifiedRef = uR({});
+  // Signature of the output patch the verify latches were earned against. A
+  // repatch invalidates every check made before it: a speaker "verified"
+  // through the wrong line was never verified.
+  const verifiedPatchSigRef = uR(null);
 
   // Per-source amplitude envelope state. Updated every animation frame so
   // meters bounce and audio breathes like a real signal. The ref is read by
@@ -9447,11 +9455,21 @@ function App() {
     // state change that completes the last check, so there's no one-frame lag.
     let verifiedOk = true;
     if (level.verifyEach && level.verifyEach.length) {
+      // Moving the output patch clears every latch: whatever played before the
+      // move played through the old lines, so those checks no longer stand.
+      const patchSig = JSON.stringify([state.outPatch || null, state.outFan || null]);
+      if (verifiedPatchSigRef.current !== null && verifiedPatchSigRef.current !== patchSig) {
+        verifiedRef.current = {};
+      }
+      verifiedPatchSigRef.current = patchSig;
       const va = window.computeAudio(state);
       for (const v of level.verifyEach) {
         const cont = va.contributions[v.source];
         const lvl = cont ? (v.dest === 'pa' ? Math.max(cont.pa_l, cont.pa_r) : (cont[v.dest] || 0)) : 0;
-        if (lvl >= (v.min != null ? v.min : 0.25)) verifiedRef.current[v.dest] = true;
+        // othersMax makes a check one-sided: Main L only counts as checked
+        // while Main R is silent, so a center-pan blast cannot tick both.
+        const oneSided = !v.othersMax || Object.keys(v.othersMax).every((k) => (cont ? (cont[k] || 0) : 0) <= v.othersMax[k]);
+        if (lvl >= (v.min != null ? v.min : 0.25) && oneSided) verifiedRef.current[v.dest] = true;
         if (!verifiedRef.current[v.dest]) verifiedOk = false;
       }
     }
@@ -9526,7 +9544,10 @@ function App() {
     // set of channels (requireHpfOn: [1, 2]). State-checked like the mute or
     // phantom switches: the HPF button is either in or out.
     const hpfOk = !level.requireHpfOn || level.requireHpfOn.every((ch) => { const c = state.channels[ch - 1]; return !!(c && c.highpass); });
-    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk;
+    // Output-check lesson: the test ends with every listed speaker switched
+    // back on. Stops a "solved" board whose mains never came back.
+    const outputsOnOk = !level.requireOutputsOn || level.requireOutputsOn.every((k) => { const o = state.outputs[k]; return !!(o && o.on); });
+    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk && outputsOnOk;
     // Mirror the live, truly-winnable state so the sign-off button can tell a
     // correct "system is healthy" call from a premature one.
     wonRef.current = won && !blocked;
@@ -10515,6 +10536,7 @@ function App() {
     if (i !== levelIdx) hasPoppedRef.current = false;
     // Reset the per-speaker verify latches so each attempt starts unchecked.
     verifiedRef.current = {};
+    verifiedPatchSigRef.current = null;
     // Fresh attempt: move counter and hint state restart, and the diff
     // baseline jumps to the new start state so the load itself isn't a move.
     movesRef.current = 0;
