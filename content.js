@@ -135,8 +135,8 @@ window.LEVELS = [
     //      channels, matched by color.
     //   3. RETURN TAILS - the console outputs into snake returns 1-6 at FOH
     //      (MAIN L -> 1, MAIN R -> 2, AUX 1 -> 3, AUX 2 -> 4).
-    //   4. SPEAKER LINES - each speaker's line into its numbered out port
-    //      at the stage box (PA L <- 5, PA R <- 6, W1 <- 7, W2 <- 8).
+    //   4. SPEAKER LINES - each speaker picks up its return channel at the
+    //      stage box (Main L <- 1, Main R <- 2, Wedge 1 <- 3, Wedge 2 <- 4).
     // EVERYTHING starts disconnected (a brand-new system is unconnected,
     // never crosspatched). Win = requirePatch (four identity checks); no
     // signal conditions. The rig stays off the whole time. The next lesson
@@ -174,7 +174,7 @@ window.LEVELS = [
       s.outputs.wedge4 = { ...s.outputs.wedge4, on: false, volume: 0 };
       return s;
     },
-    solution: 'Everything connected per the I/O list: inputs on snake 1 to 4, outputs on the return side 1 to 6, every color matched. The system is connected and still off. Next, power on.',
+    solution: 'Everything connected per the Input List: inputs on snake 1 to 4, outputs on the return side 1 to 4, every color matched. The system is connected and still off. Next, power on.',
     defaultInspect: 'pa',
   },
   {
@@ -254,7 +254,7 @@ window.LEVELS = [
     symptom: 'The system is on and the console is fully zeroed, with your playback connected. Set your gain structure start to finish: check it in PFL, set the gain, bring the faders to unity, then set the room level with the PA until the loudness meter sits in the green target band.',
     hint: 'Press PFL on the playback to hear it in your headphones. Set the gain so the meter sits in the healthy zone. Disengage PFL, unmute the playback and the master, and bring both faders up to unity. Then bring up the main speaker volume until the loudness meter reaches the green target band. A live show is louder than the all-day-safe line, so that band sits in the amber part of the meter on purpose.',
     hints: [
-      { title: 'Check it in PFL', target: 'ch7-pfl', teach: 'PFL lets you hear and meter a channel in your headphones before the audience does. Always set a level in PFL first.', text: 'PFL the playback so you can set it in your headphones first.', done: (ctx) => ctx.pflChecked || (ctx.state.channels[6] && ctx.state.channels[6].solo) },
+      { title: 'Check it in PFL', target: 'ch7-pfl', teach: 'PFL (pre-fade listen) lets you hear and meter a channel in your headphones before the audience does. Always set a level in PFL first.', text: 'PFL the playback so you can set it in your headphones first.', done: (ctx) => ctx.pflChecked || (ctx.state.channels[6] && ctx.state.channels[6].solo) },
       { title: 'Set the gain', target: 'ch7-gain', teach: 'Gain sets how hard the source hits the console. You want it strong on the meter with a little room to spare, set by the meter, not by ear.', text: 'Set the GAIN so the input meter sits in the healthy zone.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.input },
       { title: 'Faders to unity', target: ['ch7-fader', 'master-fader'], teach: 'With the gain set, the channel and master faders live at unity, the U mark. That is where they are built to run.', text: 'Disengage PFL, unmute the playback and the master, and bring both faders up to unity.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.fader && ctx.gainStatus.master },
       { title: 'Set the room level', target: ['out-pa-l', 'out-pa-r'], teach: 'Gain and faders are set, so set the room volume with the PA, not by pushing a fader. A show sits above the all-day-safe line by nature, so aim for the green target band on the loudness meter, not the quietest reading.', text: 'Bring the main speaker volume up until the loudness meter sits in the green target band.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.65; } },
@@ -291,7 +291,7 @@ window.LEVELS = [
       { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 plays' },
     ],
     conditions: [],
-    symptom: 'The PA is set. Now bring up both monitor wedges. AUX 1 feeds Wedge 1, AUX 2 feeds Wedge 2. Each wedge checks off once it plays and stays checked.',
+    symptom: 'The mains are set. Now bring up both monitor wedges. AUX 1 feeds Wedge 1, AUX 2 feeds Wedge 2. Each wedge checks off once it plays and stays checked.',
     hint: 'Turn up each AUX send on the playback channel and bring up that wedge on stage until it plays: AUX 1 for Wedge 1, AUX 2 for Wedge 2.',
     hints: [
       { title: 'Wedge 1', target: 'ch7-aux', teach: 'A wedge only plays what you send it. AUX 1 is the feed to Wedge 1, and the wedge has its own volume on stage.', text: 'Wedge 1: turn up AUX 1 on the playback, then raise the Wedge 1 volume until it plays.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
@@ -442,8 +442,8 @@ window.LEVELS = [
     // For now HPF clears it (drops the low-end loop gain ~40% while the wedge
     // level stays up). NEXT TURN: add an EQ on the aux outputs as the real,
     // surgical fix; HPF is the stopgap so the level is solvable today.
-    symptom: 'Turn Vocal 1 up in Wedge 1. Push it to a strong level and the wedge starts to ring: that is feedback. Get the level up and ring the feedback out on the monitor EQ.',
-    hint: 'Turn up AUX 1 on the Vocal 1 channel to raise it in Wedge 1. When it rings, look at the Wedge 1 monitor EQ: the ringing frequency glows. Pull that band down far enough to stop the ring. Cuts cost a little level, so keep them small.',
+    symptom: 'Turn Vocal 1 up in Wedge 1. Push it to a strong level and the wedge starts to ring: that is feedback. Get the level up and ring the feedback out on the Monitor EQ.',
+    hint: 'Turn up AUX 1 on the Vocal 1 channel to raise it in Wedge 1. When it rings, look at the Wedge 1 Monitor EQ: the ringing frequency glows. Pull that band down far enough to stop the ring. Cuts cost a little level, so keep them small.',
     hints: [
       { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'As you send more level from a microphone to a wedge, it can start to ring. That is called microphone feedback.', text: 'Bring AUX 1 on the Vocal 1 channel up until Wedge 1 reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
       { title: 'Ring it out', target: 'out-wedge1', teach: 'Feedback rings at one frequency. On the wedge Monitor EQ that band glows. Pull just that band down a touch and the ring stops while the level stays up.', text: 'When it rings, pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
@@ -462,7 +462,7 @@ window.LEVELS = [
       // cranked, kept), with a little vocal in it but not enough. Pushing AUX 1
       // up to give her what she wants crosses into feedback. Her wedge rings at
       // its resonant band (wedge.ringBand, mid-high); HPF won't fix that, so the
-      // student has to ring it out on the monitor EQ. Wedge volume kept with
+      // student has to ring it out on the Monitor EQ. Wedge volume kept with
       // headroom so the loud send doesn't clip while she's still ringing.
       s.master.fader = 0.75; s.master.mute = false;
       s.outputs.pa_l.volume = 0.6; s.outputs.pa_r.volume = 0.6;
@@ -472,7 +472,7 @@ window.LEVELS = [
       s.channels[0].highpass = false;
       return s;
     },
-    solution: 'Turn Vocal 1 up in Wedge 1, then ring it out: pull the glowing band down on the monitor EQ to cut the ringing frequency.',
+    solution: 'Turn Vocal 1 up in Wedge 1, then ring it out: pull the glowing band down on the Monitor EQ to cut the ringing frequency.',
     defaultInspect: 'wedge',
   },
   {
@@ -571,7 +571,7 @@ window.LEVELS = [
     conditions: [],
     topology: { paRig: 'powered' },
     symptom: 'Zero the console back to default, then shut down in reverse order: speakers and wedges off first, console off last.',
-    hint: 'Work down each strip: gain down, aux sends down, HPF off, +48V off, pan back to center, fader down, mute on. Then the master: all the way down and muted. Power-off is power-on in reverse: the speakers go off first and the console goes off last. A console makes a pop when it switches off, and any powered speaker still on will play that pop.',
+    hint: 'Work down each strip: gain down, aux sends down, HPF (high-pass filter) off, +48V off, pan back to center, fader down, mute on. Then the master: all the way down and muted. Power-off is power-on in reverse: the speakers go off first and the console goes off last. A console makes a pop when it switches off, and any powered speaker still on will play that pop.',
     hints: [
       { title: 'Zero the console', target: null, teach: 'You leave the desk the way you would want to find it. Every control back to its resting place so the next power-up is predictable.', text: 'Zero the console: gains, sends, faders down; mute; pans centered; HPF and +48V off.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus.slice(0, 7).every((z) => z.pass) },
       { title: 'Drop the master', target: 'master-fader', teach: 'The main output comes all the way down and muted, so nothing can sneak out while you shut the rest down.', text: 'Then the master: all the way down and muted.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus[7] && ctx.zeroStatus[7].pass },
@@ -624,19 +624,21 @@ window.START_HERE = [
       { title: 'Bring up the main mix', target: 'master-fader', teach: 'The MAIN fader is your overall level to the audience.', text: 'Bring the MAIN fader up so the band fills the room.', done: (ctx) => ctx.state.master && !ctx.state.master.mute && ctx.state.master.fader >= 0.6 },
     ],
     conditions: [
-      { source: 'vocal2', dest: 'pa', min: 0.2 },
       { source: 'guitar', dest: 'pa', min: 0.2 },
       { source: 'laptop', dest: 'pa', min: 0.2 },
     ],
     sabotage: (s) => {
-      // Band up and ready, but the mains are all the way down and the app sound
-      // is off. The two moves: sound on, then bring the main fader up.
+      // Instruments up and ready, but the mains are all the way down and the app
+      // sound is off. The two moves: sound on, then bring the main fader up. The
+      // vocals stay down until lesson 103, so this first win is bass + keys only.
       s.master.fader = 0; s.master.mute = false;
       s.outputs.pa_l.volume = 0.65; s.outputs.pa_r.volume = 0.65;
       s.channels[2].phantom = true; // active DI on bass, powered so it plays
+      s.channels[0].mute = true; s.channels[0].fader = 0;
+      s.channels[1].mute = true; s.channels[1].fader = 0; s.channels[1].phantom = false;
       return s;
     },
-    solution: 'Sound on, MAIN fader up. The whole band is in the room. The main fader is your overall level to the audience.',
+    solution: 'Sound on, MAIN fader up. The band comes up in the mains. The main fader is your overall level to the audience.',
     defaultInspect: 'pa',
   },
   {
@@ -675,11 +677,11 @@ window.START_HERE = [
     // Both vocals start muted with faders down. Vocal 1 is guided step by step;
     // Vocal 2 is the same routine on the student's own recall, plus its condenser
     // needs +48V phantom first (dead until powered). Win = both vocals in the PA.
-    symptom: 'Neither vocal is in yet: both are muted with their faders down. Bring Vocal 1 in the right way (PFL, set the gain, then disengage PFL, unmute, and bring the fader up), then do the same for Vocal 2. Vocal 2 is a condenser, so it needs +48V phantom power first.',
+    symptom: 'Neither vocal is in yet: both are muted with their faders down. Bring Vocal 1 in the right way: PFL (pre-fade listen) to check it, set the gain, then disengage PFL, unmute, and bring the fader up. Then do the same for Vocal 2. Vocal 2 is a condenser, so it needs +48V phantom power first.',
     hint: 'Vocal 1: press PFL, set the gain on the meter, then disengage PFL, unmute, and bring the fader to unity. Then Vocal 2 the same way, but turn its +48V phantom on first, while it is muted.',
     hints: [
-      { title: 'Check Vocal 1 in PFL', target: 'ch1-pfl', teach: 'PFL stands for pre-fader listen. It lets you hear a channel in your headphones without sending it to the audience.', text: 'Press PFL on Vocal 1 to hear it in your headphones.', done: (ctx) => (ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) },
-      { title: 'Set Vocal 1 gain', target: 'ch1-gain', teach: 'The gain sets the input level.', text: 'With Vocal 1 in PFL, set the gain knob and watch the meter, aiming for a strong level without seeing red.', done: (ctx) => ctx.state.channels[0] && ctx.state.channels[0].gain >= 0.4 },
+      { title: 'Check Vocal 1 in PFL', target: 'ch1-pfl', teach: 'PFL stands for pre-fade listen. It lets you hear a channel in your headphones without sending it to the audience.', text: 'Press PFL on Vocal 1 to hear it in your headphones.', done: (ctx) => (ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) },
+      { title: 'Set Vocal 1 gain', target: 'ch1-gain', teach: 'The gain sets the input level.', text: 'With Vocal 1 in PFL, set the gain knob and watch the meter, bringing the level up until the peaks sit near the top of the meter without hitting the very top.', done: (ctx) => ctx.state.channels[0] && ctx.state.channels[0].gain >= 0.4 },
       { title: 'Bring Vocal 1 in', target: ['ch1-fader', 'ch1-mute', 'ch1-pfl'], teach: '', text: 'Disengage PFL, unmute Vocal 1, and bring the fader up to unity.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
       { title: 'Power Vocal 2 (+48V)', target: 'ch2-phantom', teach: 'Vocal 2 is a condenser mic. It needs +48V phantom power to work.', text: 'Switch +48V on for Vocal 2 (channel 2) while the channel is muted (this protects the speakers).', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom },
       { title: 'Bring Vocal 2 in', target: 'ch2-strip', teach: '', text: 'Now do the same thing on Vocal 2: PFL, set the gain, disengage PFL, unmute, and bring up the fader.', done: (ctx) => hintReaches(ctx, 'vocal2', 'pa', 0.3) },
@@ -734,8 +736,8 @@ window.START_HERE = [
     // up, the wedge crosses the ring threshold and feeds back. To win: vocal
     // strong in the wedge (>= 0.8) AND no feedback, so pulling the send back
     // down will not do it. The fix is the monitor EQ: cut the glowing band.
-    symptom: 'Turn Vocal 1 up in Wedge 1. Push it to a strong level and the wedge starts to ring: that is feedback. Get the level up and ring the feedback out on the monitor EQ.',
-    hint: 'Turn up AUX 1 on the Vocal 1 channel to raise it in Wedge 1. When it rings, look at the Wedge 1 monitor EQ: the ringing frequency glows. Pull that band down far enough to stop the ring. Cuts cost a little level, so keep them small.',
+    symptom: 'Turn Vocal 1 up in Wedge 1. Push it to a strong level and the wedge starts to ring: that is feedback. Get the level up and ring the feedback out on the Monitor EQ.',
+    hint: 'Turn up AUX 1 on the Vocal 1 channel to raise it in Wedge 1. When it rings, look at the Wedge 1 Monitor EQ: the ringing frequency glows. Pull that band down far enough to stop the ring. Cuts cost a little level, so keep them small.',
     hints: [
       { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'As you send more level from a microphone to a wedge, it can start to ring. That is called microphone feedback.', text: 'Bring AUX 1 on the Vocal 1 channel up until Wedge 1 reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
       { title: 'Ring it out', target: 'out-wedge1', teach: 'Feedback rings at one frequency. On the wedge Monitor EQ that band glows. Pull just that band down a touch and the ring stops while the level stays up.', text: 'When it rings, pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
@@ -753,7 +755,7 @@ window.START_HERE = [
       s.channels[0].highpass = false;
       return s;
     },
-    solution: 'Turn Vocal 1 up in Wedge 1, then ring it out: pull the glowing band down on the monitor EQ to cut the ringing frequency.',
+    solution: 'Turn Vocal 1 up in Wedge 1, then ring it out: pull the glowing band down on the Monitor EQ to cut the ringing frequency.',
     defaultInspect: 'wedge',
   },
 ];
@@ -1693,7 +1695,7 @@ window.MONITOR_WORLD = [
       s.channels[0].highpass = false;
       return s;
     },
-    solution: 'Push Vocal 1 up, then ring it out: pull the glowing band down on the monitor EQ to cut the ringing frequency. A few small cuts buy a lot of level: when the free headroom is spent, the monitor EQ is how you buy more.',
+    solution: 'Push Vocal 1 up, then ring it out: pull the glowing band down on the Monitor EQ to cut the ringing frequency. A few small cuts buy a lot of level: when the free headroom is spent, the monitor EQ is how you buy more.',
     defaultInspect: 'wedge',
     // Tighter than the old 0.6 (which let a player cut 40% of the wedge and
     // still "pass" tone — exactly the shotgun-cutting the ring-out teaches
