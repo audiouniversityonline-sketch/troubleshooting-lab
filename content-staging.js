@@ -682,7 +682,7 @@ window.START_HERE = [
     hints: [
       { title: 'Check Vocal 1 in PFL', target: 'ch1-pfl', teach: 'PFL stands for pre-fade listen. It lets you hear a channel in your headphones without sending it to the audience.', text: 'Press PFL on Vocal 1 to hear it in your headphones.', done: (ctx) => (ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) },
       { title: 'Set Vocal 1 gain', target: 'ch1-gain', teach: 'The gain sets the input level.', text: 'With Vocal 1 in PFL, set the gain knob and watch the meter, bringing the level up until the peaks sit near the top of the meter without hitting the very top.', done: (ctx) => ctx.state.channels[0] && ctx.state.channels[0].gain >= 0.4 },
-      { title: 'Bring Vocal 1 in', target: ['ch1-fader', 'ch1-mute', 'ch1-pfl'], teach: '', text: 'Disengage PFL, unmute Vocal 1, and bring the fader up to unity.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
+      { title: 'Bring Vocal 1 in', target: ['ch1-fader', 'ch1-mute', 'ch1-pfl'], teach: '', text: 'Disengage PFL, unmute Vocal 1, and bring the fader up to unity, the U mark (its normal running position).', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
       { title: 'Power Vocal 2 (+48V)', target: 'ch2-phantom', teach: 'Vocal 2 is a condenser mic. It needs +48V phantom power to work.', text: 'Switch +48V on for Vocal 2 (channel 2) while the channel is muted (this protects the speakers).', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom },
       { title: 'Bring Vocal 2 in', target: 'ch2-strip', teach: '', text: 'Now do the same thing on Vocal 2: PFL, set the gain, disengage PFL, unmute, and bring up the fader.', done: (ctx) => hintReaches(ctx, 'vocal2', 'pa', 0.3) },
     ],
@@ -2151,7 +2151,7 @@ window.POWER = [
     symptom: 'The show is over and the band has packed up. Power down in the reverse order you powered up: level down first, then the speakers, and the console last.',
     hint: 'Pull the MAIN fader down, switch off every speaker, then switch the console off last. Speakers go first on the way down for the same reason the console went first on the way up: the console thumps when it switches, and no live speaker should be around to play it.',
     hints: [
-      { title: 'Master down', target: 'master-fader', teach: 'Level down first. It drops the mains before you switch anything off. The wedges run off their own sends, so they come down when you switch them off.', text: 'Pull the MAIN fader all the way down.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.masterDown) },
+      { title: 'MAIN fader down', target: 'master-fader', teach: 'Level down first. It drops the mains before you switch anything off. The wedges run off their own sends, so they come down when you switch them off.', text: 'Pull the MAIN fader all the way down.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.masterDown) },
       { title: 'Speakers off', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'Speakers switch off first on the way down. Once they are dead, nothing the console does on its way out can reach the audience.', text: 'Switch off both main speakers and both wedges.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedgesOff && ctx.powerStatus.paOff) },
       { title: 'Console off last', target: 'mixer-power', teach: 'The console goes last for the same reason it went first this morning: its switch thump needs a dead system around it.', text: 'Switch the console off.', done: (ctx) => !!(ctx.powerStatus && !ctx.powerStatus.console) },
     ],
@@ -2300,7 +2300,7 @@ window.INPUT_SETUP = [
     ],
     topology: { paRig: 'powered' },
     symptom: 'Two vocal mics, two kinds of mic. Channel 1 is a dynamic and works on its own. Channel 2 is a condenser and gives no signal until it gets +48V phantom power. Know your source before you bring it up.',
-    hint: 'The dynamic on channel 1 needs no power: PFL, gain, bring it up. The condenser on channel 2 needs +48V first. Switch phantom on while the channel is muted and out of PFL, so the turn-on thump reaches neither the speakers nor your headphones. Then treat it like any input.',
+    hint: 'The dynamic on channel 1 needs no power: PFL (pre-fade listen), gain, bring it up. The condenser on channel 2 needs +48V first. Switch phantom on while the channel is muted and out of PFL, so the turn-on thump reaches neither the speakers nor your headphones. Then treat it like any input.',
     hints: [
       { title: 'The dynamic first', target: 'ch1-strip', teach: 'A dynamic mic makes its own signal, no power needed. The everyday workhorse: bring it up the normal way.', text: 'Channel 1: PFL, set the gain by the meter, unmute, fader to unity.', done: (ctx) => !!(hintReaches(ctx, 'vocal', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[1]) },
       { title: 'Power the condenser', target: 'ch2-phantom', teach: 'A condenser has electronics inside that need +48V phantom power. Until it gets power, the channel meter reads nothing at all. Switch phantom while the channel is muted, so the turn-on thump never reaches the speakers.', text: 'Channel 2 is a condenser. With the channel muted, switch on +48V.', done: (ctx) => !!(ctx.state.channels[1] && ctx.state.channels[1].phantom) },
@@ -2334,7 +2334,7 @@ window.INPUT_SETUP = [
     hint: 'An active DI has electronics inside that need power; this one takes the console\'s +48V phantom, exactly like a condenser. A passive DI needs nothing. Find the active one on the source cards, switch phantom on while its channel is muted, then bring both channels up by the meter.',
     hints: [
       { title: 'Find the DI that needs power', target: 'ch3-phantom', teach: 'An active DI has electronics inside that need power. This one takes it from the console\'s +48V, exactly like the condenser did. Some active DIs run on a battery instead, so check the box when you meet a new one. Muted first, then phantom.', text: 'Find the active DI on the source cards. With its channel muted, switch on +48V.', done: (ctx) => !!(ctx.state.channels[2] && ctx.state.channels[2].phantom) },
-      { title: 'Bring in the bass', target: 'ch3-strip', teach: '', text: 'Channel 3: PFL, set the gain by the meter, unmute, fader to unity.', done: (ctx) => !!(hintReaches(ctx, 'guitar', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[3]) },
+      { title: 'Bring in the bass', target: 'ch3-strip', teach: 'Powered, the active DI is just another input now: gain to the meter, fader to unity.', text: 'Channel 3: PFL (pre-fade listen), set the gain by the meter, unmute, fader to unity.', done: (ctx) => !!(hintReaches(ctx, 'guitar', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[3]) },
       { title: 'Bring in the keys', target: 'ch4-strip', teach: 'A passive DI is just a transformer in a box: no power, no fuss. Straight up the normal way.', text: 'Channel 4 is a passive DI: PFL, gain, unmute, unity. No power needed.', done: (ctx) => !!(hintReaches(ctx, 'laptop', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[4]) },
     ],
     sabotage: (s) => {
@@ -2364,7 +2364,7 @@ window.INPUT_SETUP = [
     ],
     topology: { paRig: 'powered' },
     symptom: 'The keys are weak in the mix even though the fader is pushed way past unity. Someone set this channel by ear: the input gain is nearly off, and the fader is cranked to make up for it. That trick also turns up the console\'s own noise. Set the channel right, by the meter.',
-    hint: 'Look at where the level is actually made: the input meter on channel 4 is barely registering while the fader sits near the top. Fix it at the source. PFL the channel, bring the GAIN up until the input meter sits healthy, then bring the fader back down to unity.',
+    hint: 'Look at where the level is actually made: the input meter on channel 4 is barely registering while the fader sits near the top. Fix it at the source. PFL (pre-fade listen) the channel, bring the GAIN up until the input meter sits healthy, then bring the fader back down to unity.',
     hints: [
       { title: 'Read the strip', target: 'ch4-strip', teach: 'A fader near the top with an input meter near the bottom is the signature of a channel gained by ear. The fader is amplifying a starved signal, and the console\'s own noise comes up with it.', text: 'Check channel 4: input meter low, fader cranked. PFL it and look. The problem is at the GAIN.', done: (ctx) => !!(ctx.pflChecked || (ctx.state.channels[3] && ctx.state.channels[3].solo)) },
       { title: 'Gain up, by the meter', target: 'ch4-gain', teach: 'The level belongs at the input. PFL the channel and raise the GAIN until the meter sits strong in the healthy zone.', text: 'PFL channel 4 and bring the GAIN up to the healthy zone.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.input) },

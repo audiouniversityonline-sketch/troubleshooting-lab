@@ -110,7 +110,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=93"></script>
+<script src="content.js?v=94"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -2376,6 +2376,7 @@ function PFLBar({ level, hot, mkey = null }) {
   return (
     <div className="ui-no-select" style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
       <div ref={rootRef} style={{
+        position: 'relative',
         display: 'flex', gap: 1,
         width: '100%',
         padding: 2,
@@ -2395,6 +2396,9 @@ function PFLBar({ level, hot, mkey = null }) {
           const on = i < lit || isHold;
           return <div key={i} className="led-cell" style={{ flex: 1, height: 4, background: on ? c : '#1a1a1c', borderRadius: 0.5, boxShadow: on ? `0 0 ${isHold ? 5 : 3}px ${c}` : 'none', opacity: on ? 1 : 0.5 }}/>;
         })}
+        {/* non-color threshold marks (hot -12 dBFS, clip -3 dBFS) so the healthy zone and the red read by position, not hue */}
+        <div style={{ position: 'absolute', top: 0, bottom: 0, left: 'calc(75% - 0.5px)', width: 1, background: 'rgba(233,231,224,0.28)', pointerEvents: 'none' }}/>
+        <div style={{ position: 'absolute', top: -1.5, bottom: -1.5, left: 'calc(93.75% - 0.75px)', width: 1.5, background: 'rgba(233,231,224,0.6)', pointerEvents: 'none' }}/>
       </div>
     </div>
   );
@@ -11050,7 +11054,7 @@ function App() {
     const chs = state.channels;
     zeroStatus = [
       { label: 'Every gain down',       pass: chs.every(c => c.gain <= Z) },
-      { label: 'Every aux send down',   pass: chs.every(c => c.aux1 <= Z && c.aux2 <= Z) },
+      { label: 'Every aux send down',   pass: chs.every(c => c.aux1 <= Z && c.aux2 <= Z && (c.aux3 || 0) <= Z && (c.aux4 || 0) <= Z) },
       { label: 'Every fader down',      pass: chs.every(c => c.fader <= Z) },
       { label: 'Every channel muted',   pass: chs.every(c => c.mute) },
       { label: 'Every pan centered',    pass: chs.every(c => Math.abs(c.pan - 0.5) <= Z) },
