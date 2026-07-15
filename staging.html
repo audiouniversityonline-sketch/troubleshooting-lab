@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=181"></script>
+<script src="content-staging.js?v=182"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8899,6 +8899,9 @@ function App() {
   // using the hint is counted into the debrief, not punished.
   const [hintCount, setHintCount] = uS(0);
   const hintsUsedRef = uR(0);
+  // Latch "the Input List has been opened this level" the moment it opens, so
+  // the guide's step 1 stays satisfied even after the panel is closed again.
+  uE(() => { if (ioListOpen) ioListOpenedRef.current = true; }, [ioListOpen]);
   // Gesture-level move counter for the debrief: one fader drag is one move,
   // not fifty state updates. Counted by diffing consecutive states at the
   // app's single state choke point (the effect below).
@@ -9263,6 +9266,12 @@ function App() {
   // -> true). Drives requirePflEach (Mic Inputs / DI Boxes: PFL each input
   // before you bring it up). Reset on level change.
   const pflChannelsRef = uR({});
+  // One-way latch: has the Input List been opened at least once this level?
+  // The "Open the Input List" step in the patch lessons reads this instead of
+  // the live ioListOpen so that closing the (deliberately non-modal) panel
+  // mid-lesson can't un-check step 1 and snap the guide backward. Reset per
+  // level; the live ioListOpen still drives the panel itself.
+  const ioListOpenedRef = uR(false);
 
   // Per-destination "checked" latch for verifyEach levels (Test the System).
   // Once playback reaches a speaker, that speaker stays checked for the rest
@@ -10560,6 +10569,9 @@ function App() {
     // workflow rather than counting an earlier solo as a check.
     pflCheckedRef.current = false;
     pflChannelsRef.current = {};
+    // Each level scores its own "did they open the list" latch; the live
+    // ioListOpen still reflects whether the panel is open right now.
+    ioListOpenedRef.current = false;
     // The popped latch survives a same-level Reset (the pop forces one) and
     // clears only when the player moves to a different level.
     if (i !== levelIdx) hasPoppedRef.current = false;
@@ -11308,7 +11320,7 @@ function App() {
     state, audio: audioBaseline, powerStatus, gainStatus, verifyStatus, pflEachStatus,
     zeroStatus, patchStatus, feedback, audioOn, adjustBase: adjustBaseRef.current, adjustLatched: adjustLatchRef.current,
     pflChannels: pflChannelsRef.current, pflChecked: pflCheckedRef.current,
-    ioListOpen, hasPopped: hasPoppedRef.current,
+    ioListOpen: ioListOpen || ioListOpenedRef.current, hasPopped: hasPoppedRef.current,
   };
   const hintDefs = level.hints || (level.hint ? [{ text: level.hint, done: () => false }] : []);
   const pendingHints = hintDefs
