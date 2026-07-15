@@ -496,7 +496,7 @@ window.LEVELS = [
     task: true,
     requirePowerOn: true,
     requirePflEach: [1, 2, 3, 4, 7],
-    gainStructure: { unity: 0.75, faderTol: 0.06 },
+    gainStructure: { unity: 0.75, faderTol: 0.06, inputBandAll: [0.645, 4.566] },
     involves: [1, 2, 3, 4, 7],
     verifyEach: [
       { source: 'playback', dest: 'pa',     min: 0.30, label: 'PA tested with playback' },
@@ -518,7 +518,7 @@ window.LEVELS = [
       { title: 'Prove every speaker', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'Catch a silent speaker now, not during the first song.', text: 'Test every speaker with playback: send it to the mains and both wedges.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.pa && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2 },
       { title: 'Power what needs it', target: ['ch2-phantom', 'ch3-phantom'], teach: '', text: 'Turn +48V on (while muted) for the condenser (ch 2) and active DI (ch 3).', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom && ctx.state.channels[2] && ctx.state.channels[2].phantom },
       { title: 'Check every input', target: null, teach: '', text: 'Check every input in PFL before you bring it up: the four band channels and the playback.', done: (ctx) => ctx.pflChannels && [1, 2, 3, 4, 7].every((ch) => ctx.pflChannels[ch]) },
-      { title: 'Bring the band up', target: null, teach: '', text: 'Bring the band up clean, faders at unity: vocals, bass, and keys in the PA.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.25) && hintReaches(ctx, 'vocal2', 'pa', 0.25) && hintReaches(ctx, 'guitar', 'pa', 0.25) && hintReaches(ctx, 'laptop', 'pa', 0.25) },
+      { title: 'Bring the band up', target: null, teach: '', text: 'Bring the band up clean, gain set by the meter: vocals, bass, and keys in the PA.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.25) && hintReaches(ctx, 'vocal2', 'pa', 0.25) && hintReaches(ctx, 'guitar', 'pa', 0.25) && hintReaches(ctx, 'laptop', 'pa', 0.25) && [1, 2, 3, 4].every((ch) => { var l = (ctx.audio && ctx.audio.chanInBaseline && ctx.audio.chanInBaseline[ch - 1]) || 0; return l >= 0.645 && l <= 4.566; }) },
       { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', teach: '', text: 'Last step: send Vocal 1 to Wedge 1 by opening AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
     ],
     sabotage: (s) => {
@@ -1764,7 +1764,7 @@ window.MONITOR_WORLD = [
       s.outputs.wedge2.on = false; s.outputs.wedge2.volume = 0;
       s.channels[0].aux1 = 0.75;
       s.channels[1].aux1 = 0;
-      s.channels[2].aux1 = 0.25;
+      s.channels[2].aux1 = 0.5;
       s.channels[3].aux1 = 0;
       return s;
     },

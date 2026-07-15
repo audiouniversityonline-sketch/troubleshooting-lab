@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=185"></script>
+<script src="content-staging.js?v=186"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -9530,6 +9530,17 @@ function App() {
         const lvl = (a.chanInBaseline && a.chanInBaseline[(gs.refChannel || 1) - 1]) || 0;
         inputOk = lvl >= gs.inputBand[0] && lvl <= gs.inputBand[1];
       }
+      // inputBandAll = every listed input channel's gain sits in the healthy meter
+      // band (the final-exam check, so a starved gain cannot be faked with a
+      // cranked fader). Same band the single-channel input lessons gate on.
+      if (gs.inputBandAll) {
+        const aAll = window.computeAudio(state);
+        const chs = gs.inputChannels || [1, 2, 3, 4];
+        inputOk = inputOk && chs.every((ch) => {
+          const lvl = (aAll.chanInBaseline && aAll.chanInBaseline[ch - 1]) || 0;
+          return lvl >= gs.inputBandAll[0] && lvl <= gs.inputBandAll[1];
+        });
+      }
       // gainOnly = test the input gain and nothing else. The fader position is a
       // mix choice, not a pass/fail — requiring it at unity would teach that a
       // fader must always sit at unity, which is false (Kyle 2026-07-06).
@@ -9537,7 +9548,7 @@ function App() {
       const masterOk = !state.master.mute && Math.abs(state.master.fader - unity) <= tol;
       // No refChannel = master-only gain lesson (The Gig: playback gets pulled
       // back down after the speaker test, so no single channel is pinned).
-      if (!gs.refChannel) return masterOk;
+      if (!gs.refChannel) return masterOk && inputOk;
       const refCh = state.channels[gs.refChannel - 1];
       if (!refCh) return false;
       // "Up at unity" = unmuted AND fader at the unity mark. Used by the guided
