@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=188"></script>
+<script src="content-staging.js?v=189"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1828,6 +1828,16 @@ const { useState, useEffect, useRef, useCallback } = React;
 // knob size instead of feeling off when the whole board is zoomed to fit.
 const FitScaleContext = React.createContext(1);
 window.FitScaleContext = FitScaleContext;
+
+// A lesson step can ask the board to TRACE one signal path — light the whole
+// run and animate signal flowing along it so the eye follows source → snake →
+// console (or the mirror: console → snake → speaker). The active step's `flow`
+// spec rides this context down to the cable overlay in Chain, exactly the way
+// the fit scale rides FitScaleContext. null = no trace (the normal board).
+// Spec shapes: { source: 'vocal' } | { channel: 1 } trace an input path;
+// { out: 'wedge1' } traces an output path. See _resolveFlow in Chain.
+const FlowTraceContext = React.createContext(null);
+window.FlowTraceContext = FlowTraceContext;
 
 function Knob({ value, onChange, min = 0, max = 1, size = 44, label, sublabel, color = 'var(--accent)', track = 'var(--line)', detentAt = null, format = null, disabled = false, tip = null }) {
   const ref = useRef(null);
@@ -5251,6 +5261,24 @@ function Stage16({ state, setState, audio }) {
   );
 }
 
+// One traced segment of a signal path: a soft lit halo in the channel's snake
+// colour plus marching dashes that travel from `from` to `to`, so a run of these
+// laid end to end reads as signal flowing source → console. Given the same `d`
+// the base cable already drew, so the glow tracks the cable exactly.
+function FlowStream({ d, color }) {
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <path d={d} stroke={color} strokeWidth="7" fill="none" opacity="0.22"
+        strokeLinecap="round" strokeLinejoin="round"
+        style={{ filter: `drop-shadow(0 0 6px ${color})` }}/>
+      <path d={d} stroke={color} strokeWidth="2.3" fill="none" opacity="0.95"
+        strokeLinecap="round" strokeLinejoin="round" strokeDasharray="2 8">
+        <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.7s" repeatCount="indefinite"/>
+      </path>
+    </g>
+  );
+}
+
 function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, onZoomTo, onZoomReset, zoomActive, stageHidden, stage16Open, briefBelow = false }) {
   // The stage's source list follows the board: the four MX-8 inputs, or the full
   // 14-input band on the big desk. This is what makes the cable system, the
@@ -5321,6 +5349,41 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   // drives rendering; the ref version drives the move/up handlers.
   const dragRef = useR2(null);
   useE2(() => { dragRef.current = dragState; }, [dragState]);
+
+  // SIGNAL-PATH TRACE. The active lesson step may ask (via FlowTraceContext) to
+  // light one channel's whole run so the student can follow it end to end. We
+  // resolve the spec here into which stage cable / snake tail / channel it
+  // touches, plus the colour to paint. `flowT` is null on a normal board (no
+  // trace), so every `flowT && …` guard below is a no-op the rest of the time.
+  const flowTrace = React.useContext(window.FlowTraceContext) || null;
+  const flowT = (() => {
+    if (!flowTrace) return null;
+    const fanOut = state.fanOut || [1, 2, 3, 4];
+    const cables = state.cables || {};
+    // INPUT trace: from a source (or by console channel) → snake → its channel.
+    if (flowTrace.source != null || flowTrace.channel != null) {
+      let src = flowTrace.source != null ? flowTrace.source : null;
+      let port = null;
+      if (src != null) {
+        port = cables[src] != null ? cables[src] : null;             // stage-box port the source patches to
+      } else {
+        port = fanOut.findIndex(c => c === flowTrace.channel) + 1;   // channel → the port that feeds it
+        if (port <= 0) port = flowTrace.channel;
+        for (const k in cables) { if (cables[k] === port) { src = k; break; } }
+      }
+      const ch = flowTrace.channel != null ? flowTrace.channel : (port ? (fanOut[port - 1] || port) : null);
+      if (ch == null) return null;
+      const colors = window.SNAKE_COLORS || [];
+      return { kind: 'in', src, port, ch, color: colors[ch - 1] || '#8ab4ff' };
+    }
+    // OUTPUT trace: a console bus → snake return → stage box out → its speaker.
+    if (flowTrace.out != null) {
+      const colors = window.SNAKE_COLORS || [];
+      return { kind: 'out', out: flowTrace.out, color: colors[0] || '#8ab4ff' };
+    }
+    return null;
+  })();
+  const flowInActive = !!(flowT && flowT.kind === 'in');
 
   // Translate a clientX/Y into containerRef-relative coordinates so the
   // ghost-cable endpoint lines up with the rendered SVG.
@@ -6136,11 +6199,15 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         const chanEnd = isDragged ? dragState.cursor : c.to;
         const midY = (c.from.y + chanEnd.y) / 2 - 6;
         const d = `M ${c.from.x} ${c.from.y} C ${c.from.x} ${midY}, ${chanEnd.x} ${midY}, ${chanEnd.x} ${chanEnd.y}`;
-        const opacity = someOtherDragged ? 0.18 : (c.unplugged ? 0.6 : (c.srcKey ? 0.95 : 0.35));
+        // Signal-path trace: this fan-out tail is the last leg into the desk.
+        const traced = flowInActive && c.ch === flowT.ch;
+        const flowDim = flowInActive && !traced;
+        const opacity = someOtherDragged ? 0.18 : (flowDim ? 0.2 : (c.unplugged ? 0.6 : (c.srcKey ? 0.95 : 0.35)));
         return (
           <g key={i} style={{ pointerEvents: 'none' }}>
             <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round"/>
             <path d={d} stroke={c.color} strokeWidth={isDragged ? 4 : 3} fill="none" opacity={opacity} strokeLinecap="round"/>
+            {traced && <FlowStream d={d} color={flowT.color}/>}
             <circle cx={c.from.x} cy={c.from.y} r="2" fill={c.color} stroke="#0a0a0c" strokeWidth="0.5" opacity={someOtherDragged ? 0.3 : 1}/>
             {!isDragged && (
               <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={c.color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
@@ -6433,6 +6500,10 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             // snake head and the fan-out tails, not on the stage cables.
             const hovered = hoverCable === 'src:' + c.src;
             const color = hovered ? '#eae7e0' : '#7d7a72';
+            // Signal-path trace: this source cable is the first leg of the run
+            // the lesson is following; the others dim back so the eye stays on it.
+            const traced = flowInActive && c.src === flowT.src;
+            const flowDim = flowInActive && !traced;
             const rank = xSorted.indexOf(c);
             const n = xSorted.length;
             const railOffset = (rank - (n - 1) / 2) * 6;
@@ -6464,13 +6535,14 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                       : (nativeInput
                           ? window._polyRound([c.from, { x: c.from.x, y: laneY }, { x: fanX, y: laneY }, { x: fanX, y: c.to.y }, c.to], 8)
                           : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY))));
-            const opacity = someOtherDragged ? 0.18 : (hovered ? 1 : 0.95);
+            const opacity = someOtherDragged ? 0.18 : (flowDim ? 0.2 : (hovered ? 1 : 0.95));
             // No "unplugged" badge: the loose cable dangling from the source
             // is enough to read that it needs patching.
             return (
               <g key={c.src} style={{ pointerEvents: 'none' }}>
                 <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round" strokeLinejoin="round"/>
                 <path d={d} stroke={color} strokeWidth={isDragged ? 4 : 3} fill="none" opacity={opacity} strokeLinecap="round" strokeLinejoin="round"/>
+                {traced && <FlowStream d={d} color={flowT.color}/>}
                 {!dragState && (
                   <path d={d} stroke="transparent" strokeWidth="12" fill="none" style={{ pointerEvents: 'stroke' }}
                     onPointerEnter={() => setHoverCable('src:' + c.src)} onPointerLeave={() => setHoverCable(null)}/>
@@ -6552,6 +6624,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
               <path d={d} stroke="#1a1a1d" strokeWidth="12" fill="none" opacity="0.95" strokeLinecap="round" strokeLinejoin="round"/>
               <path d={d} stroke="#3a3a40" strokeWidth="9" fill="none" opacity="1" strokeLinecap="round" strokeLinejoin="round"/>
               <path d={d} stroke="#6c6a64" strokeWidth="1.2" fill="none" opacity="0.6" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 8"/>
+              {/* The traced channel travels INSIDE this multicore: light it so the
+                  eye carries from the stage-box tail up the snake to the desk. */}
+              {flowInActive && <FlowStream d={d} color={flowT.color}/>}
               {s.toFOH && (
                 <text x={s.to.x + 4} y={s.to.y + 3} fill="var(--cool)" fontFamily="Geist Mono" fontSize="7" fontWeight="700" letterSpacing="0.5">→ FOH</text>
               )}
@@ -11379,6 +11454,16 @@ function App() {
   const guideTarget = (guideSteps && guideActiveIndex >= 0 && guideActiveIndex < guideSteps.length)
     ? guideSteps[guideActiveIndex].target : null;
 
+  // The active step can also ask the board to TRACE a signal path — light one
+  // channel's whole run and flow signal along it (see FlowTraceContext). Read
+  // the step's `flow` spec, suppressed while any pop-up owns the top layer,
+  // exactly like the spotlight target above.
+  const flowSpec = (eqPanelOpen || catalogOpen || pitchFor || ctaOpen) ? null
+    : (walkPhase === 'steps'
+        ? (walkSteps[walkStep] && walkSteps[walkStep].flow)
+        : (guideSteps && guideActiveIndex >= 0 && guideActiveIndex < guideSteps.length
+            ? guideSteps[guideActiveIndex].flow : null)) || null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'radial-gradient(ellipse at 30% 0%, #1a1a1f 0%, #0e0e10 50%, #08080a 100%)', position: 'relative' }}>
       <TopBar
@@ -11530,6 +11615,7 @@ function App() {
           never overlap regardless of window size; we only ever change the zoom.
           overflow:hidden because scaling guarantees fit (no stray scrollbars). */}
       <div ref={fitViewportRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: (!zoom && userZoom > 1.001) ? 'auto' : 'hidden' }}>
+       <window.FlowTraceContext.Provider value={flowSpec}>
         <window.FitScaleContext.Provider value={appliedScale}>
           <div style={(!zoom && userZoom > 1.001)
             ? { width: designW * appliedScale, height: designH * appliedScale, minWidth: '100%', minHeight: '100%' }
@@ -11612,6 +11698,7 @@ function App() {
             </div>
           </div>
         </window.FitScaleContext.Provider>
+       </window.FlowTraceContext.Provider>
         {/* Zoom-out control — sits OUTSIDE the scaled canvas so it stays pinned
             at a fixed size while the board underneath is magnified. */}
         {zoom && (
