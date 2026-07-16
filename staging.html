@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=186"></script>
+<script src="content-staging.js?v=187"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -6910,6 +6910,7 @@ function defaultProfile() {
     streakBest: 0,      // longest daily streak reached, ever
     stageHidden: false, // view pref: hide the stage so the console gets the screen
     consoleSize: 0,     // big-desk view: 0 = native band, else 8/16/24 (unused line inputs pad the desk)
+    userZoom: 1,        // overall zoom: 1 = fit-to-window, up to 2.0 (200%); board scrolls past fit
     // Future fields go here. They round-trip through storage and the save
     // code for free, because the envelope serializes the whole object.
   };
@@ -9066,9 +9067,9 @@ function App() {
   // refreshes; the save code is this same object. lastLevel / practiceFaults /
   // feedbackByEar drive "resume where I left off" on the next load.
   uE(() => {
-    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, etGuided, etByEar, freePractice, surface, liveShow, stageHidden, consoleSize };
+    profileRef.current = { ...profileRef.current, completed, reps, lastLevel: levelIdx, practiceFaults, feedbackByEar, etGuided, etByEar, freePractice, surface, liveShow, stageHidden, consoleSize, userZoom };
     saveProfile(profileRef.current);
-  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, etGuided, etByEar, freePractice, surface, liveShow, stageHidden, consoleSize]);
+  }, [completed, reps, levelIdx, practiceFaults, feedbackByEar, etGuided, etByEar, freePractice, surface, liveShow, stageHidden, consoleSize, userZoom]);
 
   // Free tier: Ear Training difficulty follows the phase. Guided for the first
   // three rounds, by-ear after. Runs on entering the mode and when the guided
@@ -11026,6 +11027,13 @@ function App() {
   // the fit uses and the combined scale is passed down as fitScale, so the cable
   // overlay (which divides screen deltas by fitScale) stays pixel-accurate.
   const [zoom, setZoom] = uS(null);
+  // Overall zoom (user-controlled): 1 = fit-to-window, up to 2.0. Multiplies the
+  // fit scale; the viewport scrolls when the board grows past the window. The
+  // knob/cable math already divides by the applied scale, so it compensates.
+  const ZOOM_MIN = 1, ZOOM_MAX = 2, ZOOM_STEP = 0.25;
+  const [userZoom, setUserZoom] = uS(() => { const z = Number(profileRef.current.userZoom); return (z >= ZOOM_MIN && z <= ZOOM_MAX) ? z : 1; });
+  const bumpZoom = React.useCallback((d) => setUserZoom((z) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round((z + d) * 100) / 100))), []);
+  const resetZoom = React.useCallback(() => setUserZoom(1), []);
   // Hiding the stage narrows the canvas to the console, so fit-to-screen scales
   // it up. Height still measured live (designH), width switches with the pref.
   // Guided lessons and the walkthrough teach ON the stage (patching, power-up,
@@ -11067,7 +11075,7 @@ function App() {
   const designW = baseW + stripsOver * STRIP_UNIT;
   const fitScale = useFitScale(fitViewportRef, designW, designH, !isMobile);
   // Effective scale = the zoom scale when zoomed in, the fit scale otherwise.
-  const appliedScale = zoom ? zoom.scale : fitScale;
+  const appliedScale = zoom ? zoom.scale : fitScale * userZoom;
   // Zoom INTO a region: measure its centre in the design canvas's own unscaled
   // coordinates (offset chain up to designRef, transform-independent), then pick
   // a scale ~2.2x the current fit (capped at 3) and a translate that lands that
@@ -11124,6 +11132,18 @@ function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [!!zoom]);
+  // Ctrl/Cmd +/-/0 drive the overall zoom (browser zoom is cancelled by the
+  // fit-to-window refit, so the app owns these keys instead).
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key === '=' || e.key === '+') { e.preventDefault(); bumpZoom(ZOOM_STEP); }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); bumpZoom(-ZOOM_STEP); }
+      else if (e.key === '0') { e.preventDefault(); resetZoom(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [bumpZoom, resetZoom]);
   // Cursor-driven pan while zoomed. The pointer's position in the viewport maps
   // to the pan, so a region wider than the screen (the 16-ch console fan-out) can
   // be explored by moving the pointer toward the side you want to reach, without
@@ -11376,6 +11396,7 @@ function App() {
         onSelectDifficulty={(TIER === 'member' && !repShareFree) ? selectDifficulty : null}
         onPracticeFaults={(TIER === 'member' && !repShareFree) ? practiceAtFaults : null} onPracticeLive={null}
         startOpen={!shouldWalk && !SCENARIO_PARAM && !REP_PARAM && !BAND_PARAM && !tourOpen}
+        zoomPct={Math.round(userZoom * 100)} onZoomIn={() => bumpZoom(ZOOM_STEP)} onZoomOut={() => bumpZoom(-ZOOM_STEP)} onZoomReset={resetZoom}
       />
 
       <IoListPanel open={ioListOpen} onClose={() => setIoListOpen(false)} state={state}/>
@@ -11500,16 +11521,18 @@ function App() {
           the board always lays out at DESIGN_W, the stage cards and console
           never overlap regardless of window size; we only ever change the zoom.
           overflow:hidden because scaling guarantees fit (no stray scrollbars). */}
-      <div ref={fitViewportRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+      <div ref={fitViewportRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: (!zoom && userZoom > 1.001) ? 'auto' : 'hidden' }}>
         <window.FitScaleContext.Provider value={appliedScale}>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: zoom ? 'flex-start' : 'center', justifyContent: zoom ? 'flex-start' : 'center', overflow: 'hidden' }}>
+          <div style={(!zoom && userZoom > 1.001)
+            ? { width: designW * appliedScale, height: designH * appliedScale, minWidth: '100%', minHeight: '100%' }
+            : { position: 'absolute', inset: 0, display: 'flex', alignItems: zoom ? 'flex-start' : 'center', justifyContent: zoom ? 'flex-start' : 'center', overflow: 'hidden' }}>
             {/* No CSS transition on this transform: the cable overlay measures
                 element positions and divides by the scale to draw the cables, so
                 an animating scale would be sampled mid-flight and every cable
                 would land in the wrong place. The zoom snaps instead. */}
             <div ref={designRef} style={{ width: designW, flexShrink: 0,
-                 transform: zoom ? `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.scale})` : `scale(${fitScale})`,
-                 transformOrigin: zoom ? '0 0' : 'center center' }}>
+                 transform: zoom ? `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.scale})` : `scale(${appliedScale})`,
+                 transformOrigin: (zoom || (!zoom && userZoom > 1.001)) ? '0 0' : 'center center' }}>
               <window.Chain
                 state={state} setState={setState} audio={audio} fitScale={appliedScale} wedgeMargins={fbMargins} onOpenPlacement={setPlacementFor}
                 onZoomTo={onZoomTo} onZoomReset={onZoomReset} zoomActive={!!zoom}
@@ -11916,7 +11939,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, feedbackFreeLabel, feedbackExhausted, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, stage16Open, consoleSize, onSetConsoleSize, sizeSelectable, big16 }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, feedbackFreeLabel, feedbackExhausted, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, stage16Open, consoleSize, onSetConsoleSize, sizeSelectable, big16, zoomPct, onZoomIn, onZoomOut, onZoomReset }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -12091,6 +12114,13 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
               <span title={streak + '-day streak'} style={{ fontSize: 9, fontWeight: 800, color: '#0a0a0c', background: 'var(--accent)', borderRadius: 8, padding: '1px 6px', letterSpacing: 0.3 }}>{streak}</span>
             )}
           </button>
+        )}
+        {onZoomIn && (
+          <div className="mono ui-no-select" title="Zoom the whole board (Ctrl/Cmd + and -, Ctrl/Cmd 0 to reset). Scrolls when zoomed in." style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #38383e', borderRadius: 4, overflow: 'hidden' }}>
+            <button onClick={onZoomOut} disabled={zoomPct <= 100} className="ui-no-select" style={{ ...navBtn, border: 'none', borderRadius: 0, padding: '5px 10px', fontSize: 15, lineHeight: 1, opacity: zoomPct <= 100 ? 0.4 : 1 }}>−</button>
+            <button onClick={onZoomReset} className="ui-no-select" title="Reset zoom to fit" style={{ ...navBtn, border: 'none', borderRadius: 0, padding: '6px 4px', minWidth: 46, textAlign: 'center', color: zoomPct > 100 ? 'var(--ink)' : 'var(--ink-2)' }}>{zoomPct}%</button>
+            <button onClick={onZoomIn} disabled={zoomPct >= 200} className="ui-no-select" style={{ ...navBtn, border: 'none', borderRadius: 0, padding: '5px 10px', fontSize: 15, lineHeight: 1, opacity: zoomPct >= 200 ? 0.4 : 1 }}>+</button>
+          </div>
         )}
         <button onClick={toggleFullscreen} className="mono ui-no-select" title="Fill the screen" style={{ ...navBtn, padding: '6px 12px' }}>{isFs ? '⤢ EXIT' : '⤢ FULL SCREEN'}</button>
         <button onClick={onRestart} className="mono ui-no-select" style={{ ...navBtn, padding: '6px 14px' }}>↻ RESET</button>
