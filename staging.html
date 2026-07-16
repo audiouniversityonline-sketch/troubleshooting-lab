@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=187"></script>
+<script src="content-staging.js?v=188"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -3360,10 +3360,18 @@ function useFitScale(viewportRef, designW, designH, enabled) {
     const el = viewportRef.current;
     if (!enabled || !el || !designW || !designH) return;
     const recompute = () => {
-      const availW = el.clientWidth, availH = el.clientHeight;
+      // Measure the BORDER box (offset*), not the content box (client*): when the
+      // user zooms in, this same viewport becomes overflow:auto and a scrollbar
+      // appears, which shrinks clientWidth/Height by the scrollbar width. Feeding
+      // that back into the fit scale toggled the scrollbar on/off and made the whole
+      // board vibrate (only when zoomed, and worst inside a fixed-height iframe).
+      // offsetWidth/Height ignore the scrollbar, so the fit stays stable. The
+      // hysteresis guard drops sub-pixel churn as a second line of defense.
+      const availW = el.offsetWidth, availH = el.offsetHeight;
       if (!availW || !availH) return;
       const raw = Math.min(availW / designW, availH / designH);
-      setScale(Math.max(0.45, Math.min(3, raw)));
+      const next = Math.max(0.45, Math.min(3, raw));
+      setScale((prev) => (Math.abs(prev - next) < 0.001 ? prev : next));
     };
     recompute();
     const ro = new ResizeObserver(recompute);
