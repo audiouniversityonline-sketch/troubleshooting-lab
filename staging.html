@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=189"></script>
+<script src="content-staging.js?v=190"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -3124,7 +3124,7 @@ function DigitalMainStrip({ master, onChange, onInspect, paLevel, paRLevel, powe
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '2px 6px 0' }}>
         <BP active={master.mute} onClick={() => onChange({ ...master, mute: !master.mute })} label="MUTE" color="var(--hot)" width={90} height={16} fontSize={8}
-          tip="Mute the main mix. The whole room goes quiet." />
+          tip="Mute the main mix. The whole audience goes quiet." />
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4 }}>
           <F value={master.fader} onChange={(v) => { onChange({ ...master, fader: v }); if (onInspect) onInspect('pa'); }} height={148} />
           <div style={{ display: 'flex', gap: 2 }}>
@@ -7267,7 +7267,7 @@ function MobileNotice({ onCapture, optedIn }) {
     }}>
       <img src={window.AU_LOGO} alt="Audio University" style={{ height: 72, width: 72, display: 'block', marginBottom: 16 }}/>
       <div className="display" style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.8, lineHeight: 1 }}>Troubleshooting Lab</div>
-      <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 4 }}>Interactive Mixing Console Trainer</div>
+      <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 4 }}>Live Sound Simulator</div>
       <div style={{
         marginTop: 24, padding: '18px', width: '100%', maxWidth: 360, boxSizing: 'border-box',
         background: 'rgba(14,36,21,0.7)', border: '1px solid var(--green)', borderRadius: 10,
@@ -8030,7 +8030,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
           <>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9, fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
           <div>In Practice Mode, you'll find and solve problems in the sound system.</div>
-          <div>First, let us send you the Soundcheck Checklist, so you can apply these steps at your next show. Enter your email and we'll send you the checklist.</div>
+          <div>First, the Soundcheck Checklist, so you can run these steps at your next show. Enter your email and we'll send it over.</div>
           <div>Then we can continue to Practice Mode and Ear Training Mode.</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -11579,7 +11579,7 @@ function App() {
                 : pitchFor.isDigital
                 ? 'Build the confidence to walk up to a digital console and mix the show.'
                 : pitchFor.isLibrary
-                ? 'A growing library of real-world scenarios to troubleshoot, each a different board.'
+                ? 'A growing library of scenarios to troubleshoot, each on a different board.'
                 : pitchFor.isFeedbackMode
                 ? 'That is your free ear training. Members get unlimited rounds, guided and by ear, plus the full live-sound course.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
@@ -12106,7 +12106,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
              style={{ height: 36, width: 36, display: 'block' }}/>
         <div>
           <div className="display" style={{ fontSize: 17, fontWeight: 800, letterSpacing: -0.4, lineHeight: 1 }}>Troubleshooting Lab</div>
-          <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 }}>Interactive Mixing Console Trainer</div>
+          <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 }}>Live Sound Simulator</div>
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, justifyContent: 'center' }}>
@@ -12633,7 +12633,7 @@ function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, fe
           <div style={{ fontSize: 9, color: 'var(--ink-2)', lineHeight: 1.4 }}>
             {dropouts > 0
               ? <>The audience heard <b style={{ color: 'var(--hot)' }}>{dropouts} dropout{dropouts === 1 ? '' : 's'}</b> while you worked. PFL lets you check a channel in your headphones without the audience hearing it, and the master never needs to move.</>
-              : <>The room <b style={{ color: 'var(--green)' }}>never heard you working</b>. You found it with PFL and the meters. That's the live-show standard.</>}
+              : <>The audience <b style={{ color: 'var(--green)' }}>never heard you working</b>. You found it with PFL and the meters. That's the live-show standard.</>}
           </div>
         </div>
       )}
