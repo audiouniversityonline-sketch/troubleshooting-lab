@@ -17,6 +17,78 @@
      - Only ever APPEND new scenarios. Never renumber existing ones.
    ============================================================ */
 
+/* ============================================================
+   GLOSSARY — the single source of truth for every definition the
+   student reads. Written and approved by Kyle 2026-07-20; see
+   GLOSSARY.md for sourcing and the accuracy rules.
+
+   A lesson does NOT carry prose. It carries `defs: ['wedge', ...]`
+   and the engine renders the term/definition list. This is
+   deliberate: there is no free-text field to fill, so a lesson
+   cannot contain scene-setting, instructions, or a description of
+   something the student can already see on screen.
+
+   Instructions live in the step's `text` (the green DO THIS).
+   Nowhere else.
+
+   Adding a term? Add it here once. Never reword it per lesson.
+   ============================================================ */
+window.GLOSSARY = {
+  // Signal path
+  'signal':        'The audio traveling through the cables and gear.',
+  'patch':         'To connect a signal from one device to another.',
+  'input channel': "One signal's path through the mixer, with its own controls and fader.",
+  'input':         'Where signal enters a device.',
+  'output':        'Where signal leaves a device.',
+  'snake':         'A multichannel cable carrying many signals between the stage and the mixer.',
+  'stage box':     'The connector box on stage where cables plug into the snake.',
+  'sub-snake':     'A short snake connecting one area of the stage to the main snake.',
+  'snake input':   'A line in the snake that carries sound from the stage to the mixer.',
+  'snake output':  'A line in the snake that carries sound from the mixer back to the stage.',
+  'cross-patch':   'A signal landing on the wrong channel.',
+
+  // Level
+  'gain':           'How much signal level is boosted or cut.',
+  'fader':          "The slider that sets a channel's level in the main mix.",
+  'unity':          'The setting where a signal passes through unchanged. On a fader, the 0 dB mark.',
+  'meter':          'Reads the signal level at a particular point in the signal chain.',
+  'headroom':       'The room between the signal level and the point where sound distorts.',
+  'clipping':       'The harsh distortion that is heard when a signal exceeds the available headroom.',
+  'gain structure': 'How signal level is set at every stage of the signal chain.',
+
+  // Microphones and inputs
+  'dynamic microphone':   'A passive moving-coil microphone that needs no power.',
+  'condenser microphone': 'A microphone with active electronics inside, which require power.',
+  'phantom power':        'Power required for active DIs and microphones (usually provided by the microphone preamp).',
+  'DI box':               'A device used when connecting a high-impedance source (instrument, laptop, etc) to a low-impedance input (mixer input).',
+  'active DI':            'A DI that requires external power (usually from a battery or phantom power).',
+  'passive DI':           'A DI that requires no power.',
+  'high-pass filter':     'Reduces energy below a set frequency. Also called low-cut.',
+
+  // Monitors and routing
+  'wedge':       'A speaker on the stage pointing at a performer.',
+  'monitor mix': 'A mix built for a performer on stage, separate from the main mix.',
+  'aux send':    'Sends signal from a channel to a separate output mix.',
+  'pre-fader':   'A send that bypasses the channel fader. Monitor sends work this way.',
+  'main mix':    'The mix that goes to the speakers facing the audience.',
+  'mains':       'The main speakers pointed at the audience.',
+  'mute':        'Turns a channel off.',
+  'PFL':         'Routes audio to your headphones without changing what the audience hears.',
+
+  // Feedback and EQ
+  'feedback':    'An infinite loop where the output of a system feeds into its input.',
+  'ring out':    'Cutting the frequencies that feed back first, so monitors are clearer and louder.',
+  'graphic EQ':  'An EQ with a row of sliders, each cutting or boosting one fixed frequency band.',
+  'line check':  'Confirming every input reaches the console on the right channel and sounds clean.'
+};
+
+// Display labels. Most terms render as their key; these get a fuller
+// on-screen label so the lookup key can stay short.
+window.GLOSSARY_LABELS = {
+  'phantom power':    'Phantom power (+48V DC)',
+  'high-pass filter': 'High-pass filter (HPF)'
+};
+
 // LEVELS — the Essentials free tier.
 //
 // Contract per level (kept intentionally small so the prose surface stays
@@ -146,13 +218,13 @@ window.LEVELS = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'Leave the power off while you patch, so nothing pops. A pop is a loud burst through the speakers that can damage them.',
+    defs: ['stage box', 'snake', 'snake output'],
     hint: 'Drag one end of a cable and drop it on a port or an output. If you drop it on a port that already has a cable, the two swap. The snake tails are color coded so you can tell them apart: 1 brown, 2 red, 3 orange, 4 yellow, 5 green, 6 blue.',
     hints: [
-      { title: 'Patch the inputs', target: null, teach: 'Microphone and instrument cables plug into the stage box.', text: 'Drag each cable to the stage box port the Input List shows.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
-      { title: 'Land the snake at the console', target: null, teach: 'The snake bundles stage signals into one cable to the console, the mixer, then fans out into numbered tails. Channels are the console\'s numbered input strips.', text: 'Drop snake tails 1-4 onto their matching console channels.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[1] && ctx.patchStatus[1].pass },
-      { title: 'Feed the snake returns', target: null, teach: 'A return carries a mix back to the stage. L and R feed the audience, AUX (auxiliary) the performers.', text: 'Drag console outputs to snake returns: L to 1, R to 2, AUX 1 to 3, AUX 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
-      { title: 'Speakers to the out ports', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'Out ports are where returns leave the stage box. A wedge is a floor speaker facing the performer.', text: 'Connect the speakers: Main L to 1, Main R to 2, Wedge 1 to 3, Wedge 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
+      { title: 'Patch the inputs', target: null, text: 'Leave the power off, then drag each cable to the stage box port the Input List shows.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[0] && ctx.patchStatus[0].pass },
+      { title: 'Land the snake at the console', target: null, text: 'Drop snake tails 1-4 onto their matching console channels.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[1] && ctx.patchStatus[1].pass },
+      { title: 'Feed the snake outputs', target: null, text: 'Drag the console outputs to the snake outputs: L to 1, R to 2, AUX 1 to 3, AUX 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
+      { title: 'Speakers to the out ports', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], text: 'Connect the speakers: Main L to 1, Main R to 2, Wedge 1 to 3, Wedge 2 to 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
     ],
     sabotage: (s) => {
       // Load-in state: nothing connected anywhere. Input cables loose above
@@ -200,11 +272,11 @@ window.LEVELS = [
     // down (the zeroed console start). Without it, deriveInvolves defaults to
     // [1] to avoid an accidentally-dead desk, which would leave channel 1 live.
     involves: [],
-    symptom: 'A console makes a loud thump when you switch it on. Any speaker that is already on will play that thump.',
+    defs: [],
     hint: 'All four speakers are off right now, so nothing is powered up to play the console\'s thump. Once the console is on, the thump is over and the speakers can go on in any order.',
     hints: [
-      { title: 'Console on first', target: 'mixer-power', teach: 'The console is the mixing desk you are standing at.', text: 'Turn the console on first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
-      { title: 'Then the speakers', target: null, teach: 'Main speakers face the audience.', text: 'Turn on both main speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
+      { title: 'Console on first', target: 'mixer-power', teach: 'Gear can pop at power-up, so power it after its source.', text: 'Turn the console on first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
+      { title: 'Then the speakers', target: null, text: 'Turn on both main speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
     ],
     conditions: [],
     // Active speakers: powered PA boxes with their own on/off, no power amp.
@@ -251,13 +323,13 @@ window.LEVELS = [
     conditions: [
       { source: 'playback', dest: 'pa', min: 0.30, max: 0.65 },
     ],
-    symptom: 'The system is powered on and playback is connected to one channel. Every channel is muted, so nothing reaches the speakers yet.',
+    defs: ['PFL', 'gain', 'unity'],
     hint: 'Press PFL on the channel playback is connected to, and you will hear it in your headphones. Set the GAIN until the input meter sits in the healthy zone. Disengage PFL, switch MUTE off on that channel and on MAIN, and bring both faders to the U mark. Then raise the main speaker volume until the loudness meter reaches the green target band, which sits inside the amber section of that meter because a live show is louder than an all-day-safe listening level.',
     hints: [
-      { title: 'Listen in your headphones', target: 'ch7-pfl', teach: 'PFL means pre-fade listen. It sends the channel to your headphones before the audience hears it.', text: 'Press PFL on the channel playback is connected to.', done: (ctx) => ctx.pflChecked || (ctx.state.channels[6] && ctx.state.channels[6].solo) },
-      { title: 'Set the gain', target: 'ch7-gain', teach: 'GAIN sets signal strength inside the console. Healthy means bars high but short of the top.', text: 'Set the GAIN so the input meter sits in the healthy zone.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.input },
-      { title: 'Faders to unity', target: ['ch7-fader', 'master-fader'], teach: 'A fader is a sliding volume control, and unity, the U mark, neither boosts nor cuts. MAIN is the master fader every channel passes through.', text: 'Disengage PFL, switch MUTE off on the playback channel and MAIN, both faders to unity.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.fader && ctx.gainStatus.master },
-      { title: 'Turn up the speakers', target: ['out-pa-l', 'out-pa-r'], teach: 'MAIN stays at unity. Audience loudness comes from the speakers\' own volume control.', text: 'Raise the main speaker volume until the loudness meter reaches the green target band.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.65; } },
+      { title: 'Listen in your headphones', target: 'ch7-pfl', text: 'Press PFL on the channel playback is connected to.', done: (ctx) => ctx.pflChecked || (ctx.state.channels[6] && ctx.state.channels[6].solo) },
+      { title: 'Set the gain', target: 'ch7-gain', text: 'Set the GAIN so the input meter sits in the healthy zone.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.input },
+      { title: 'Faders to unity', target: ['ch7-fader', 'master-fader'], text: 'Disengage PFL, switch MUTE off on the playback channel and MAIN, then set both faders to unity.', done: (ctx) => ctx.gainStatus && ctx.gainStatus.fader && ctx.gainStatus.master },
+      { title: 'Turn up the speakers', target: ['out-pa-l', 'out-pa-r'], text: 'Raise the main speaker volume until the loudness meter reaches the green target band.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.65; } },
     ],
     sabotage: (s) => {
       // Continuous with Power-On: rig on, console fully zeroed. Channel muted,
@@ -291,11 +363,11 @@ window.LEVELS = [
       { source: 'playback', dest: 'wedge2', min: 0.25, label: 'Wedge 2 plays' },
     ],
     conditions: [],
-    symptom: 'Neither wedge is making any sound. The playback channel is the channel with music running through it.',
+    defs: ['wedge', 'aux send'],
     hint: 'Two separate controls have to be up, and the usual mistake is leaving one of them down. One is the AUX knob on the playback channel at the console. The other is the volume control on Wedge 1 itself, out on stage.',
     hints: [
-      { title: 'Bring up Wedge 1', target: 'ch7-aux', teach: 'An aux send is a knob that sends a channel\'s sound to a wedge, not the audience.', text: 'Turn up AUX 1 on the playback channel, then raise Wedge 1\'s volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
-      { title: 'Bring up Wedge 2', target: 'ch7-aux', teach: '', text: 'Turn up AUX 2 on the playback channel, then raise Wedge 2\'s volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
+      { title: 'Bring up Wedge 1', target: 'ch7-aux', text: 'Turn up AUX 1 on the playback channel, then raise Wedge 1\'s volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
+      { title: 'Bring up Wedge 2', target: 'ch7-aux', text: 'Turn up AUX 2 on the playback channel, then raise Wedge 2\'s volume.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
     ],
     sabotage: (s) => {
       // Carried from Set the Input Level: good input, faders at unity, PA set.
@@ -333,12 +405,12 @@ window.LEVELS = [
       { source: 'vocal',  dest: 'pa', min: 0.3 },
       { source: 'vocal2', dest: 'pa', min: 0.3 },
     ],
-    symptom: 'Channel 1 has a dynamic microphone and channel 2 has a condenser microphone. The two types get set up differently.',
+    defs: ['dynamic microphone', 'condenser microphone', 'phantom power'],
     hint: 'Finish channel 1 completely before you touch channel 2. On channel 2, switch +48V on first, then PFL it and set GAIN, because that order keeps the turn-on thump out of your headphones. Switching +48V on for channel 2 changes nothing on channel 1.',
     hints: [
-      { title: 'Channel 1: the dynamic', target: 'ch1-strip', teach: 'A dynamic microphone needs no power.', text: 'PFL channel 1, raise GAIN to mid-meter, disengage PFL, unmute, fader to U.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[1] },
-      { title: 'Power the condenser', target: 'ch2-phantom', teach: '+48V, or phantom power, feeds a condenser microphone through the cable. Switching it on makes a thump.', text: 'Switch +48V on for channel 2 while it is muted and not in PFL.', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom },
-      { title: 'Bring up channel 2', target: 'ch2-strip', teach: '', text: 'PFL channel 2, raise GAIN to mid-meter, disengage PFL, unmute, fader to U.', done: (ctx) => hintReaches(ctx, 'vocal2', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[2] },
+      { title: 'Channel 1: the dynamic', target: 'ch1-strip', text: 'Press PFL on channel 1, raise GAIN to mid-meter, disengage PFL, unmute, fader to U.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[1] },
+      { title: 'Power the condenser', target: 'ch2-phantom', text: 'Switch +48V on for the condenser microphone on channel 2 while it is muted and not in PFL.', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom },
+      { title: 'Bring up channel 2', target: 'ch2-strip', text: 'Press PFL on channel 2, raise GAIN to mid-meter, disengage PFL, unmute, fader to U.', done: (ctx) => hintReaches(ctx, 'vocal2', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[2] },
     ],
     sabotage: (s) => {
       // System set up (master at unity, PA at a good level, wedges still up from
@@ -373,12 +445,12 @@ window.LEVELS = [
       { source: 'guitar', dest: 'pa', min: 0.3 },
       { source: 'laptop', dest: 'pa', min: 0.3 },
     ],
-    symptom: 'A DI box, short for direct injection, lets you plug an instrument into a console channel. Channel 3 uses an active DI on the bass and channel 4 uses a passive DI on the keyboard.',
+    defs: ['DI box', 'active DI', 'passive DI'],
     hint: 'Switch +48V on channel 3 before you press PFL, not while you are listening to that channel. Phantom power arriving while you are listening pops your headphones the same way it pops the speakers.',
     hints: [
-      { title: 'Power the active DI', target: 'ch3-phantom', teach: 'An active DI has electronics inside that run on +48V.', text: 'Mute channel 3, then switch +48V on.', done: (ctx) => ctx.state.channels[2] && ctx.state.channels[2].phantom },
-      { title: 'Bring up the bass', target: 'ch3-strip', teach: '', text: 'Press PFL on channel 3, set GAIN, disengage PFL, unmute, fader to unity.', done: (ctx) => hintReaches(ctx, 'guitar', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[3] },
-      { title: 'Bring up the keys', target: 'ch4-strip', teach: 'A passive DI has no electronics, so it needs no power.', text: 'Press PFL on channel 4, set GAIN, disengage PFL, unmute, fader to unity.', done: (ctx) => hintReaches(ctx, 'laptop', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[4] },
+      { title: 'Power the active DI', target: 'ch3-phantom', text: 'Mute channel 3, which has the active DI on the bass, then switch +48V on.', done: (ctx) => ctx.state.channels[2] && ctx.state.channels[2].phantom },
+      { title: 'Bring up the bass', target: 'ch3-strip', text: 'Press PFL on channel 3, set GAIN, disengage PFL, unmute, fader to unity.', done: (ctx) => hintReaches(ctx, 'guitar', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[3] },
+      { title: 'Bring up the keys', target: 'ch4-strip', text: 'Press PFL on channel 4, which has the passive DI on the keyboard, set GAIN, disengage PFL, unmute, fader to unity.', done: (ctx) => hintReaches(ctx, 'laptop', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[4] },
     ],
     sabotage: (s) => {
       // Mics from the last level kept as set (their per-source healthy gain),
@@ -407,10 +479,10 @@ window.LEVELS = [
     // A positive setup task, not a problem: build the singer her monitor mix.
     // The wedge volume is already up (set in Test the Wedges and kept), so this
     // is purely the aux send: open AUX 1 on the vocal to feed her wedge.
-    symptom: 'The singer on Vocal 1 cannot hear themselves in Wedge 1. A wedge carries its own mix, separate from what the audience hears.',
+    defs: ['monitor mix', 'main mix'],
     hint: 'Wedge 1 is already on and turned up. AUX 1 is the first of the aux knobs on the Vocal 1 channel strip. Turning it up does not change what the audience hears.',
     hints: [
-      { title: 'Vocal into the wedge', target: 'ch1-aux', teach: 'AUX 1 feeds Wedge 1. The more you send, the more the singer hears.', text: 'Turn up AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
+      { title: 'Vocal into the wedge', target: 'ch1-aux', text: 'Turn up AUX 1 on the Vocal 1 channel to put that vocal in Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
     ],
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
@@ -442,11 +514,11 @@ window.LEVELS = [
     // For now HPF clears it (drops the low-end loop gain ~40% while the wedge
     // level stays up). NEXT TURN: add an EQ on the aux outputs as the real,
     // surgical fix; HPF is the stopgap so the level is solvable today.
-    symptom: 'Turn a microphone up too loud in a wedge and its sound loops back into the microphone and rings. That ring is feedback.',
+    defs: ['feedback', 'ring out'],
     hint: 'Turn AUX 1 up on the Vocal 1 channel until Wedge 1 is loud. When it rings, look at the Wedge 1 Monitor EQ and pull the glowing band down until the ring stops. Every cut takes away a little level, so cut only as much as you need.',
     hints: [
-      { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'AUX 1 sets how much of a channel goes to Wedge 1.', text: 'Bring AUX 1 on the Vocal 1 channel up until Wedge 1 rings.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
-      { title: 'Ring it out', target: 'out-wedge1', teach: 'The Monitor EQ (equalizer) splits Wedge 1\'s sound into bands. The ringing band glows.', text: 'Pull the glowing band down on the Wedge 1 Monitor EQ until ringing stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
+      { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', text: 'Bring AUX 1 on the Vocal 1 channel up until Wedge 1 rings.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
+      { title: 'Ring it out', target: 'out-wedge1', text: 'Pull the glowing band down on the Wedge 1 Monitor EQ until the ringing stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     // Wedge min 0.8 under the real-dB loop (2026-07-02): the ring point on
     // the primed wedge sits at a send of ~0.66, and 0.8 lands about 1.2 dB
@@ -511,15 +583,15 @@ window.LEVELS = [
       { source: 'vocal',  dest: 'wedge', min: 0.3 },
     ],
     topology: { paRig: 'powered' },
-    symptom: 'This is the final exam. Nothing is powered on yet.',
+    defs: ['line check'],
     hint: 'Work through the stages in the order they are listed. In the playback test, each speaker checks off once it has played and stays checked, so you do not have to keep them all playing at once. A wedge only plays what its AUX send feeds it. If a channel reads nothing on its meter in PFL, check whether it is one of the two that needs +48V.',
     hints: [
-      { title: 'Start the system', target: 'mixer-power', teach: 'Speakers thump if the console comes on after them.', text: 'Power on in order: console first, then both main speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
-      { title: 'Catch a dead speaker', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: 'A failed speaker should turn up now, not during the show.', text: 'Test every speaker with playback: send it to MAIN and to both wedges.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.pa && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2 },
-      { title: 'Power what needs it', target: ['ch2-phantom', 'ch3-phantom'], teach: 'A condenser mic and an active DI need +48V. Switching it on unmuted pops the speakers.', text: 'With the channel muted, turn +48V on for channels 2 and 3.', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom && ctx.state.channels[2] && ctx.state.channels[2].phantom },
-      { title: 'One channel at a time', target: null, teach: '', text: 'Check every input in PFL: the four band channels and the playback.', done: (ctx) => ctx.pflChannels && [1, 2, 3, 4, 7].every((ch) => ctx.pflChannels[ch]) },
-      { title: 'Into the main mix', target: null, teach: '', text: 'Bring vocals, bass, and keys into the main mix: gain by the meter, faders at unity.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.25) && hintReaches(ctx, 'vocal2', 'pa', 0.25) && hintReaches(ctx, 'guitar', 'pa', 0.25) && hintReaches(ctx, 'laptop', 'pa', 0.25) && [1, 2, 3, 4].every((ch) => { var l = (ctx.audio && ctx.audio.chanInBaseline && ctx.audio.chanInBaseline[ch - 1]) || 0; return l >= 0.645 && l <= 4.566; }) },
-      { title: 'Feed the wedge', target: 'ch1-aux', teach: 'The performer needs to hear their own vocal on stage.', text: 'Open AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
+      { title: 'Start the system', target: 'mixer-power', text: 'Power on in order: console first, then both main speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
+      { title: 'Catch a dead speaker', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], text: 'Test every speaker with playback: send it to MAIN and to both wedges.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.pa && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2 },
+      { title: 'Power what needs it', target: ['ch2-phantom', 'ch3-phantom'], text: 'With the channel muted, turn +48V on for channels 2 and 3.', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom && ctx.state.channels[2] && ctx.state.channels[2].phantom },
+      { title: 'One channel at a time', target: null, text: 'Line check every input in PFL: the four band channels and the playback.', done: (ctx) => ctx.pflChannels && [1, 2, 3, 4, 7].every((ch) => ctx.pflChannels[ch]) },
+      { title: 'Into the main mix', target: null, text: 'Bring vocals, bass, and keys into the main mix: gain by the meter, faders at unity.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.25) && hintReaches(ctx, 'vocal2', 'pa', 0.25) && hintReaches(ctx, 'guitar', 'pa', 0.25) && hintReaches(ctx, 'laptop', 'pa', 0.25) && [1, 2, 3, 4].every((ch) => { var l = (ctx.audio && ctx.audio.chanInBaseline && ctx.audio.chanInBaseline[ch - 1]) || 0; return l >= 0.645 && l <= 4.566; }) },
+      { title: 'Feed the wedge', target: 'ch1-aux', text: 'Open AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
     ],
     sabotage: (s) => {
       // Cold venue. Everything off, console zeroed, nothing set.
@@ -570,13 +642,13 @@ window.LEVELS = [
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'A shutdown has an order. Get it wrong and the audience gets a loud pop out of the speakers.',
+    defs: [],
     hint: 'Work one channel strip at a time: GAIN down, AUX 1 through AUX 4 down, fader down, PAN centered, HPF off, +48V off, MUTE on. MAIN is the one fader that does not belong to a channel strip. If the lesson does not finish, go back across the channels and look for a GAIN still up or a MUTE still off.',
     hints: [
-      { title: 'Zero the console', target: null, teach: 'Zeroing returns every control to its starting position for a known power-up. MUTE is the exception: it goes on.', text: 'On every channel: GAIN, AUX 1-4, fader down, PAN centered, HPF and +48V off, MUTE on.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus.slice(0, 7).every((z) => z.pass) },
-      { title: 'Shut down the main mix', target: 'master-fader', teach: 'MAIN is its own fader and feeds the audience speakers.', text: 'Pull the MAIN fader all the way down and mute it.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus[7] && ctx.zeroStatus[7].pass },
-      { title: 'Speakers off first', target: null, teach: 'Power-up goes console first, speakers last. Power-down reverses it.', text: 'Switch off the main speakers and the wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paOff && ctx.powerStatus.wedgesOff },
-      { title: 'Console last', target: 'mixer-power', teach: 'The console pops as it switches off.', text: 'Switch the console off.', done: (ctx) => ctx.powerStatus && !ctx.powerStatus.console },
+      { title: 'Zero the console', target: null, text: 'Zero every channel: GAIN and AUX 1-4 down, fader down, PAN centered, HPF and +48V off, MUTE on.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus.slice(0, 7).every((z) => z.pass) },
+      { title: 'Shut down the main mix', target: 'master-fader', text: 'Pull the MAIN fader all the way down and mute it.', done: (ctx) => ctx.zeroStatus && ctx.zeroStatus[7] && ctx.zeroStatus[7].pass },
+      { title: 'Speakers off first', target: null, text: 'Switch off the main speakers and the wedges before the console.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paOff && ctx.powerStatus.wedgesOff },
+      { title: 'Console last', target: 'mixer-power', text: 'Switch the console off last.', done: (ctx) => ctx.powerStatus && !ctx.powerStatus.console },
     ],
     sabotage: (s) => {
       // End-of-night state: a clean live mix (every input at its per-source
@@ -617,11 +689,11 @@ window.START_HERE = [
     // First quick win: wake the system up. Turn the app sound on (top bar), then
     // bring the MAIN fader up so the band fills the room. Teaches the SOUND
     // button and that the main fader is the overall level to the audience.
-    symptom: 'The system is silent. Turn the sound on with the SOUND button in the top bar, then bring the MAIN fader up so the band fills the room.',
+    defs: ['fader', 'main mix', 'mains'],
     hint: 'First, hit the SOUND button in the top bar so you can hear the app. Then bring the MAIN fader in the master section up: that is your overall level to the audience.',
     hints: [
-      { title: 'Turn on the sound', target: 'sound', teach: '', text: 'Hit the SOUND button in the top bar to turn the sound on.', done: (ctx) => !!ctx.audioOn },
-      { title: 'Bring up the main mix', target: 'master-fader', teach: 'The MAIN fader is your overall level to the audience.', text: 'Bring the MAIN fader up so the band fills the room.', done: (ctx) => ctx.state.master && !ctx.state.master.mute && ctx.state.master.fader >= 0.6 },
+      { title: 'Turn on the sound', target: 'sound', text: 'Press the SOUND button in the top bar to turn the sound on.', done: (ctx) => !!ctx.audioOn },
+      { title: 'Bring up the main mix', target: 'master-fader', text: 'Bring the MAIN fader up until the band is loud enough for the audience.', done: (ctx) => ctx.state.master && !ctx.state.master.mute && ctx.state.master.fader >= 0.6 },
     ],
     conditions: [
       { source: 'guitar', dest: 'pa', min: 0.2 },
@@ -649,11 +721,11 @@ window.START_HERE = [
     // vocals come in the next lesson). Pull each instrument's fader down and hear
     // it drop. requireAdjust latches once a fader is >= 6 dB below its start, so
     // a beginner makes a move big enough to clearly hear.
-    symptom: 'Only the bass and keyboard are up. Every channel has its own fader. Pull the KEYS fader down and hear the keyboard drop, then do the same with the BASS.',
+    defs: ['input channel'],
     hint: 'Pull the KEYS fader (channel 4) down at least 6 dB and listen: the keyboard drops while everything else stays put. Then do the same with the BASS (channel 3).',
     hints: [
-      { title: 'Pull the keyboard down', target: 'ch4-fader', teach: 'Each channel fader sets that one channel\'s level in the mix.', text: 'Pull the KEYS fader (channel 4) down at least 6 dB. Hear the keyboard drop out.', done: (ctx) => !!(ctx.adjustLatched && ctx.adjustLatched[4]) },
-      { title: 'Now the bass', target: 'ch3-fader', teach: '', text: 'Do the same with the BASS fader (channel 3): pull it down at least 6 dB. Only the bass drops.', done: (ctx) => !!(ctx.adjustLatched && ctx.adjustLatched[3]) },
+      { title: 'Pull the keyboard down', target: 'ch4-fader', text: 'Pull the KEYS fader (channel 4) down at least 6 dB. Only the keyboard gets quieter.', done: (ctx) => !!(ctx.adjustLatched && ctx.adjustLatched[4]) },
+      { title: 'Now the bass', target: 'ch3-fader', text: 'Pull the BASS fader (channel 3) down at least 6 dB. Only the bass gets quieter.', done: (ctx) => !!(ctx.adjustLatched && ctx.adjustLatched[3]) },
     ],
     conditions: [],
     requireAdjust: [3, 4],
@@ -677,14 +749,14 @@ window.START_HERE = [
     // Both vocals start muted with faders down. Vocal 1 is guided step by step;
     // Vocal 2 is the same routine on the student's own recall, plus its condenser
     // needs +48V phantom first (dead until powered). Win = both vocals in the PA.
-    symptom: 'Neither vocal is in yet. Both are muted with their faders down. Bring in Vocal 1: PFL (pre-fade listen) to check it, set the gain, disengage PFL, unmute, fader up. Then do the same for Vocal 2, which is a condenser and needs +48V phantom power first.',
+    defs: ['PFL', 'gain', 'unity', 'meter', 'phantom power', 'mute'],
     hint: 'Vocal 1: press PFL, set the gain on the meter, then disengage PFL, unmute, and bring the fader to unity. Then Vocal 2 the same way, but turn its +48V phantom on first, while it is muted.',
     hints: [
-      { title: 'Check Vocal 1 in PFL', target: 'ch1-pfl', teach: 'PFL stands for pre-fade listen. It lets you hear a channel in your headphones without sending it to the audience.', text: 'Press PFL on Vocal 1 to hear it in your headphones.', done: (ctx) => (ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) },
-      { title: 'Set Vocal 1 gain', target: 'ch1-gain', teach: 'The gain sets the input level.', text: 'With Vocal 1 in PFL, turn the gain and watch the meter. Bring the peaks near the top without hitting it.', done: (ctx) => ctx.state.channels[0] && ctx.state.channels[0].gain >= 0.4 },
-      { title: 'Bring Vocal 1 in', target: ['ch1-fader', 'ch1-mute', 'ch1-pfl'], teach: '', text: 'Disengage PFL, unmute Vocal 1, and bring the fader up to unity, the U mark (its normal running position).', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
-      { title: 'Power Vocal 2 (+48V)', target: 'ch2-phantom', teach: 'Vocal 2 is a condenser mic. It needs +48V phantom power to work.', text: 'Switch +48V on for Vocal 2 (channel 2) while the channel is muted (this protects the speakers).', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom },
-      { title: 'Bring Vocal 2 in', target: 'ch2-strip', teach: '', text: 'Now do the same thing on Vocal 2: PFL, set the gain, disengage PFL, unmute, and bring up the fader.', done: (ctx) => hintReaches(ctx, 'vocal2', 'pa', 0.3) },
+      { title: 'Check Vocal 1 in PFL', target: 'ch1-pfl', text: 'Press PFL on Vocal 1 to hear it in your headphones.', done: (ctx) => (ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) },
+      { title: 'Set Vocal 1 gain', target: 'ch1-gain', text: 'With Vocal 1 in PFL, turn the gain up and watch the meter. Bring the peaks near the top of the meter without hitting the top.', done: (ctx) => ctx.state.channels[0] && ctx.state.channels[0].gain >= 0.4 },
+      { title: 'Bring Vocal 1 in', target: ['ch1-fader', 'ch1-mute', 'ch1-pfl'], text: 'Disengage PFL on Vocal 1, unmute the channel, and bring its fader up to unity, the U mark on the fader.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
+      { title: 'Power Vocal 2 (+48V)', target: 'ch2-phantom', text: 'Vocal 2 (channel 2) is muted. Leave it muted and switch +48V on for that channel.', done: (ctx) => ctx.state.channels[1] && ctx.state.channels[1].phantom },
+      { title: 'Bring Vocal 2 in', target: 'ch2-strip', text: 'Do the same on Vocal 2: press PFL, set the gain, disengage PFL, unmute, and bring the fader up to unity.', done: (ctx) => hintReaches(ctx, 'vocal2', 'pa', 0.3) },
     ],
     conditions: [
       { source: 'vocal',  dest: 'pa', min: 0.3 },
@@ -708,10 +780,10 @@ window.START_HERE = [
     involves: [1, 2, 3, 4],
     // Vocal live in the PA, her wedge up. Just the aux send: open AUX 1 on the
     // vocal to feed her monitor. (Adapts the Monitor Mix lesson.)
-    symptom: 'The singer\'s voice is in the PA, but she cannot hear herself on stage. Send her voice to her monitor wedge.',
+    defs: ['aux send', 'wedge', 'monitor mix'],
     hint: 'Wedge 1 is on and turned up. Turn up AUX 1 on the Vocal 1 channel to send her voice to it.',
     hints: [
-      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', teach: 'An aux send creates a mix separate from the main outputs. AUX 1 feeds Wedge 1, the monitor for the performer on stage.', text: 'Turn up AUX 1 on the Vocal 1 channel to send it to Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
+      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', text: 'Turn AUX 1 up on the Vocal 1 input channel to send Vocal 1 to Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
     ],
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
@@ -736,11 +808,11 @@ window.START_HERE = [
     // up, the wedge crosses the ring threshold and feeds back. To win: vocal
     // strong in the wedge (>= 0.8) AND no feedback, so pulling the send back
     // down will not do it. The fix is the monitor EQ: cut the glowing band.
-    symptom: 'Turn Vocal 1 up in Wedge 1. Push it to a strong level and the wedge starts to ring: that is feedback. Get the level up and ring the feedback out on the Monitor EQ.',
+    defs: ['feedback', 'ring out', 'graphic EQ'],
     hint: 'Turn up AUX 1 on the Vocal 1 channel to raise it in Wedge 1. When it rings, look at the Wedge 1 Monitor EQ: the ringing frequency glows. Pull that band down far enough to stop the ring. Cuts cost a little level, so keep them small.',
     hints: [
-      { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'As you send more level from a microphone to a wedge, it can start to ring. That is called microphone feedback.', text: 'Bring AUX 1 on the Vocal 1 channel up until Wedge 1 reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
-      { title: 'Ring it out', target: 'out-wedge1', teach: 'Feedback rings at one frequency. On the wedge Monitor EQ that band glows. Pull just that band down a touch and the ring stops while the level stays up.', text: 'When it rings, pull the glowing band down on the Wedge 1 Monitor EQ, enough to stop it.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
+      { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', text: 'Bring AUX 1 on the Vocal 1 input channel up until Wedge 1 reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
+      { title: 'Ring it out', target: 'out-wedge1', text: 'When Wedge 1 rings, pull the glowing band down on the Wedge 1 Monitor EQ until the ringing stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
@@ -1580,10 +1652,10 @@ window.MONITOR_WORLD = [
     id: 'mw1',
     title: 'The second mix',
     task: true,
-    symptom: 'A wedge is a speaker on the floor that points at the performer so they can hear themselves. It plays its own blend of the channels, separate from the main mix the audience hears.',
+    defs: ['wedge', 'monitor mix', 'aux send'],
     hint: 'Wedge 1 is already powered on and turned up, so nothing is wrong with it. The AUX 1 knob is on the Vocal 1 channel strip itself, grouped with the other AUX knobs, not on the wedge. Turning it up does not change what the audience hears.',
     hints: [
-      { title: 'Vocal 1 in Wedge 1', target: 'ch1-aux', teach: 'AUX 1 is an extra output feeding Wedge 1. Each channel\'s AUX 1 knob sets how much it sends.', text: 'Turn up AUX 1 on Vocal 1 until you hear it in Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
+      { title: 'Vocal 1 in Wedge 1', target: 'ch1-aux', text: 'Turn up AUX 1 on the Vocal 1 input channel until you hear it in Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
@@ -1598,11 +1670,11 @@ window.MONITOR_WORLD = [
     id: 'mw2',
     title: 'A bit of everyone',
     task: true,
-    symptom: 'Wedge 1 is the speaker on the floor aimed at the Vocal 1 singer, and it already has their own channel, Vocal 1, in it. A channel is one strip on the console carrying one microphone or one instrument.',
+    defs: ['input channel'],
     hint: 'Each channel has its own AUX 1 knob, so select a channel first to reach it. Judge this by knob position: the AUX 1 knob on the Vocal 1 channel is already set, so keep the Vocal 2 one below it. Set the Keys AUX 1 knob much lower again.',
     hints: [
-      { title: 'Add Vocal 2', target: 'ch2-aux', teach: 'Singers need to hear each other.', text: 'Turn up AUX 1 on Vocal 2, quieter than Vocal 1.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal2; var l = c ? (c.wedge || 0) : 0; return l >= 0.22 && l <= 0.30; } },
-      { title: 'Add a little keys', target: 'ch4-aux', teach: 'Keys is the keyboard channel. A tuned instrument gives the singer a pitch to match.', text: 'Turn up AUX 1 on Keys, well below both vocals.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.laptop; var l = c ? (c.wedge || 0) : 0; return l >= 0.18 && l <= 0.26; } },
+      { title: 'Add Vocal 2', target: 'ch2-aux', text: 'Turn up AUX 1 on the Vocal 2 input channel, keeping it quieter than Vocal 1.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal2; var l = c ? (c.wedge || 0) : 0; return l >= 0.22 && l <= 0.30; } },
+      { title: 'Add a little keys', target: 'ch4-aux', text: 'Turn up AUX 1 on the Keys input channel, well below both vocals.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.laptop; var l = c ? (c.wedge || 0) : 0; return l >= 0.18 && l <= 0.26; } },
     ],
     involves: [1, 2, 3, 4],
     // "Under Vocal 1" is graded, not just described: Vocal 1 rests at ~0.33,
@@ -1620,12 +1692,12 @@ window.MONITOR_WORLD = [
     id: 'mw3',
     title: 'Build Wedge 2',
     task: true,
-    symptom: 'Wedge 2 is for the singer on the Vocal 2 channel, and a second singer is on the Vocal 1 channel. Wedge 2 has nothing in it yet.',
+    defs: [],
     hint: 'The AUX 2 control on each channel sets how much of that channel goes to Wedge 2. The channel fader sets the main mix the audience hears, which is a separate control.',
     hints: [
-      { title: 'Vocal 2 loudest', target: 'ch2-aux', teach: 'AUX 2 feeds Wedge 2.', text: 'Raise AUX 2 on the Vocal 2 channel to a strong level.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge2', 0.35) },
-      { title: 'Add Vocal 1', target: 'ch1-aux', teach: '', text: 'Raise AUX 2 on the Vocal 1 channel lower than Vocal 2.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal; var l = c ? (c.wedge2 || 0) : 0; return l >= 0.22 && l <= 0.30; } },
-      { title: 'A little keys', target: 'ch4-aux', teach: '', text: 'Raise AUX 2 on the Keys channel lower than either vocal.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.laptop; var l = c ? (c.wedge2 || 0) : 0; return l >= 0.18 && l <= 0.26; } },
+      { title: 'Vocal 2 loudest', target: 'ch2-aux', text: 'Raise AUX 2 on the Vocal 2 input channel to a strong level in Wedge 2.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge2', 0.35) },
+      { title: 'Add Vocal 1', target: 'ch1-aux', text: 'Raise AUX 2 on the Vocal 1 input channel, lower than Vocal 2.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal; var l = c ? (c.wedge2 || 0) : 0; return l >= 0.22 && l <= 0.30; } },
+      { title: 'A little keys', target: 'ch4-aux', text: 'Raise AUX 2 on the Keys input channel, lower than either vocal.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.laptop; var l = c ? (c.wedge2 || 0) : 0; return l >= 0.18 && l <= 0.26; } },
     ],
     involves: [1, 2, 3, 4],
     // Same graded hierarchy as mw2: Vocal 2 leads at 0.35+, the support stays under.
@@ -1643,11 +1715,11 @@ window.MONITOR_WORLD = [
     id: 'mw4',
     title: 'Both vocal monitors',
     task: true,
-    symptom: 'Neither singer can hear themselves on stage. Each wedge gets its own mix, separate from what the audience hears.',
+    defs: [],
     hint: 'The aux number matches the wedge number: AUX 1 feeds Wedge 1, AUX 2 feeds Wedge 2. Turn each send up until that singer can hear themselves over the band, then stop. Turning the wrong AUX knob puts a singer in the other person\'s wedge.',
     hints: [
-      { title: 'Vocal 1 in Wedge 1', target: 'ch1-aux', teach: '', text: 'Turn up AUX 1 on the Vocal 1 channel.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
-      { title: 'Vocal 2 in Wedge 2', target: 'ch2-aux', teach: '', text: 'Turn up AUX 2 on the Vocal 2 channel.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge2', 0.35) },
+      { title: 'Vocal 1 in Wedge 1', target: 'ch1-aux', text: 'Turn up AUX 1 on the Vocal 1 input channel so that singer hears themselves in Wedge 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.3) },
+      { title: 'Vocal 2 in Wedge 2', target: 'ch2-aux', text: 'Turn up AUX 2 on the Vocal 2 input channel so that singer hears themselves in Wedge 2.', done: (ctx) => hintReaches(ctx, 'vocal2', 'wedge2', 0.35) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
@@ -1670,10 +1742,10 @@ window.MONITOR_WORLD = [
       { source: 'vocal', dest: 'wedge', min: 0.3 },
     ],
     toneGate: 0.85,
-    symptom: 'Wedge 1 is ringing low and boomy. A ring is feedback: a tone that keeps sounding because the wedge\'s sound gets back into the microphone and loops around.',
+    defs: ['feedback', 'high-pass filter'],
     hint: 'Turning the aux send down stops the ring. It also takes the vocal out of the wedge, and the ring comes back as soon as you turn the send up again. Fix it on the channel instead of at the send.',
     hints: [
-      { title: 'The high-pass filter', target: 'ch1-hpf', teach: 'HPF cuts the low frequencies and lets the rest through. The ring is below the voice.', text: 'Engage HPF on channel 1 and leave the aux send alone.', done: (ctx) => !!(ctx.state.channels[0] && ctx.state.channels[0].highpass && !ctx.feedback) },
+      { title: 'The high-pass filter', target: 'ch1-hpf', text: 'Wedge 1 is ringing low and boomy. Engage HPF on channel 1 to clear it, and leave the aux send where it is.', done: (ctx) => !!(ctx.state.channels[0] && ctx.state.channels[0].highpass && !ctx.feedback) },
     ],
     sabotage: (s) => {
       // This wedge's resonance sits at 100 Hz, exactly where an HPF works.
@@ -1698,10 +1770,10 @@ window.MONITOR_WORLD = [
     id: 'mw5',
     title: 'Keep the stage quiet',
     task: true,
-    symptom: 'Wedge 1 is ringing with feedback. The singer still needs to hear the vocal in it.',
+    defs: [],
     hint: 'Find the AUX 1 knob on the Vocal 1 channel. Turn it down a little at a time and listen after each move.',
     hints: [
-      { title: 'Stop the ringing', target: 'ch1-aux', teach: 'The louder the wedge plays that voice, the more the microphone picks it up again.', text: 'Turn AUX 1 down on Vocal 1 until the ringing stops, voice still audible.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.22 && l <= 0.40; } },
+      { title: 'Stop the ringing', target: 'ch1-aux', text: 'Turn AUX 1 down on the Vocal 1 input channel until the ringing stops, keeping the vocal audible in Wedge 1.', done: (ctx) => { var a = ctx && ctx.audio; var c = a && a.contributions && a.contributions.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.22 && l <= 0.40; } },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
@@ -1722,10 +1794,10 @@ window.MONITOR_WORLD = [
       { source: 'guitar', dest: 'wedge', min: 0, max: 0.12 },
       { source: 'laptop', dest: 'wedge', min: 0, max: 0.12 },
     ],
-    symptom: 'The vocal on channel 1 is buried in Wedge 1. That wedge cannot go any louder without ringing.',
+    defs: [],
     hint: 'Leave channel 1 where it is. Turn the other three AUX 1 knobs most of the way down, not a small nudge.',
     hints: [
-      { title: 'Make room in the wedge', target: ['ch2-aux', 'ch3-aux', 'ch4-aux'], teach: 'Each channel has its own AUX 1 knob feeding the wedge.', text: 'Turn AUX 1 on channels 2, 3, and 4 well below the vocal.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; if (!a) return false; var g = (a.guitar && a.guitar.wedge) || 0; var l = (a.laptop && a.laptop.wedge) || 0; var v2 = (a.vocal2 && a.vocal2.wedge) || 0; return g <= 0.12 && l <= 0.12 && v2 <= 0.12; } },
+      { title: 'Make room in the wedge', target: ['ch2-aux', 'ch3-aux', 'ch4-aux'], text: 'Turn AUX 1 down on channels 2, 3, and 4 until they sit well below the vocal in Wedge 1.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; if (!a) return false; var g = (a.guitar && a.guitar.wedge) || 0; var l = (a.laptop && a.laptop.wedge) || 0; var v2 = (a.vocal2 && a.vocal2.wedge) || 0; return g <= 0.12 && l <= 0.12 && v2 <= 0.12; } },
     ],
     sabotage: (s) => {
       // Her send starts strong (0.6 ~ a 0.33 contribution, already inside the
@@ -1752,12 +1824,12 @@ window.MONITOR_WORLD = [
       { source: 'guitar', dest: 'wedge', min: 0, max: 0.1 },
       { source: 'laptop', dest: 'wedge', min: 0, max: 0.1 },
     ],
-    symptom: 'Wedge 2 is not working, so both singers have to use Wedge 1. Wedge 1 is still set up for Vocal 1 only.',
+    defs: [],
     hint: 'Turn Vocal 1 down before you turn Vocal 2 up. After the two voices are set, the bass and keys channels still need to come down.',
     hints: [
-      { title: 'Lower Vocal 1', target: 'ch1-aux', teach: 'One singer alone leaves no space for a second voice.', text: 'Turn AUX 1 on Vocal 1 down from full to about halfway.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.2 && l <= 0.38; } },
-      { title: 'Bring up Vocal 2', target: 'ch2-aux', teach: 'Matched levels keep either singer from being covered up.', text: 'Turn AUX 1 on Vocal 2 up to match Vocal 1, not past it.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal2; var l = c ? (c.wedge || 0) : 0; return l >= 0.2 && l <= 0.38; } },
-      { title: 'Keep the band out', target: ['ch3-aux', 'ch4-aux'], teach: 'Anything besides the two voices takes space from the singers.', text: 'Turn AUX 1 off on keys, then down to a low level on bass.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; if (!a) return false; var g = (a.guitar && a.guitar.wedge) || 0; var l = (a.laptop && a.laptop.wedge) || 0; return g <= 0.1 && l <= 0.1; } },
+      { title: 'Lower Vocal 1', target: 'ch1-aux', text: 'Turn AUX 1 on the Vocal 1 input channel down from full to about halfway.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.2 && l <= 0.38; } },
+      { title: 'Bring up Vocal 2', target: 'ch2-aux', text: 'Turn AUX 1 on the Vocal 2 input channel up to match Vocal 1, not past it.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal2; var l = c ? (c.wedge || 0) : 0; return l >= 0.2 && l <= 0.38; } },
+      { title: 'Keep the band out', target: ['ch3-aux', 'ch4-aux'], text: 'Turn AUX 1 off on keys, then turn AUX 1 down to a low level on bass.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; if (!a) return false; var g = (a.guitar && a.guitar.wedge) || 0; var l = (a.laptop && a.laptop.wedge) || 0; return g <= 0.1 && l <= 0.1; } },
     ],
     sabotage: (s) => {
       mwBoard(s);
@@ -1775,11 +1847,11 @@ window.MONITOR_WORLD = [
     id: 'mw6',
     title: 'Ring it out',
     task: true,
-    symptom: 'Sound from Wedge 1 gets back into the Vocal 1 microphone and rings. Turning the send down would stop it, but the singer needs that level.',
+    defs: ['ring out', 'graphic EQ'],
     hint: 'Open the Monitor EQ for Wedge 1 while it is still ringing. Cut the glowing band in small steps and listen after each one. Stop as soon as the ring stops, since a deeper cut takes away level you do not need to lose.',
     hints: [
-      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', teach: 'Ringing on purpose is how you find the frequency that feeds back.', text: 'Turn AUX 1 up on Vocal 1 until Wedge 1 is loud and rings.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.5) },
-      { title: 'Cut one frequency', target: 'out-wedge1', teach: 'Monitor EQ turns narrow frequency bands up or down. The ringing band glows.', text: 'Open Wedge 1\'s Monitor EQ and cut the glowing band until the ring stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
+      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', text: 'Turn AUX 1 up on the Vocal 1 input channel until Wedge 1 is loud and rings.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.5) },
+      { title: 'Cut one frequency', target: 'out-wedge1', text: 'Open Wedge 1\'s Monitor EQ and cut the glowing band by 3 to 6 dB until the ring stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
@@ -1831,12 +1903,12 @@ window.PATCHING = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The stage box is the panel on stage where microphones and instruments plug in. The snake carries its numbered ports to the console: port 1 to channel 1, port 2 to channel 2, and so on.',
+    defs: ['snake', 'stage box', 'PFL'],
     hint: 'Channel 1 is the first channel strip on the console. Its PFL button and its input meter are both on that strip. If nothing moves, check that PFL is engaged on channel 1 and not on another channel.',
     hints: [
-      { title: 'Read the show plan', target: 'iolist', teach: 'The Input List is the written plan for the show: what belongs on each channel and where the outputs go.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || ctx.pflChecked) },
-      { title: 'Check channel 1', target: ['src-vocal', 'conn-stage-in-1', 'conn-in-0', 'ch1-pfl'], flow: { source: 'vocal' }, teach: 'Vocal 1 is on stage box port 1. PFL, pre-fade listen, checks one channel alone, and meter movement means port 1 is landing here.', text: 'Press PFL on channel 1 and watch its input meter.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo)) },
-      { title: 'Return to the main mix', target: 'ch1-pfl', teach: 'PFL stays engaged until you press it again.', text: 'Press PFL on channel 1 again to disengage it.', done: (ctx) => !!(ctx.pflChannels && ctx.pflChannels[1] && ctx.state.channels.every((c) => !c.solo)) },
+      { title: 'Read the show plan', target: 'iolist', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || ctx.pflChecked) },
+      { title: 'Check channel 1', target: ['src-vocal', 'conn-stage-in-1', 'conn-in-0', 'ch1-pfl'], flow: { source: 'vocal' }, text: 'Press PFL on channel 1 to hear what stage box port 1 is sending, and watch its input meter.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo)) },
+      { title: 'Return to the main mix', target: 'ch1-pfl', text: 'Press PFL on channel 1 again to disengage it.', done: (ctx) => !!(ctx.pflChannels && ctx.pflChannels[1] && ctx.state.channels.every((c) => !c.solo)) },
     ],
     sabotage: (s) => {
       // The concept lesson, and the board is patched CORRECTLY end to end.
@@ -1874,11 +1946,11 @@ window.PATCHING = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'Input 3 is the keys and input 4 is the bass. Channel 3 has input 4 on it, and channel 4 has input 3.',
+    defs: ['input channel', 'cross-patch'],
     hint: 'Open the Input List and read what it says for channels 3 and 4. Compare that with what is plugged in above each of those channels. Tail 3 is the one sitting on channel 4 right now.',
     hints: [
-      { title: 'Read the connection points', target: 'iolist', teach: 'The snake carries stage inputs to the console. Each tail plugs into the connection point above a channel.', text: 'Look at the connection points above channels 3 and 4.', done: (ctx) => { const f = ctx.state.fanOut || []; return !!(ctx.ioListOpen || (f[2] === 3 && f[3] === 4)); } },
-      { title: 'Repatch inputs 3 and 4', target: ['conn-in-2', 'conn-in-3'], flow: { source: 'guitar' }, teach: 'The Input List is the plan for which input belongs on which channel. Dropping a tail on an occupied point swaps them.', text: 'Drag tail 3 off channel 4 and onto the connection point marked CH 3.', done: (ctx) => { const f = ctx.state.fanOut || []; return f[0] === 1 && f[1] === 2 && f[2] === 3 && f[3] === 4; } },
+      { title: 'Read the connection points', target: 'iolist', text: 'Look at the connection points above channels 3 and 4 and find which input is landing on the wrong channel.', done: (ctx) => { const f = ctx.state.fanOut || []; return !!(ctx.ioListOpen || (f[2] === 3 && f[3] === 4)); } },
+      { title: 'Repatch inputs 3 and 4', target: ['conn-in-2', 'conn-in-3'], flow: { source: 'guitar' }, text: 'Drag tail 3 off channel 4 and onto the connection point marked CH 3.', done: (ctx) => { const f = ctx.state.fanOut || []; return f[0] === 1 && f[1] === 2 && f[2] === 3 && f[3] === 4; } },
     ],
     sabotage: (s) => {
       // The test for the concept pt0 just taught. Everything at the stage is
@@ -1913,12 +1985,12 @@ window.PATCHING = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The Input List is the written plan for where each source plugs in. Every microphone and instrument on stage has a line on it.',
+    defs: ['patch', 'snake input'],
     hint: 'The ports on the stage box are color coded: 1 brown, 2 red, 3 orange, 4 yellow. If you drop a cable on a port that already has a cable in it, the two swap.',
     hints: [
-      { title: 'Start with the plan', target: 'iolist', teach: 'It shows what should be plugged in, not what is.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
-      { title: 'Patch Vocal 1', target: ['iolist-ch1', 'src-vocal', 'conn-stage-in-1'], teach: '', text: 'Drag Vocal 1\'s cable to port 1, or click PATCH on that row.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1) },
-      { title: 'Patch the rest of the list', target: ['src-vocal2', 'src-guitar', 'src-laptop', 'conn-stage-in-2', 'conn-stage-in-3', 'conn-stage-in-4'], teach: '', text: 'Patch Vocal 2, Bass, and Keys to the ports the list calls for.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal2 === 2 && ctx.state.cables.guitar === 3 && ctx.state.cables.laptop === 4) },
+      { title: 'Start with the plan', target: 'iolist', text: 'Open the Input List in the top bar to see which port each source plugs into.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
+      { title: 'Patch Vocal 1', target: ['iolist-ch1', 'src-vocal', 'conn-stage-in-1'], text: 'Drag Vocal 1\'s cable to port 1, or click PATCH on that row.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1) },
+      { title: 'Patch the rest of the list', target: ['src-vocal2', 'src-guitar', 'src-laptop', 'conn-stage-in-2', 'conn-stage-in-3', 'conn-stage-in-4'], text: 'Patch Vocal 2, Bass, and Keys to the ports the list calls for.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal2 === 2 && ctx.state.cables.guitar === 3 && ctx.state.cables.laptop === 4) },
     ],
     sabotage: (s) => {
       // Only the inputs are loose. The snake fan-out, the returns, and the
@@ -1945,12 +2017,12 @@ window.PATCHING = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The mix leaves the console and travels to the speakers. The lines that carry it are called returns.',
-    hint: 'The Input List has the answers, so open it and read the output rows. Each row names a console output, the out port its speaker plugs into, and the return that carries the mix. Match by number at both ends: same number on the stage box, same number at the console.',
+    defs: ['snake output', 'wedge'],
+    hint: 'The Input List has the answers, so open it and read the output rows. Each row names a console output, the out port its speaker plugs into, and the snake output that carries the mix. Match by number at both ends: same number on the stage box, same number at the console.',
     hints: [
-      { title: 'Read the output plan', target: 'iolist', teach: 'The Input List names which speaker each mix feeds.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass)) },
-      { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'conn-stage-out-1', 'conn-stage-out-2', 'conn-stage-out-3', 'conn-stage-out-4', 'iolist-out-mainL', 'iolist-out-mainR', 'iolist-out-aux1', 'iolist-out-aux2'], teach: 'Main L and Main R face the audience. A wedge sits on the floor facing a performer.', text: 'On the stage box, patch Main L to out 1, Main R to out 2, Wedge 1 to out 3, Wedge 2 to out 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
-      { title: 'Match outputs to returns', target: ['conn-out-MAIN L', 'conn-out-MAIN R', 'conn-out-AUX 1', 'conn-out-AUX 2'], teach: 'Main L and Main R here are console outputs, not speakers. AUX 1 and AUX 2 are separate mixes for the wedges.', text: 'Match by number: Main L to return 1, Main R to return 2, AUX 1 to return 3, AUX 2 to return 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
+      { title: 'Read the output plan', target: 'iolist', text: 'Open the Input List in the top bar and read the output plan.', done: (ctx) => !!(ctx.ioListOpen || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass)) },
+      { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'conn-stage-out-1', 'conn-stage-out-2', 'conn-stage-out-3', 'conn-stage-out-4', 'iolist-out-mainL', 'iolist-out-mainR', 'iolist-out-aux1', 'iolist-out-aux2'], text: 'On the stage box, patch Main L to out 1, Main R to out 2, Wedge 1 to out 3, Wedge 2 to out 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
+      { title: 'Match outputs to snake outputs', target: ['conn-out-MAIN L', 'conn-out-MAIN R', 'conn-out-AUX 1', 'conn-out-AUX 2'], text: 'Match by number: Main L to snake output 1, Main R to snake output 2, AUX 1 to snake output 3, AUX 2 to snake output 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
     ],
     sabotage: (s) => {
       // Inputs stay patched; only the return side the MX-8 actually uses is loose:
@@ -1981,11 +2053,11 @@ window.PATCHING = [
     conditions: [
       { source: 'vocal', dest: 'pa', min: 0.3 },
     ],
-    symptom: 'Channel 1\'s fader is up but no sound comes through it.',
+    defs: ['fader', 'mute'],
     hint: 'MUTE is on channel 1\'s strip on the console. Press it and wait until the channel is silent before you touch the cable. Press MUTE again once the cable is fully seated.',
     hints: [
-      { title: 'Get signal to channel 1', target: ['src-vocal', 'conn-stage-in-1'], teach: 'The input meter is dead because the cable is unplugged.', text: 'Plug the Vocal 1 cable back into stage box port 1.', done: (ctx) => !!(ctx.hasPopped || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
-      { title: 'Do it without the pop', target: 'ch1-mute', teach: 'Plugging in a live channel pops. MUTE silences the channel; press again to restore.', text: 'Mute channel 1, reconnect the cable, then unmute it.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
+      { title: 'Get signal to channel 1', target: ['src-vocal', 'conn-stage-in-1'], text: 'Plug the Vocal 1 cable back into stage box port 1.', done: (ctx) => !!(ctx.hasPopped || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
+      { title: 'Do it without the pop', target: 'ch1-mute', text: 'Mute channel 1, reconnect the cable, then unmute channel 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
     ],
     sabotage: (s) => {
       // A healthy, fully patched show, then the lead vocal's cable pulled loose.
@@ -2014,12 +2086,12 @@ window.PATCHING = [
       { source: 'vocal', dest: 'pa', min: 0.3 },
       { source: 'vocal2', dest: 'pa', min: 0.3 },
     ],
-    symptom: 'Channel 1 is labeled Vocal 1, but a different microphone is coming through it. The two vocal cables are plugged into each other\'s ports at the stage box.',
+    defs: [],
     hint: 'Listen on PFL and compare what you hear with the Input List. The microphone on channel 1 is the one the Input List assigns to channel 2. Order matters here: mute first, move the cable second, unmute last.',
     hints: [
-      { title: 'Identify the microphone', target: 'ch1-pfl', teach: 'The Input List says which microphone belongs on each channel. PFL shows what is actually there.', text: 'Press PFL on channel 1 and listen.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) || (ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2)) },
-      { title: 'Repatch without a pop', target: ['ch1-mute', 'ch2-mute', 'src-vocal', 'conn-stage-in-1', 'conn-stage-in-2'], teach: 'Moving a cable on an unmuted channel pops loudly through the speakers.', text: 'Mute channels 1 and 2, then drag Vocal 1\'s cable from port 2 to port 1.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2) },
-      { title: 'Restore the main mix', target: ['ch1-pfl', 'ch1-mute', 'ch2-mute'], teach: 'The audience hears the main mix. A muted channel is not in it.', text: 'Disengage PFL on channel 1, then unmute channels 1 and 2.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2 && hintReaches(ctx, 'vocal', 'pa', 0.3) && hintReaches(ctx, 'vocal2', 'pa', 0.3) && ctx.state.channels.every((c) => !c.solo)) },
+      { title: 'Identify the microphone', target: 'ch1-pfl', text: 'Press PFL on channel 1 and listen to find out which microphone is on it.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) || (ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2)) },
+      { title: 'Repatch without a pop', target: ['ch1-mute', 'ch2-mute', 'src-vocal', 'conn-stage-in-1', 'conn-stage-in-2'], text: 'Mute channels 1 and 2, then drag Vocal 1\'s cable from port 2 to port 1.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2) },
+      { title: 'Restore the main mix', target: ['ch1-pfl', 'ch1-mute', 'ch2-mute'], text: 'Disengage PFL on channel 1, then unmute channels 1 and 2.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2 && hintReaches(ctx, 'vocal', 'pa', 0.3) && hintReaches(ctx, 'vocal2', 'pa', 0.3) && ctx.state.channels.every((c) => !c.solo)) },
     ],
     sabotage: (s) => {
       // A live soundcheck with the two VOCAL cables crossed at the stage box.
@@ -2070,14 +2142,14 @@ window.PATCHING = [
     // The check ends with every speaker back on: a board whose mains never
     // came back is not a verified board.
     requireOutputsOn: ['pa_l', 'pa_r', 'wedge', 'wedge2'],
-    symptom: 'One of the console\'s outputs is patched to the wrong speaker. An output is the cable that carries sound from the console to one speaker.',
+    defs: ['mains', 'aux send'],
     hint: 'PLAYBACK is panned hard left, so only the left main speaker should play. If the right one plays instead, the two main speaker cables are swapped. Switch the speakers off before you move a cable, or you get a loud pop.',
     hints: [
-      { title: 'Playback to the left main speaker', target: 'ch7-mute', teach: 'MUTE silences a channel. PLAYBACK is your test signal.', text: 'Switch the MUTE button off on PLAYBACK and watch which main speaker plays.', done: (ctx) => !!((ctx.verifyStatus && (ctx.verifyStatus.pa_l || ctx.verifyStatus.pa_r)) || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass) || (ctx.state.outPatch && !(ctx.state.outPatch.pa_l === 2 && ctx.state.outPatch.pa_r === 1))) },
-      { title: 'Repatch the outputs safely', target: ['out-pa-l', 'out-pa-r', 'conn-stage-out-1', 'conn-stage-out-2'], teach: 'Moving a cable with a speaker on causes a loud pop.', text: 'Switch both main speakers off, swap the two cables, then switch them back on.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass && ctx.state.outputs.pa_l.on && ctx.state.outputs.pa_r.on) },
-      { title: 'Prove left and right', target: 'ch7-pan', teach: 'BAL sets how much of the channel goes to the left main speaker and how much to the right.', text: 'Set the playback hard left with the BAL knob, listen, then hard right.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass && ctx.verifyStatus && ctx.verifyStatus.pa_l && ctx.verifyStatus.pa_r) },
-      { title: 'Check the wedges, one at a time', target: 'ch7-aux', teach: 'An aux send is a knob that feeds one wedge, the monitor speaker on the floor.', text: 'Send playback to Wedge 1 with AUX 1, then Wedge 2 with AUX 2.', done: (ctx) => !!(ctx.verifyStatus && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2) },
-      { title: 'Clear the test signal', target: 'ch7-strip', teach: 'Leave the speakers on. You only power a system down when you are finished with it.', text: 'Pull the AUX sends down, center BAL, mute PLAYBACK, leave every speaker on.', done: (ctx) => { const v = ctx.verifyStatus; if (!(v && v.pa_l && v.pa_r && v.wedge && v.wedge2)) return false; const o = ctx.state.outputs; if (!(o.pa_l.on && o.pa_r.on && o.wedge.on && o.wedge2.on)) return false; const a = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!a) return false; return Math.max(a.pa_l || 0, a.pa_r || 0, a.wedge || 0, a.wedge2 || 0) <= 0.05; } },
+      { title: 'Playback to the left main speaker', target: 'ch7-mute', text: 'Switch the MUTE button off on PLAYBACK and watch which main speaker plays.', done: (ctx) => !!((ctx.verifyStatus && (ctx.verifyStatus.pa_l || ctx.verifyStatus.pa_r)) || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass) || (ctx.state.outPatch && !(ctx.state.outPatch.pa_l === 2 && ctx.state.outPatch.pa_r === 1))) },
+      { title: 'Repatch the outputs safely', target: ['out-pa-l', 'out-pa-r', 'conn-stage-out-1', 'conn-stage-out-2'], text: 'Switch both main speakers off, swap the two cables, then switch them back on.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass && ctx.state.outputs.pa_l.on && ctx.state.outputs.pa_r.on) },
+      { title: 'Prove left and right', target: 'ch7-pan', text: 'Set the playback hard left with the BAL knob, listen, then hard right.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass && ctx.verifyStatus && ctx.verifyStatus.pa_l && ctx.verifyStatus.pa_r) },
+      { title: 'Check the wedges, one at a time', target: 'ch7-aux', text: 'Send playback to Wedge 1 with AUX 1, then Wedge 2 with AUX 2.', done: (ctx) => !!(ctx.verifyStatus && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2) },
+      { title: 'Clear the test signal', target: 'ch7-strip', text: 'Pull the AUX sends down, center BAL, mute PLAYBACK, leave every speaker on.', done: (ctx) => { const v = ctx.verifyStatus; if (!(v && v.pa_l && v.pa_r && v.wedge && v.wedge2)) return false; const o = ctx.state.outputs; if (!(o.pa_l.on && o.pa_r.on && o.wedge.on && o.wedge2.on)) return false; const a = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!a) return false; return Math.max(a.pa_l || 0, a.pa_r || 0, a.wedge || 0, a.wedge2 || 0) <= 0.05; } },
     ],
     sabotage: (s) => {
       // The pre-show output check, the way it actually happens: the band's
@@ -2116,11 +2188,11 @@ window.PATCHING = [
     requirePatch: true,
     involves: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
     conditions: [],
-    symptom: 'On a big stage, microphones plug into cable bundles called sub-snakes that run to the stage box. One drum microphone is silent.',
+    defs: ['sub-snake'],
     hint: 'Follow the cable from each drum microphone into the drum sub-snake, then follow the sub-snake to the stage box. The Input List gives every microphone a channel number, and it puts the kick drum microphone on channel 1. That is the line that came loose.',
     hints: [
-      { title: 'Check the channel plan', target: 'iolist', teach: 'The Input List does not show sub-snakes, so trace cables yourself.', text: 'Open the Input List to check each microphone\'s channel.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.kick === 1)) },
-      { title: 'Reconnect the drum mic', target: ['src-kick', 'conn-stage-in-1'], teach: 'A line is one microphone\'s cable. A loose sub-snake takes out every microphone it carries.', text: 'Reconnect the loose drum line, or click PATCH for that line.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.kick === 1) },
+      { title: 'Check the channel plan', target: 'iolist', text: 'Open the Input List to check each microphone\'s channel.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.kick === 1)) },
+      { title: 'Reconnect the drum mic', target: ['src-kick', 'conn-stage-in-1'], text: 'Reconnect the loose drum line, or click PATCH for that line.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.kick === 1) },
     ],
     sabotage: (s) => {
       // The full 16-channel band. Rig off (line check before the show), and the
@@ -2154,12 +2226,12 @@ window.POWER = [
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'A console sends a loud thump through the system when it switches on. Any speaker that is already on will play that thump.',
+    defs: ['wedge', 'mains'],
     hint: 'The console goes on before anything that makes sound. Leave the MAIN fader down the whole time. The MAIN fader is the slider that controls how much sound goes to the main speakers.',
     hints: [
-      { title: 'Desk first', target: 'mixer-power', teach: 'The console is the mixing desk you are standing at.', text: 'Turn the console on.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console) },
-      { title: 'Stage speakers second', target: ['out-wedge1', 'out-wedge2'], teach: 'A wedge is a floor speaker aimed at a performer so they hear themselves.', text: 'Turn on Wedge 1 and Wedge 2.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedges) },
-      { title: 'Audience speakers last', target: ['out-pa-l', 'out-pa-r'], teach: 'The main speakers face the audience.', text: 'Turn on both main speakers.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage) },
+      { title: 'Desk first', target: 'mixer-power', text: 'Turn the console on first. Every device goes on after whatever feeds it.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console) },
+      { title: 'Stage speakers second', target: ['out-wedge1', 'out-wedge2'], text: 'Turn on Wedge 1 and Wedge 2.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedges) },
+      { title: 'Audience speakers last', target: ['out-pa-l', 'out-pa-r'], text: 'Turn on both main speakers.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage) },
     ],
     sabotage: (s) => {
       // Load-in, fully patched, everything dark. The MAIN fader rests down and
@@ -2186,12 +2258,12 @@ window.POWER = [
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The last thing you switched on is the first thing you switch off.',
+    defs: ['fader'],
     hint: 'Pull the MAIN fader all the way down. Then switch off both main speakers and both wedges. The console switch is the last thing you touch.',
     hints: [
-      { title: 'Quiet the main speakers', target: 'master-fader', teach: 'The MAIN fader sets how loud the main speakers get. The wedges stay live.', text: 'Pull the MAIN fader all the way down.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.masterDown) },
-      { title: 'Speakers off', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], teach: '', text: 'Switch off both main speakers and both wedges.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedgesOff && ctx.powerStatus.paOff) },
-      { title: 'Avoid the switch thump', target: 'mixer-power', teach: 'A console makes a loud thump when it switches off.', text: 'Switch the console off.', done: (ctx) => !!(ctx.powerStatus && !ctx.powerStatus.console) },
+      { title: 'Quiet the main speakers', target: 'master-fader', text: 'Pull the MAIN fader all the way down before you switch anything off.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.masterDown) },
+      { title: 'Speakers off', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], text: 'Switch off both main speakers and both wedges before the console, because the console feeds them.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedgesOff && ctx.powerStatus.paOff) },
+      { title: 'Console off last', target: 'mixer-power', text: 'Switch the console off.', done: (ctx) => !!(ctx.powerStatus && !ctx.powerStatus.console) },
     ],
     sabotage: (s) => {
       // End of the night: system up and healthy, ready to be taken down.
@@ -2216,12 +2288,12 @@ window.POWER = [
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The main speakers, the ones facing the audience, are on and the console is still off. A system powers up console first, speakers last.',
+    defs: [],
     hint: 'The thump a console makes on power-up only becomes a pop if a speaker is switched on to play it. So the speakers come off first, the console goes on with nothing to play through, and the speakers go back on once the console is already running.',
     hints: [
-      { title: 'Make it safe', target: ['out-pa-l', 'out-pa-r'], teach: 'A console thumps when it powers on. Any speaker left on plays it loudly.', text: 'Switch both main speakers off.', done: (ctx) => !!(ctx.powerStatus && (ctx.powerStatus.paOff || ctx.powerStatus.console)) },
-      { title: 'Console on', target: 'mixer-power', teach: '', text: 'Turn the console on.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console) },
-      { title: 'Speakers back', target: ['out-wedge1', 'out-wedge2', 'out-pa-l', 'out-pa-r'], teach: 'Speakers go on last.', text: 'Turn on the wedges and both main speakers.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedges && ctx.powerStatus.paStage) },
+      { title: 'Make it safe', target: ['out-pa-l', 'out-pa-r'], text: 'Switch both main speakers off. Switching a device on or off can send a pop through anything already powered.', done: (ctx) => !!(ctx.powerStatus && (ctx.powerStatus.paOff || ctx.powerStatus.console)) },
+      { title: 'Console on', target: 'mixer-power', text: 'Turn the console on.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console) },
+      { title: 'Speakers back', target: ['out-wedge1', 'out-wedge2', 'out-pa-l', 'out-pa-r'], text: 'Turn on the wedges and both main speakers.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedges && ctx.powerStatus.paStage) },
     ],
     sabotage: (s) => {
       // Someone else's half-done power-up, in the wrong order: PA live,
@@ -2247,10 +2319,10 @@ window.POWER = [
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'Every meter on the console is moving, but the audience hears nothing. A meter is the small display that lights up when audio is passing through.',
+    defs: ['meter'],
     hint: 'The main speakers are the ones that play sound to the audience. Each of the two has its own power switch, so check both.',
     hints: [
-      { title: 'Power up what is off', target: null, teach: 'Signal reaching the MAIN meter already cleared the console, so the fault is after it.', text: 'Turn on any equipment after the console that is off.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage) },
+      { title: 'Power up what is off', target: null, text: 'Turn on every device after the console that is still switched off.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage) },
     ],
     sabotage: (s) => {
       // The band is up and playing; both main speakers were never switched on.
@@ -2270,10 +2342,10 @@ window.POWER = [
     requirePowerOn: true,
     involves: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
     conditions: [],
-    symptom: 'Part of the audience hears nothing, and one speaker on stage is silent. The console shows signal on every channel.',
+    defs: [],
     hint: 'The power switch is on the speaker itself, not at the console. Check the pair of main speakers facing the audience first, then check each wedge on the stage floor.',
     hints: [
-      { title: 'Speaker power switches', target: null, teach: 'Every speaker, main or wedge, has its own power switch.', text: 'Switch the two dead speakers back on: one main, one wedge.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges) },
+      { title: 'Speaker power switches', target: null, text: 'Switch the two dead speakers back on: one main, one wedge.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges) },
     ],
     sabotage: (s) => {
       // The 16-channel board, band playing, two independent power faults:
@@ -2307,12 +2379,12 @@ window.INPUT_SETUP = [
       { source: 'vocal', dest: 'pa', min: 0.3 },
     ],
     topology: { paRig: 'powered' },
-    symptom: 'Channel 1 is the lead vocal microphone. It is muted and its level has not been set.',
+    defs: ['PFL', 'gain', 'unity'],
     hint: 'Everything you need is in the channel 1 strip: GAIN is the knob near the top, PFL and MUTE are buttons, and the fader is the slider at the bottom. PFL and MUTE both toggle, so a second press turns each one off. Watch the meter while you turn GAIN, and stop while the red lights at the very top are still off. Unity is the U printed next to the fader, not the top of the fader\'s travel.',
     hints: [
-      { title: 'Check it in PFL', target: 'ch1-pfl', teach: 'PFL means pre-fade listen: it feeds your headphones and lights the input meter while the audience hears nothing.', text: 'Press PFL on channel 1.', done: (ctx) => !!(ctx.pflChecked || (ctx.state.channels[0] && ctx.state.channels[0].solo)) },
-      { title: 'Set the gain', target: 'ch1-gain', teach: 'GAIN sets how strong the microphone signal is. The healthy zone reaches the top of the meter with the red lights off.', text: 'Turn GAIN until the input meter sits in the healthy zone.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.input) },
-      { title: 'Open the channel', target: 'ch1-fader', teach: 'Unity is the U mark beside the fader slider, where the console is designed to run. PFL and MUTE both toggle.', text: 'Disengage PFL, unmute channel 1, and set the fader to unity.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.fader && hintReaches(ctx, 'vocal', 'pa', 0.3)) },
+      { title: 'Check it in PFL', target: 'ch1-pfl', text: 'Press PFL on channel 1.', done: (ctx) => !!(ctx.pflChecked || (ctx.state.channels[0] && ctx.state.channels[0].solo)) },
+      { title: 'Set the gain', target: 'ch1-gain', text: 'Turn GAIN until the input meter sits in the healthy zone.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.input) },
+      { title: 'Open the channel', target: 'ch1-fader', text: 'Disengage PFL, unmute channel 1, and set the fader to unity.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.fader && hintReaches(ctx, 'vocal', 'pa', 0.3)) },
     ],
     sabotage: (s) => {
       // System up and healthy; only the lead vocal is down. Gain starts low so
@@ -2337,12 +2409,12 @@ window.INPUT_SETUP = [
       { source: 'vocal2', dest: 'pa', min: 0.3 },
     ],
     topology: { paRig: 'powered' },
-    symptom: 'Channel 1 has a dynamic microphone, which makes its own signal. Channel 2 has a condenser microphone, which makes no signal until the console powers it.',
+    defs: ['dynamic microphone', 'condenser microphone', 'phantom power'],
     hint: 'Switch +48V on while channel 2 is muted and its PFL is disengaged, so the thump reaches neither the speakers nor your headphones. Channel 1 needs no power at all. On either channel the order is the same: engage PFL, set the GAIN by the meter, switch MUTE off, move the fader to unity.',
     hints: [
-      { title: 'The dynamic first', target: 'ch1-strip', teach: 'A dynamic microphone needs no power. Set GAIN so the meter peaks near the top of the green.', text: 'On channel 1: engage PFL, set GAIN by the meter, MUTE off, fader to unity (U).', done: (ctx) => !!(hintReaches(ctx, 'vocal', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[1]) },
-      { title: 'Power the condenser', target: 'ch2-phantom', teach: '+48V (phantom power) comes from the console up the microphone cable. Switching it on makes a loud thump.', text: 'With channel 2 MUTE engaged, switch on +48V.', done: (ctx) => !!(ctx.state.channels[1] && ctx.state.channels[1].phantom) },
-      { title: 'Bring in channel 2', target: 'ch2-strip', teach: '', text: 'On channel 2: engage PFL, set GAIN by the meter, MUTE off, fader to unity.', done: (ctx) => !!(hintReaches(ctx, 'vocal2', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[2]) },
+      { title: 'The dynamic first', target: 'ch1-strip', text: 'On channel 1: engage PFL, set GAIN by the meter, MUTE off, fader to unity (U).', done: (ctx) => !!(hintReaches(ctx, 'vocal', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[1]) },
+      { title: 'Power the condenser', target: 'ch2-phantom', text: 'Make sure MUTE is engaged on channel 2, then switch on +48V.', done: (ctx) => !!(ctx.state.channels[1] && ctx.state.channels[1].phantom) },
+      { title: 'Bring in channel 2', target: 'ch2-strip', text: 'On channel 2: engage PFL, set GAIN by the meter, MUTE off, fader to unity.', done: (ctx) => !!(hintReaches(ctx, 'vocal2', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[2]) },
     ],
     sabotage: (s) => {
       // System up; both vocal channels down with half-healthy gain, phantom off
@@ -2368,12 +2440,12 @@ window.INPUT_SETUP = [
       { source: 'laptop', dest: 'pa', min: 0.3 },
     ],
     topology: { paRig: 'powered' },
-    symptom: 'A DI box, short for direct injection, lets an instrument plug into a microphone input. The bass and keys both come in on DI boxes, and the source card on stage says which is which.',
+    defs: ['DI box', 'active DI', 'passive DI'],
     hint: 'The source cards sit at the stage inputs, and each one names the instrument and its DI type. Only the active DI takes +48V. When you set GAIN, the meter should read about 0.',
     hints: [
-      { title: 'Power the active DI', target: 'ch3-phantom', teach: 'An active DI has electronics that need +48V. Switching it on while a channel is live pops the speakers.', text: 'Mute the active DI\'s channel from the source cards, then switch on +48V.', done: (ctx) => !!(ctx.state.channels[2] && ctx.state.channels[2].phantom) },
-      { title: 'Bring in the bass', target: 'ch3-strip', teach: 'GAIN is right when the meter reads about 0.', text: 'On channel 3, engage PFL, set GAIN by the meter, unmute, fader to unity.', done: (ctx) => !!(hintReaches(ctx, 'guitar', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[3]) },
-      { title: 'Bring in the keys', target: 'ch4-strip', teach: 'A passive DI has no electronics, so it needs no power.', text: 'On channel 4, engage PFL, set GAIN by the meter, unmute, fader to unity, leave +48V off.', done: (ctx) => !!(hintReaches(ctx, 'laptop', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[4]) },
+      { title: 'Power the active DI', target: 'ch3-phantom', text: 'Use the source cards on stage to find which channel has the active DI, mute that channel, then switch on +48V.', done: (ctx) => !!(ctx.state.channels[2] && ctx.state.channels[2].phantom) },
+      { title: 'Bring in the bass', target: 'ch3-strip', text: 'On channel 3, engage PFL, set GAIN by the meter, unmute, fader to unity.', done: (ctx) => !!(hintReaches(ctx, 'guitar', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[3]) },
+      { title: 'Bring in the keys', target: 'ch4-strip', text: 'On channel 4, engage PFL, set GAIN by the meter, unmute, fader to unity, leave +48V off.', done: (ctx) => !!(hintReaches(ctx, 'laptop', 'pa', 0.3) && ctx.pflChannels && ctx.pflChannels[4]) },
     ],
     sabotage: (s) => {
       // System up; both DI channels down, phantom off, half-healthy gain. The
@@ -2401,12 +2473,12 @@ window.INPUT_SETUP = [
       { source: 'laptop', dest: 'pa', min: 0.3 },
     ],
     topology: { paRig: 'powered' },
-    symptom: 'The keys on channel 4 are quiet, and its fader is pushed near the top. Turning a fader up to make up for a weak signal also raises the console\'s background hiss.',
+    defs: ['gain structure', 'headroom'],
     hint: 'The GAIN knob at the top of channel 4 is nearly off, so the fader is doing all the work. Press PFL on channel 4, raise the GAIN until the input meter reads strong, then slide the fader back down to the U mark.',
     hints: [
-      { title: 'Find the weak signal', target: 'ch4-strip', teach: '', text: 'Press PFL on channel 4 and read the input meter.', done: (ctx) => !!(ctx.pflChecked || (ctx.state.channels[3] && ctx.state.channels[3].solo)) },
-      { title: 'Set level at the input', target: 'ch4-gain', teach: '', text: 'Turn GAIN up until the input meter reads strong, never touching the top.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.input) },
-      { title: 'Reset the fader', target: 'ch4-fader', teach: 'That leaves room to move up or down.', text: 'Slide the channel 4 fader down to the U mark.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.fader) },
+      { title: 'Find the weak signal', target: 'ch4-strip', text: 'Press PFL on channel 4 and read the input meter.', done: (ctx) => !!(ctx.pflChecked || (ctx.state.channels[3] && ctx.state.channels[3].solo)) },
+      { title: 'Set level at the input', target: 'ch4-gain', text: 'Turn GAIN up until the input meter reads strong, never touching the top.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.input) },
+      { title: 'Reset the fader', target: 'ch4-fader', text: 'Slide the channel 4 fader down to the U mark.', done: (ctx) => !!(ctx.gainStatus && ctx.gainStatus.fader) },
     ],
     sabotage: (s) => {
       // The classic by-ear compensation: gain starved, fader slammed. The
@@ -2434,10 +2506,10 @@ window.INPUT_SETUP = [
       { source: 'laptop', dest: 'pa', min: 0.3 },
     ],
     topology: { paRig: 'powered' },
-    symptom: 'Vocal 2 is the microphone on channel 2, and it has gone silent. Every other channel sounds normal.',
+    defs: [],
     hint: 'The +48V and MUTE buttons are both in channel 2\'s set of controls. Press MUTE so the channel makes no sound, press +48V to send the microphone its power, then press MUTE again to bring the channel back.',
     hints: [
-      { title: 'Check channel 2', target: null, teach: 'Channel 2 has a condenser microphone. It makes no signal without +48V, and switching +48V on unmuted pops the speakers.', text: 'Press MUTE on channel 2, switch +48V on, then unmute.', done: (ctx) => !!hintReaches(ctx, 'vocal2', 'pa', 0.3) },
+      { title: 'Check channel 2', target: null, text: 'Press MUTE on channel 2, switch +48V on, then unmute channel 2.', done: (ctx) => !!hintReaches(ctx, 'vocal2', 'pa', 0.3) },
     ],
     sabotage: (s) => {
       // The whole band live and healthy, except channel 2's phantom is off:

@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=198"></script>
+<script src="content-staging.js?v=199"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8262,6 +8262,36 @@ function lessonActiveIndex(steps, ctx) {
   return steps.length;
 }
 
+// DEFINITIONS PANEL — the only prose a lesson shows outside its steps.
+//
+// A lesson declares `defs: ['wedge', 'aux send']` and this renders the
+// term/definition pairs from window.GLOSSARY. There is deliberately NO
+// free-text field: a lesson cannot set a scene, restate the DO THIS, or
+// describe something the student can already see on the console. If a
+// lesson has nothing to define, it shows nothing at all.
+//
+// Unknown keys are skipped rather than rendered raw, so a typo shows up as
+// a missing definition in the lint rather than as garbage on screen.
+function DefList({ defs }) {
+  if (!Array.isArray(defs) || defs.length === 0) return null;
+  const G = window.GLOSSARY || {};
+  const L = window.GLOSSARY_LABELS || {};
+  const rows = defs.filter((k) => G[k]);
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {rows.map((k) => (
+        <div key={k} style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+          <span style={{ color: 'var(--ink)', fontWeight: 700 }}>{L[k] || k}</span>
+          <span style={{ opacity: 0.5 }}>{'  ·  '}</span>
+          {G[k]}
+        </div>
+      ))}
+    </div>
+  );
+}
+window.DefList = DefList;
+
 function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
   const total = steps.length;
   const allDone = activeIndex >= total;
@@ -8281,10 +8311,13 @@ function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
         </div>
       </div>
 
-      {/* The scene. Guided lessons replace the BriefCard, which was the only
-          place level.symptom rendered — without this line the student never
-          reads the situation the lesson drops them into. */}
-      {level.symptom && (
+      {/* Definitions only. A lesson declares which terms it introduces and
+          this renders them from the glossary. Instructions belong in the
+          step's DO THIS; board state belongs on the console, not in prose.
+          `symptom` is still honored for Practice and custom scenarios (which
+          need a goal statement), but lessons must not use it. */}
+      <DefList defs={level.defs} />
+      {!level.defs && level.symptom && (
         <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5 }}>{level.symptom}</div>
       )}
 
@@ -8676,7 +8709,7 @@ function IoListPanel({ open, onClose, state }) {
         <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
           <thead><tr>
             {s.big16 && <th style={th}>Sub-snake</th>}
-            <th style={th}>Snake ch</th><th style={th}>Mixer ch</th><th style={th}>Source</th><th style={th}>Type</th>
+            <th style={th}>Snake input</th><th style={th}>Mixer ch</th><th style={th}>Source</th><th style={th}>Type</th>
           </tr></thead>
           <tbody>
             {inputRows.map((r) => (
@@ -8693,7 +8726,7 @@ function IoListPanel({ open, onClose, state }) {
         {sectionTitle('OUTPUTS · TO THE SPEAKERS')}
         <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
           <thead><tr>
-            <th style={th}>Snake ch</th><th style={th}>Console output</th><th style={th}>Goes to</th>
+            <th style={th}>Snake output</th><th style={th}>Console output</th><th style={th}>Goes to</th>
           </tr></thead>
           <tbody>
             {outputDefs.map((o) => {

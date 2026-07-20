@@ -1,0 +1,467 @@
+{
+ "1": {
+  "nums": [
+   "-4",
+   "1",
+   "2",
+   "3",
+   "4"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "AUX 2",
+   "Main L",
+   "Main R",
+   "Wedge 1",
+   "Wedge 2"
+  ]
+ },
+ "2": {
+  "nums": [],
+  "ctrls": []
+ },
+ "3": {
+  "nums": [],
+  "ctrls": [
+   "GAIN",
+   "MUTE",
+   "PFL"
+  ]
+ },
+ "4": {
+  "nums": [
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "AUX 2",
+   "Wedge 1",
+   "Wedge 2"
+  ]
+ },
+ "5": {
+  "nums": [
+   "+48",
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "GAIN",
+   "PFL",
+   "channel 1",
+   "channel 2"
+  ]
+ },
+ "6": {
+  "nums": [
+   "+48",
+   "3",
+   "4"
+  ],
+  "ctrls": [
+   "GAIN",
+   "PFL",
+   "channel 3",
+   "channel 4"
+  ]
+ },
+ "7": {
+  "nums": [
+   "1"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "Vocal 1",
+   "Wedge 1"
+  ]
+ },
+ "8": {
+  "nums": [
+   "1"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "Monitor EQ",
+   "Vocal 1",
+   "Wedge 1"
+  ]
+ },
+ "9": {
+  "nums": [
+   "+48",
+   "1",
+   "2",
+   "3"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "PFL",
+   "Vocal 1"
+  ]
+ },
+ "10": {
+  "nums": [
+   "+48",
+   "-4",
+   "1"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "GAIN",
+   "HPF",
+   "MUTE",
+   "PAN"
+  ]
+ },
+ "101": {
+  "nums": [],
+  "ctrls": [
+   "SOUND"
+  ]
+ },
+ "102": {
+  "nums": [
+   "3",
+   "4",
+   "6"
+  ],
+  "ctrls": [
+   "BASS",
+   "KEYS",
+   "channel 3",
+   "channel 4"
+  ]
+ },
+ "103": {
+  "nums": [
+   "+48",
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "PFL",
+   "Vocal 1",
+   "Vocal 2",
+   "channel 2"
+  ]
+ },
+ "104": {
+  "nums": [
+   "1"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "Vocal 1",
+   "Wedge 1"
+  ]
+ },
+ "105": {
+  "nums": [],
+  "ctrls": []
+ },
+ "practice": {
+  "nums": [],
+  "ctrls": []
+ },
+ "feedback-mode": {
+  "nums": [
+   "1"
+  ],
+  "ctrls": [
+   "Vocal 1",
+   "Wedge 1"
+  ]
+ },
+ "lead-vocal-dead": {
+  "nums": [],
+  "ctrls": []
+ },
+ "pa-side-quiet": {
+  "nums": [],
+  "ctrls": []
+ },
+ "keys-buried": {
+  "nums": [],
+  "ctrls": []
+ },
+ "mw1": {
+  "nums": [
+   "1"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "Vocal 1",
+   "Wedge 1"
+  ]
+ },
+ "mw2": {
+  "nums": [
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "Vocal 1",
+   "Vocal 2",
+   "Wedge 1",
+   "Wedge 2"
+  ]
+ },
+ "mw3": {
+  "nums": [
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "AUX 2",
+   "Vocal 1",
+   "Vocal 2",
+   "Wedge 2"
+  ]
+ },
+ "mw4": {
+  "nums": [
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "AUX 2",
+   "Vocal 1",
+   "Vocal 2",
+   "Wedge 1",
+   "Wedge 2"
+  ]
+ },
+ "mwHpf": {
+  "nums": [
+   "1"
+  ],
+  "ctrls": [
+   "HPF",
+   "Wedge 1",
+   "channel 1"
+  ]
+ },
+ "mw5": {
+  "nums": [
+   "1"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "Vocal 1",
+   "Wedge 1"
+  ]
+ },
+ "mwMoreMe": {
+  "nums": [
+   "1",
+   "2",
+   "3",
+   "4"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "Wedge 1",
+   "channel 1"
+  ]
+ },
+ "mwShare": {
+  "nums": [
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "Vocal 1",
+   "Vocal 2",
+   "Wedge 1",
+   "Wedge 2"
+  ]
+ },
+ "mw6": {
+  "nums": [
+   "1"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "Monitor EQ",
+   "Vocal 1",
+   "Wedge 1"
+  ]
+ },
+ "pt0": {
+  "nums": [
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "PFL",
+   "Vocal 1",
+   "channel 1",
+   "channel 2"
+  ]
+ },
+ "pt0b": {
+  "nums": [
+   "3",
+   "4"
+  ],
+  "ctrls": [
+   "channel 4"
+  ]
+ },
+ "pt1": {
+  "nums": [
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "Vocal 1",
+   "Vocal 2"
+  ]
+ },
+ "pt2": {
+  "nums": [
+   "1",
+   "2",
+   "3",
+   "4"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "AUX 2",
+   "Main L",
+   "Main R",
+   "Wedge 1",
+   "Wedge 2"
+  ]
+ },
+ "pt3": {
+  "nums": [
+   "1"
+  ],
+  "ctrls": [
+   "MUTE",
+   "Vocal 1",
+   "channel 1"
+  ]
+ },
+ "pt4": {
+  "nums": [
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "PFL",
+   "Vocal 1",
+   "channel 1"
+  ]
+ },
+ "ptSwap": {
+  "nums": [
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "AUX 1",
+   "AUX 2",
+   "MUTE",
+   "Wedge 1",
+   "Wedge 2"
+  ]
+ },
+ "pt5": {
+  "nums": [],
+  "ctrls": []
+ },
+ "pw1": {
+  "nums": [
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "Wedge 1",
+   "Wedge 2"
+  ]
+ },
+ "pw2": {
+  "nums": [],
+  "ctrls": []
+ },
+ "pw3": {
+  "nums": [],
+  "ctrls": []
+ },
+ "pw4": {
+  "nums": [],
+  "ctrls": []
+ },
+ "pw5": {
+  "nums": [],
+  "ctrls": []
+ },
+ "is1": {
+  "nums": [
+   "1"
+  ],
+  "ctrls": [
+   "GAIN",
+   "MUTE",
+   "PFL",
+   "channel 1"
+  ]
+ },
+ "is2": {
+  "nums": [
+   "+48",
+   "1",
+   "2"
+  ],
+  "ctrls": [
+   "GAIN",
+   "MUTE",
+   "PFL",
+   "channel 1",
+   "channel 2"
+  ]
+ },
+ "is3": {
+  "nums": [
+   "+48",
+   "0",
+   "3",
+   "4"
+  ],
+  "ctrls": [
+   "GAIN",
+   "PFL",
+   "channel 3",
+   "channel 4"
+  ]
+ },
+ "is4": {
+  "nums": [
+   "2",
+   "4"
+  ],
+  "ctrls": [
+   "GAIN",
+   "PFL",
+   "Vocal 2",
+   "channel 4"
+  ]
+ },
+ "is5": {
+  "nums": [
+   "+48",
+   "2"
+  ],
+  "ctrls": [
+   "MUTE",
+   "Vocal 2",
+   "channel 2"
+  ]
+ }
+}
