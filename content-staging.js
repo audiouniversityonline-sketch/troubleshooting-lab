@@ -89,6 +89,60 @@ window.GLOSSARY_LABELS = {
   'high-pass filter': 'High-pass filter (HPF)'
 };
 
+/* ------------------------------------------------------------------
+   GLOSSARY_ANCHORS — hovering a definition highlights the thing itself
+   on the board. Each value is a CSS selector matched against the
+   spotlight anchors the console and stage already carry (`data-walk`),
+   so one term can light up EVERY instance: hover "fader" and all the
+   channel faders plus the master fader light up together.
+
+   A term is listed only when the highlight is HONEST. Concepts with no
+   single home on screen (signal, patch, cross-patch, headroom, clipping,
+   gain structure, feedback, ring out, pre-fader, monitor mix, line
+   check) are deliberately absent, and the UI shows no hover affordance
+   for them. A hover that lights up the wrong thing teaches the wrong
+   thing; a hover that lights up nothing feels broken.
+
+   Microphone and DI types are absent for that reason: the stage source
+   cards share one `src-` anchor with no per-type distinction, so
+   "condenser microphone" would ring the dynamics too.
+   ------------------------------------------------------------------ */
+window.GLOSSARY_ANCHORS = {
+  // Console controls. The `$=` suffix match catches every channel plus
+  // the master where one exists (master-fader, master-aux).
+  'gain':             '[data-walk$="-gain"]',
+  'fader':            '[data-walk$="-fader"]',
+  'unity':            '[data-walk$="-fader"]',
+  'meter':            '[data-walk$="-fader"]', // anchor spans the fader+meter row
+  'mute':             '[data-walk$="-mute"]',
+  'PFL':              '[data-walk$="-pfl"]',
+  'phantom power':    '[data-walk$="-phantom"]',
+  'high-pass filter': '[data-walk$="-hpf"]',
+  'aux send':         '[data-walk$="-aux"]',
+  'input channel':    '[data-walk$="-strip"]',
+  'main mix':         '[data-walk="master-fader"]',
+  'graphic EQ':       '[data-walk="monitor-eq"]',
+
+  // Connection points, console end and stage end.
+  'input':            '[data-walk^="conn-in-"], [data-walk^="conn-stage-in-"]',
+  'output':           '[data-walk^="conn-out-"], [data-walk^="conn-stage-out-"]',
+  'snake input':      '[data-walk^="conn-stage-in-"]',
+  'snake output':     '[data-walk^="conn-stage-out-"]',
+  'stage box':        '[data-walk^="conn-stage-in-"]',
+  'sub-snake':        '[data-walk^="conn-sub-"]',
+
+  // Speakers.
+  'wedge':            '[data-walk^="out-wedge"]',
+  'mains':            '[data-walk="out-pa-l"], [data-walk="out-pa-r"]',
+
+  // Stage sources, by type (SourceCard tags each card with data-srckind).
+  'dynamic microphone':   '[data-srckind="dynamic"]',
+  'condenser microphone': '[data-srckind="condenser"]',
+  'DI box':               '[data-srckind^="di-"]',
+  'active DI':            '[data-srckind="di-active"]',
+  'passive DI':           '[data-srckind="di-passive"]'
+};
+
 // LEVELS — the Essentials free tier.
 //
 // Contract per level (kept intentionally small so the prose surface stays

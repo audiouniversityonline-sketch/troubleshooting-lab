@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=199"></script>
+<script src="content-staging.js?v=201"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -3487,6 +3487,10 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
   return (
     <div
       data-walk={'src-' + srcKey}
+      /* Source TYPE, so hovering "condenser microphone" in the definitions
+         panel can light up the condensers only. `data-walk` is one shared
+         `src-` key with no type in it, which would ring every card. */
+      data-srckind={kind === 'di' ? (diActive ? 'di-active' : 'di-passive') : kind}
       onClick={onTest}
       className="ui-no-select"
       style={{
@@ -8272,21 +8276,105 @@ function lessonActiveIndex(steps, ctx) {
 //
 // Unknown keys are skipped rather than rendered raw, so a typo shows up as
 // a missing definition in the lint rather than as garbage on screen.
+// Hovering a definition tells the app which term to light up on the board.
+// The App owns the state (the highlight layer renders at the top level,
+// above the board), so this context just hands the setter down.
+const DefHoverContext = React.createContext(null);
+window.DefHoverContext = DefHoverContext;
+
+// GLOSSARY HIGHLIGHT — "show me what that word means".
+//
+// Deliberately NOT the walkthrough spotlight. That ring pulses green and
+// means "do this next"; this is a calm, static amber wash that means
+// "this is the thing I just defined". Different intent, different look,
+// so a student never confuses a definition with an instruction.
+//
+// Highlights EVERY match, so hovering "fader" lights up all of them at
+// once, which is the point: the word names a kind of control, not one
+// control.
+function GlossaryHighlight({ term }) {
+  const [rects, setRects] = uS([]);
+  const sel = (term && window.GLOSSARY_ANCHORS && window.GLOSSARY_ANCHORS[term]) || '';
+  uE(() => {
+    if (!sel) { setRects([]); return; }
+    const measure = () => {
+      const boxes = [];
+      document.querySelectorAll(sel).forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) return;
+        // Anything scrolled out of view would otherwise draw a box pinned
+        // to the viewport edge.
+        if (r.bottom < 0 || r.top > window.innerHeight) return;
+        boxes.push({ left: r.left, top: r.top, w: r.width, h: r.height,
+                     inPanel: !!el.closest('[data-iolist-card]') });
+      });
+      setRects((prev) => {
+        const same = boxes.length === prev.length && boxes.every((b, i) => {
+          const p = prev[i];
+          return p && Math.abs(p.left - b.left) < 0.5 && Math.abs(p.top - b.top) < 0.5
+              && Math.abs(p.w - b.w) < 0.5 && Math.abs(p.h - b.h) < 0.5;
+        });
+        return same ? prev : boxes;
+      });
+    };
+    measure();
+    // Track the board's scale-to-fit transform and any panel drag, the
+    // same way the walkthrough spotlight does.
+    let raf;
+    const loop = () => { measure(); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    window.addEventListener('resize', measure);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measure); };
+  }, [sel]);
+  if (!sel || !rects.length) return null;
+  return (
+    <>
+      {rects.map((r, i) => (
+        <div key={i} style={{
+          position: 'fixed', left: r.left - 3, top: r.top - 3,
+          width: r.w + 6, height: r.h + 6,
+          border: '1.5px solid var(--gold, #f0b429)',
+          background: 'rgba(240,180,41,0.13)',
+          borderRadius: r.h < 40 ? 3 : 6,
+          pointerEvents: 'none', zIndex: r.inPanel ? 96 : 87,
+          boxShadow: '0 0 10px rgba(240,180,41,0.45)',
+        }}/>
+      ))}
+    </>
+  );
+}
+window.GlossaryHighlight = GlossaryHighlight;
+
 function DefList({ defs }) {
   if (!Array.isArray(defs) || defs.length === 0) return null;
   const G = window.GLOSSARY || {};
   const L = window.GLOSSARY_LABELS || {};
+  const A = window.GLOSSARY_ANCHORS || {};
+  const setHover = React.useContext(window.DefHoverContext) || null;
   const rows = defs.filter((k) => G[k]);
   if (rows.length === 0) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {rows.map((k) => (
-        <div key={k} style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-          <span style={{ color: 'var(--ink)', fontWeight: 700 }}>{L[k] || k}</span>
-          <span style={{ opacity: 0.5 }}>{'  ·  '}</span>
-          {G[k]}
-        </div>
-      ))}
+      {rows.map((k) => {
+        // Only terms that map to something real on the board get the
+        // hover affordance. A dotted underline on a word that lights
+        // nothing up reads as a broken feature.
+        const canPoint = !!(A[k] && setHover);
+        return (
+          <div key={k}
+            onMouseEnter={canPoint ? () => setHover(k) : undefined}
+            onMouseLeave={canPoint ? () => setHover(null) : undefined}
+            style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5,
+                     cursor: canPoint ? 'help' : 'default' }}>
+            <span style={{
+              color: 'var(--ink)', fontWeight: 700,
+              borderBottom: canPoint ? '1px dotted var(--ink-2)' : 'none',
+            }}>{L[k] || k}</span>
+            <span style={{ opacity: 0.5 }}>{'  ·  '}</span>
+            {G[k]}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -9365,6 +9453,9 @@ function App() {
   // Power-Down (lesson 10) is a wind-down the student can still finish after.
   // Stable ids are append-only, so completed[9] is The Gig for good.
   const [ctaOpen, setCtaOpen] = uS(false);
+  // Which glossary term the student is hovering in the definitions panel.
+  // Drives GlossaryHighlight, which washes the matching controls in amber.
+  const [defHover, setDefHover] = uS(null);
   // Finale of the free Start Here course (SH_FINALE_ID). Fires once: a free
   // viewer who has not given an email gets the opt-in first (then the CTA);
   // members and already-subscribed viewers get the CTA straight away.
@@ -11524,6 +11615,7 @@ function App() {
             ? guideSteps[guideActiveIndex].flow : null)) || null;
 
   return (
+   <window.DefHoverContext.Provider value={setDefHover}>
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'radial-gradient(ellipse at 30% 0%, #1a1a1f 0%, #0e0e10 50%, #08080a 100%)', position: 'relative' }}>
       <TopBar
         level={level} levelIdx={levelIdx} totalLevels={SCENARIOS.length}
@@ -11566,6 +11658,11 @@ function App() {
           layer: the spotlight ring hides while one is open so it can't draw in
           front of the window. */}
       <WalkthroughSpotlight target={(eqPanelOpen || catalogOpen || pitchFor || ctaOpen) ? null : (walkPhase === 'steps' ? (walkSteps[walkStep] && walkSteps[walkStep].target) : (guideTarget || null))}/>
+      {/* Hovering a definition washes the matching controls in amber. The
+          Monitor EQ stays allowed here (unlike the spotlight above) because
+          "graphic EQ" points AT that panel; the rest hide behind a pop-up
+          for the same reason the ring does. */}
+      <GlossaryHighlight term={(catalogOpen || pitchFor || ctaOpen) ? null : defHover}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
       {/* Free-tier email opt-in. Fires at the FINALE of the free Start Here
@@ -11891,6 +11988,7 @@ function App() {
         </div>
       )}
     </div>
+   </window.DefHoverContext.Provider>
   );
 }
 
@@ -12239,7 +12337,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             color: eqOpen ? '#0a0a0c' : (eqRinging ? 'var(--hot)' : 'var(--ink-2)'),
             borderColor: eqOpen ? '#c79a1f' : (eqRinging ? 'var(--hot)' : '#38383e'),
             boxShadow: eqRinging && !eqOpen ? '0 0 8px rgba(255,70,48,0.4)' : 'none', fontWeight: 700,
-          }}>MONITOR EQ</button>
+          }} data-walk="monitor-eq">MONITOR EQ</button>
         )}
         {onOpenIoList && (
           <button data-walk="iolist" onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>INPUT LIST</button>
