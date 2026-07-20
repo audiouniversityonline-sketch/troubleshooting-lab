@@ -1827,7 +1827,7 @@ window.PATCHING = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'Every stage cable plugs into a numbered port on the stage box. The snake carries them all to the console, one to one: port 1 feeds console input 1, port 2 feeds input 2, and so on. Two inputs are patched wrong. Find them and fix them.',
+    symptom: 'Every stage cable plugs into a numbered port on the stage box. The snake carries them all to the console, one to one: port 1 feeds console input 1, port 2 feeds input 2, and so on. Follow one channel through first. Then fix the two inputs that are patched wrong.',
     hint: 'Open the Input List, then follow channel 1: Vocal 1 goes into stage port 1, the snake carries it up as tail 1, and tail 1 lands on console input 1. PFL channel 1 to see it on the meter. Tails 3 and 4 are crossed at the console. Drag either one onto its matching input and they swap back.',
     hints: [
       { title: 'Open the Input List', target: 'iolist', teach: 'The Input List shows which channel each input and output belongs on.', text: 'Open the Input List in the top bar.', done: (ctx) => { const f = ctx.state.fanOut || []; return !!(ctx.ioListOpen || (f[2] === 3 && f[3] === 4)); } },
@@ -1976,7 +1976,7 @@ window.PATCHING = [
       { source: 'vocal', dest: 'pa', min: 0.3 },
       { source: 'vocal2', dest: 'pa', min: 0.3 },
     ],
-    symptom: 'The band is playing. Push channel 1\'s fader and the other singer gets louder. Two inputs are crossed between the stage and the console. Find them and fix them without popping the speakers.',
+    symptom: 'The band is playing. Push channel 1\'s fader and the other singer gets louder. Something is crossed between the stage and the console. Find it and fix it without popping the speakers.',
     hint: 'PFL channel 1 and listen: that is not Vocal 1. The two vocal cables are in each other\'s ports at the stage box. Changing a patch on a live channel pops the speakers, so mute both channels, then move the cables so they are connected according to the input list, and unmute.',
     hints: [
       { title: 'Find who is really on channel 1', target: 'ch1-pfl', teach: 'The label on the strip only says what should be there. PFL (pre-fade listen) plays what actually is there. Check one against the other to find a cross-patch.', text: 'PFL channel 1 and listen, then open the Input List and compare it to the stage box.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) || (ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2)) },
@@ -2032,7 +2032,7 @@ window.PATCHING = [
     // The check ends with every speaker back on: a board whose mains never
     // came back is not a verified board.
     requireOutputsOn: ['pa_l', 'pa_r', 'wedge', 'wedge2'],
-    symptom: 'The system is patched and the band has not arrived. Test every output with the playback device, one at a time: left main speaker, right main speaker, then each wedge. One of them is patched wrong.',
+    symptom: 'The system is patched and the band has not arrived. Test every output with the playback device, one at a time: left main speaker, right main speaker, then each wedge. Something is not where it should be.',
     hint: 'Unmute PLAYBACK: it is already panned hard left (the BAL knob on the PLAYBACK strip), so only the left main speaker should answer. Here the right side plays instead, because the two main speaker lines are crossed at the stage box. Speakers off, swap the lines, speakers back. Then run the whole test again on the fixed lines: pan hard left, pan hard right, then send the playback to Wedge 1 and Wedge 2 with its AUX sends, one at a time. Zero the sends and mute the playback when you are done.',
     hints: [
       { title: 'Playback to the left main speaker', target: 'ch7-mute', teach: 'The playback device is your test signal. It is panned hard left, so only the left main speaker should play. Watch the SIG lights: if the right side plays instead, the main lines are crossed.', text: 'Unmute PLAYBACK. Watch which main speaker plays.', done: (ctx) => !!((ctx.verifyStatus && (ctx.verifyStatus.pa_l || ctx.verifyStatus.pa_r)) || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass) || (ctx.state.outPatch && !(ctx.state.outPatch.pa_l === 2 && ctx.state.outPatch.pa_r === 1))) },
