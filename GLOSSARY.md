@@ -51,8 +51,8 @@ Allen & Heath, Behringer and Crown documentation, then rewritten by Kyle.
 | condenser microphone | A microphone with active electronics inside, which require power. |
 | phantom power (+48V DC) | Power required for active DIs and microphones (usually provided by the microphone preamp). |
 | DI box | A device used when connecting a high-impedance source (instrument, laptop, etc) to a low-impedance input (mixer input). |
-| active DI | A DI that requires external power (usually from a battery or phantom power). |
-| passive DI | A DI that requires no power. |
+| active DI | A DI that requires external power (usually from a battery or phantom power). Usually used with passive sources. |
+| passive DI | A DI that requires no power. Usually used with active sources. |
 | high-pass filter (HPF) | Reduces energy below a set frequency. Also called low-cut. |
 
 ## Monitors and routing
@@ -113,6 +113,11 @@ Claims the app makes, or could easily make, that the research contradicts.
 6. **Phantom power does not harm modern dynamic mics.** The hazard is unbalanced or
    miswired cable, not the mic type.
 7. **Active DI needs power, passive does not.** Commonly taught backwards.
+   The source pairing is the opposite of what the words suggest, which is why
+   both definitions state it: an **active DI** suits a **passive source** (passive
+   bass, acoustic pickup), and a **passive DI** suits an **active source**
+   (keyboard, active bass). Beginners pattern-match "active bass, active DI"
+   and get it backwards. Source: Radial Engineering.
 8. **A channel is not a socket.** Stage box port 1 need not be console channel 1.
    This is the whole basis of the Patching course.
 9. **Feedback is not always a squeal.** It ranges from low rumble to screech.

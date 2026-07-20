@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=201"></script>
+<script src="content-staging.js?v=202"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -2021,7 +2021,10 @@ function Fader({ value, onChange, height = 180, color = '#dcd7c6', tickLabels = 
       {tickLabels && (
         <div style={{ position: 'relative', height: trackH, width: 18, fontSize: 7, color: 'var(--ink-3)' }} className="mono">
           {ticks.map(t => (
-            <div key={t.label} style={{ position: 'absolute', right: 0, top: (1 - t.v) * (trackH - capH) + capH / 2 - 4, lineHeight: 1 }}>{t.label}</div>
+            /* The U tick carries an anchor so hovering "unity" in the
+               definitions panel can point an arrow at the exact line,
+               rather than washing the whole fader. */
+            <div key={t.label} data-walk={t.label === 'U' ? 'unity-mark' : undefined} style={{ position: 'absolute', right: 0, top: (1 - t.v) * (trackH - capH) + capH / 2 - 4, lineHeight: 1}}>{t.label}</div>
           ))}
         </div>
       )}
@@ -2478,7 +2481,10 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       {walk('gain', <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={40} color="var(--accent)"
         tip="Input gain. Sets how hard the source hits the preamp. Set it first, in PFL." />)}
 
-      <div style={{ width: '94%' }}>
+      {/* The INPUT meter, right under the preamp. This is the meter the
+          gain-setting lessons mean, so it gets its own anchor separate
+          from the fader row's. */}
+      <div data-walk={'ch' + (idx + 1) + '-inputmeter'} style={{ width: '94%' }}>
         <PFLBar level={pflLevel} hot={ch.solo} mkey={'pfl:' + idx}/>
         <div className="mono" style={{ fontSize: 6.5, color: ch.solo ? 'var(--amber)' : 'var(--ink-3)', textAlign: 'center', marginTop: 1, letterSpacing: 0.5, fontWeight: 700 }}>
           {ch.solo ? 'PFL' : 'INPUT'}
@@ -3003,7 +3009,7 @@ function DigitalPatch({ channels, inputPatch, onRepatch, powered }) {
               border: '1px solid ' + (assigned ? '#38383e' : 'var(--hot)'), borderRadius: 3,
               padding: '3px 7px', minWidth: 44,
             }}
-              title={assigned ? ('Channel ' + (i + 1) + ' is patched to physical input ' + inNum + '. Click to unassign.') : ('Channel ' + (i + 1) + ' has no input assigned, so it is dead even though the cable is fine. Click to re-patch it.')}>
+              title={assigned ? ('Channel ' + (i + 1) + ' is patched to physical input ' + inNum + '. Click to unassign.') : ('Channel ' + (i + 1) + ' has no input assigned, so it stays silent even though the cable is fine. Click to re-patch it.')}>
               <span style={{ fontSize: 8, fontWeight: 800, color: assigned ? 'var(--ink-2)' : 'var(--hot)' }}>CH {c.stereo ? (i + 1) + '/' + (i + 2) : (i + 1)}</span>
               <span style={{ fontSize: 7.5, fontWeight: 700, color: assigned ? 'var(--label)' : 'var(--hot)' }}>{assigned ? ('IN ' + inNum) : '— NONE'}</span>
             </div>
@@ -4157,7 +4163,7 @@ function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive, nPor
     active: !!(retActive && retActive[ch]),
   }));
   return (
-    <div className="ui-no-select" style={{
+    <div className="ui-no-select" data-walk="stage-box" style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
       border: '1px solid #0a0a0c', borderRadius: 4,
       padding: '5px 8px 8px',
@@ -4246,7 +4252,7 @@ function NativeSnakeBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive
     </div>
   );
   return (
-    <div className="ui-no-select" style={{ background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)', border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 7px 6px', position: 'relative', width: 80, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)' }}>
+    <div className="ui-no-select" data-walk="stage-box" style={{ background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)', border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 7px 6px', position: 'relative', width: 80, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)' }}>
       <div className="mono" style={{ fontSize: 6.5, color: 'var(--cool)', letterSpacing: 0.8, fontWeight: 700, textAlign: 'center' }}>STAGE BOX</div>
       <div className="mono" style={{ fontSize: 5, color: 'var(--ink-3)', fontWeight: 700, letterSpacing: 0.3, marginTop: 2, marginBottom: 1 }}>IN → FOH</div>
       {[1, 2, 3, 4].map(p => {
@@ -4282,7 +4288,7 @@ function SubSnakeHead({ label, items, subJackRefs, outRef }) {
   // order. Each channel shows its LOCAL number, the instrument, and (when the
   // patch is non-1:1) where it lands on the main stage box, e.g. "→14".
   return (
-    <div className="ui-no-select" style={{
+    <div className="ui-no-select" data-walk="sub-snake-head" style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
       border: '1px solid #0a0a0c', borderRadius: 4, padding: '4px 8px 6px',
       position: 'relative', boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
@@ -4328,7 +4334,7 @@ function SideStageBox({ inChannels, stageChRefs, outRefs, snakeOutRef, retActive
     </React.Fragment>
   );
   return (
-    <div className="ui-no-select" style={{
+    <div className="ui-no-select" data-walk="stage-box" style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
       border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 6px 6px',
       position: 'relative', width: 92, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
@@ -4359,7 +4365,7 @@ function FanOutPoint({ fanOutRef }) {
   // colored fan-out tails out). No colored bars or rectangles inside the
   // anchor block; the cables tell the whole story.
   return (
-    <div ref={fanOutRef} className="ui-no-select" style={{
+    <div ref={fanOutRef} className="ui-no-select" data-walk="snake-trunk" style={{
       width: 80,
       padding: '4px 8px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -8327,6 +8333,27 @@ function GlossaryHighlight({ term }) {
     return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measure); };
   }, [sel]);
   if (!sel || !rects.length) return null;
+  const style = (window.GLOSSARY_ANCHOR_STYLE || {})[term] || 'box';
+  // A LINE target (the fader's U mark) gets an arrow pointing at it from the
+  // left. A box drawn around a 1px tick reads as a box around nothing.
+  if (style === 'arrow') {
+    return (
+      <>
+        {rects.map((r, i) => (
+          <div key={i} style={{
+            position: 'fixed', left: r.left - 20, top: r.top + r.h / 2 - 6.5,
+            width: 17, height: 13, pointerEvents: 'none',
+            zIndex: r.inPanel ? 96 : 87,
+            filter: 'drop-shadow(0 0 5px rgba(240,180,41,0.9))',
+          }}>
+            <svg viewBox="0 0 17 13" width="17" height="13" style={{ display: 'block' }}>
+              <path d="M17 6.5 L9 1 L9 4 L0 4 L0 9 L9 9 L9 12 Z" fill="var(--gold, #f0b429)"/>
+            </svg>
+          </div>
+        ))}
+      </>
+    );
+  }
   return (
     <>
       {rects.map((r, i) => (
@@ -12072,7 +12099,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   const COURSES = [];
   if (startHere.length) COURSES.push({ key: 'starthere', label: 'START HERE', color: 'var(--green)', tag: 'FREE', free: true, blurb: 'Start here to learn the essential skills, one step at a time.', rows: startHere });
   if (patching.length > 0) COURSES.push({ key: 'patching', label: 'PATCHING', color: 'var(--cool)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Read the input list, patch the system, and find the fault when a cable is wrong.', rows: patching });
-  if (power.length > 0) COURSES.push({ key: 'power', label: 'POWER', color: 'var(--amber)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Power the system up and down in the right order, and find the dead box when part of it stays silent.', rows: power });
+  if (power.length > 0) COURSES.push({ key: 'power', label: 'POWER', color: 'var(--amber)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Power the system up and down in the right order, and find the box that is off when part of the system stays silent.', rows: power });
   if (inputSetup.length > 0) COURSES.push({ key: 'inputsetup', label: 'INPUT SETUP', color: '#4dd0c4', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Bring any input up the right way: PFL first, gain by the meter, power what needs it, and fix the channels that were set by ear.', rows: inputSetup });
   COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a system from nothing and run a full show. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MIXING MONITORS', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build each performer\'s monitor mix, keep it clean, and handle "more me" without making the wedge ring.', rows: monitors });

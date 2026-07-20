@@ -76,6 +76,7 @@ BANNED = [
     (r'\bthe room\b(?! is)', '"the room" for people (say "the audience")'),
     (r'\brig\b', '"rig" (say "system")'),
     (r'\bdeaf\b', '"deaf" for mic directionality'),
+    (r'\bdead\b', '"dead" (say "silent", or "switched off")'),
     (r'You walk in|Mid-set|Soundcheck, the band|A new night', 'scene-setting opener'),
     (r'\bNow that you(\'| ha)ve\b', 'meta-transition'),
     # The NOUN is retired in favour of "snake output". The verb is fine:
