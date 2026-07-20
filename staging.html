@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=202"></script>
+<script src="content-staging.js?v=203"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -5366,6 +5366,9 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   // touches, plus the colour to paint. `flowT` is null on a normal board (no
   // trace), so every `flowT && …` guard below is a no-op the rest of the time.
   const flowTrace = React.useContext(window.FlowTraceContext) || null;
+  // Which glossary term the student is hovering, so the snake trunk can be
+  // traced along its real path (see the snake block below).
+  const defTerm = React.useContext(window.DefTermContext) || null;
   const flowT = (() => {
     if (!flowTrace) return null;
     const fanOut = state.fanOut || [1, 2, 3, 4];
@@ -6637,6 +6640,16 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
               {/* The traced channel travels INSIDE this multicore: light it so the
                   eye carries from the stage-box tail up the snake to the desk. */}
               {flowInActive && <FlowStream d={d} color={flowT.color}/>}
+              {/* Hovering "snake" in the definitions panel traces the trunk
+                  itself, connecting the highlighted stage box to the
+                  highlighted snake block at the console. The run is the
+                  concept; two boxes with nothing between them would not
+                  show that one cable carries every channel. */}
+              {defTerm === 'snake' && (
+                <path d={d} stroke="var(--gold, #f0b429)" strokeWidth="7" fill="none"
+                  opacity="0.85" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ filter: 'drop-shadow(0 0 7px rgba(240,180,41,0.85))' }}/>
+              )}
               {s.toFOH && (
                 <text x={s.to.x + 4} y={s.to.y + 3} fill="var(--cool)" fontFamily="Geist Mono" fontSize="7" fontWeight="700" letterSpacing="0.5">→ FOH</text>
               )}
@@ -8287,6 +8300,13 @@ function lessonActiveIndex(steps, ctx) {
 // above the board), so this context just hands the setter down.
 const DefHoverContext = React.createContext(null);
 window.DefHoverContext = DefHoverContext;
+
+// The hovered term itself, for a highlight that must be drawn INSIDE the
+// board's SVG rather than as a screen-space box. The snake trunk is a
+// cornered multicore path, so the only honest way to trace it is to stroke
+// the real path where its geometry already lives.
+const DefTermContext = React.createContext(null);
+window.DefTermContext = DefTermContext;
 
 // GLOSSARY HIGHLIGHT — "show me what that word means".
 //
@@ -11798,6 +11818,7 @@ function App() {
           never overlap regardless of window size; we only ever change the zoom.
           overflow:hidden because scaling guarantees fit (no stray scrollbars). */}
       <div ref={fitViewportRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: (!zoom && userZoom > 1.001) ? 'auto' : 'hidden' }}>
+       <window.DefTermContext.Provider value={defHover}>
        <window.FlowTraceContext.Provider value={flowSpec}>
         <window.FitScaleContext.Provider value={appliedScale}>
           <div style={(!zoom && userZoom > 1.001)
@@ -11882,6 +11903,7 @@ function App() {
           </div>
         </window.FitScaleContext.Provider>
        </window.FlowTraceContext.Provider>
+       </window.DefTermContext.Provider>
         {/* Zoom-out control — sits OUTSIDE the scaled canvas so it stays pinned
             at a fixed size while the board underneath is magnified. */}
         {zoom && (

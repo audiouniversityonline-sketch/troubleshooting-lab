@@ -137,7 +137,12 @@ window.GLOSSARY_ANCHORS = {
   'snake output':     '[data-walk^="conn-stage-out-"]',
   'stage box':        '[data-walk="stage-box"]',
   'sub-snake':        '[data-walk="sub-snake-head"]',
-  'snake':            '[data-walk="snake-trunk"]',
+  // The snake is the WHOLE RUN, so it boxes both ends (the stage box and
+  // the snake block at the console) and the engine strokes the trunk along
+  // its real path between them. The run is the concept: one cable carries
+  // every channel from the stage to the desk, and two boxes with nothing
+  // between them would not show that.
+  'snake':            '[data-walk="stage-box"], [data-walk="snake-trunk"]',
 
   // Speakers.
   'wedge':            '[data-walk^="out-wedge"]',
