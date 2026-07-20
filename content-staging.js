@@ -2745,7 +2745,7 @@ window.SYSTEM_LEVEL = [
     conditions: [
       { source: 'laptop', dest: 'pa', min: 0.30, max: 0.65 },
     ],
-    hint: 'Leave the MAIN fader at unity. If you set the room level with the master fader instead, you lose your reference and every show starts from a different place.',
+    hint: 'Leave the MAIN fader at unity. If you set the audience level with the master fader instead, you lose your reference and every show starts from a different place.',
     hints: [
       { title: 'Raise the main speakers', target: ['out-pa-l', 'out-pa-r'], text: 'Leave the MAIN fader at U. Raise the volume on both main speakers until the loudness meter sits inside the target band.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.65; } },
     ],
@@ -2757,7 +2757,7 @@ window.SYSTEM_LEVEL = [
       s.outputs.pa_l.volume = 0.05; s.outputs.pa_r.volume = 0.05;
       return s;
     },
-    solution: 'Room level is set at the speakers with the console at unity. Now the MAIN fader is a real reference: unity is show level.',
+    solution: 'The audience level is set at the speakers with the console at unity. Now the MAIN fader is a real reference: unity is show level.',
     defaultInspect: 'pa',
   },
   {
@@ -2783,7 +2783,7 @@ window.SYSTEM_LEVEL = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, mute: false, volume: 0.05 };
       return s;
     },
-    solution: 'Every speaker in the system is now set against the same track, so the whole rig starts the night from one reference.',
+    solution: 'Every speaker is now set against the same track, so the whole system starts the night from one reference.',
     defaultInspect: 'wedge',
   },
 ];
