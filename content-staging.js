@@ -1822,40 +1822,78 @@ window.PATCHING = [
     title: 'Meet the Snake',
     task: true,
     requirePatch: true,
-    // The lesson's wrap-up step is "disengage PFL" — the win waits for it.
+    // Nothing is broken in this lesson, so the win cannot rest on the patch
+    // alone or the level would solve itself the moment it loads. It gates on
+    // the PFL workflow instead: check channel 1, then disengage. The student
+    // has to actually trace the channel.
+    requirePflCheck: true,
     requireNoPfl: true,
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
     symptom: 'Every stage cable plugs into a numbered port on the stage box. The snake carries them all to the console, one to one: port 1 feeds console input 1, port 2 feeds input 2, and so on. Follow one channel from the stage to the console.',
-    hint: 'Open the Input List, then follow channel 1: Vocal 1 goes into stage port 1, the snake carries it up as tail 1, and tail 1 lands on console input 1. PFL channel 1 to see it on the meter. Tails 3 and 4 are crossed at the console. Drag either one onto its matching input and they swap back.',
+    hint: 'Open the Input List, then follow channel 1: Vocal 1 goes into stage port 1, the snake carries it up as tail 1, and tail 1 lands on console input 1. PFL channel 1 and the input meter proves it. Disengage PFL when you are done.',
     hints: [
-      { title: 'Open the Input List', target: 'iolist', teach: 'The Input List shows which channel each input and output belongs on.', text: 'Open the Input List in the top bar.', done: (ctx) => { const f = ctx.state.fanOut || []; return !!(ctx.ioListOpen || (f[2] === 3 && f[3] === 4)); } },
+      { title: 'Open the Input List', target: 'iolist', teach: 'The Input List shows which channel each input and output belongs on.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || ctx.pflChecked) },
       { title: 'Follow channel 1 home', target: ['src-vocal', 'conn-stage-in-1', 'conn-in-0', 'ch1-pfl'], flow: { source: 'vocal' }, teach: 'Vocal 1 goes into stage box port 1. The snake carries port 1 to the console as tail 1, and tail 1 lands on console input 1. The lit path shows the whole run.', text: 'Press PFL (pre-fade listen) on channel 1 and watch its input meter move. That is Vocal 1 arriving on console input 1.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo)) },
       { title: 'Disengage PFL', target: 'ch1-pfl', teach: 'The meter moved, so Vocal 1 is exactly where the Input List says. Disengage PFL and move on.', text: 'Press PFL on channel 1 again to disengage it.', done: (ctx) => !!(ctx.pflChannels && ctx.pflChannels[1] && ctx.state.channels.every((c) => !c.solo)) },
-      { title: 'Repatch inputs 3 and 4', target: ['conn-in-2', 'conn-in-3'], teach: 'Tail 3 landed on channel 4 and tail 4 on channel 3, so the bass comes up on the keys\' channel. The connection points show it: channel 3 reads INPUT 4, channel 4 reads INPUT 3. Drag either tail onto its matching channel and they swap back.', text: 'Drag tail 3 onto the connection point marked CH 3. The two crossed tails swap back in one move.', done: (ctx) => { const f = ctx.state.fanOut || []; return f[0] === 1 && f[1] === 2 && f[2] === 3 && f[3] === 4; } },
     ],
     sabotage: (s) => {
-      // The concept lesson. Everything at the stage is patched right; the
-      // snake's fan-out at the console has tails 3 and 4 crossed, so channels
-      // 1 and 2 demonstrate the one-to-one promise WORKING (step 2's PFL
-      // proof) while 3 and 4 show it broken. Console ON so the input meters
-      // are alive for the follow-it-home step; every speaker OFF and master
-      // down, so no repatch here can pop anything (the pop discipline is
-      // taught later, in Fader Up, No Signal).
+      // The concept lesson, and the board is patched CORRECTLY end to end.
+      // Tracing channel 1 has to PROVE the one-to-one rule, so nothing here
+      // contradicts it. The crossed fan-out moved to the next lesson, which
+      // tests the rule once it has been taught (Kyle, 2026-07-20).
+      // Console ON so the input meters are alive for the follow-it-home step;
+      // every speaker OFF and the master down, so nothing here can pop.
+      s.mixer = { on: true };
+      // involves: [] zeroes every strip (mute on, fader and gain at 0). Give
+      // all four band channels their input GAIN back, so whichever channel the
+      // student PFLs reads on the meter and the rule proves out across the
+      // board, not just on channel 1.
+      s.channels.forEach((c, i) => { if (i < 4) c.gain = (window.HEALTHY_GAIN_BY_CH && window.HEALTHY_GAIN_BY_CH[i]) || c.gain; });
+      // Vocal 2 is a condenser and the bass is an active DI. Both need +48V to
+      // read at all (normalize stripped it), so a student who PFLs 2 or 3 sees
+      // the rule working there too instead of a second mystery.
+      s.channels[1].phantom = true;
+      s.channels[2].phantom = true;
+      s.master = { ...s.master, mute: true, fader: 0 };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: false, volume: 0 };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: false, volume: 0 };
+      s.outputs.wedge = { ...s.outputs.wedge, on: false, volume: 0 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
+      return s;
+    },
+    solution: 'Port N goes to tail N and lands on input N. Patched one to one, the stage box numbers match the console numbers. The outputs work the same way in reverse: each console output rides a numbered return back to the stage box.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pt0b',
+    title: 'Crossed at the Console',
+    task: true,
+    requirePatch: true,
+    involves: [],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    symptom: 'Same system, one to one from the stage box to the console. On this board two channels do not match the Input List. Find them and put them right.',
+    hint: 'Open the Input List and compare it to the console. Channel 3 reads INPUT 4 and channel 4 reads INPUT 3, so tails 3 and 4 are crossed at the console fan-out. Drag either tail onto its matching channel and the two swap back.',
+    hints: [
+      { title: 'Compare the console to the list', target: 'iolist', teach: 'The connection point above each channel shows which snake input is landing on it. Read those against the Input List and a cross shows up right away.', text: 'Open the Input List and compare it to the connection points on the console.', done: (ctx) => { const f = ctx.state.fanOut || []; return !!(ctx.ioListOpen || (f[2] === 3 && f[3] === 4)); } },
+      { title: 'Repatch inputs 3 and 4', target: ['conn-in-2', 'conn-in-3'], flow: { source: 'guitar' }, teach: 'Tail 3 landed on channel 4 and tail 4 on channel 3, so the bass comes up on the keys\' channel. The connection points show it: channel 3 reads INPUT 4, channel 4 reads INPUT 3. Drag either tail onto its matching channel and they swap back.', text: 'Drag tail 3 onto the connection point marked CH 3. The two crossed tails swap back in one move.', done: (ctx) => { const f = ctx.state.fanOut || []; return f[0] === 1 && f[1] === 2 && f[2] === 3 && f[3] === 4; } },
+    ],
+    sabotage: (s) => {
+      // The test for the concept pt0 just taught. Everything at the stage is
+      // patched right; the snake's fan-out at the console has tails 3 and 4
+      // crossed. Console ON so the connection points and meters read; every
+      // speaker OFF and the master down, so no repatch here can pop anything
+      // (the pop discipline is taught later, in Fader Up, No Signal).
       s.fanOut = [1, 2, 4, 3];
       s.mixer = { on: true };
-      // involves: [] zeroes every strip (mute on, fader and gain at 0) — the
-      // right resting state for this lesson, except channels 1-2 get their
-      // input GAINS back so channel 1's meter reads and PFL has something to
-      // play (step 2's proof is watching that meter move). Channels 3-4 stay
-      // at zero gain: the crossed tails put the hot keys line on the bass
-      // channel, and the bass channel's healthy gain would drive it into the
-      // red — a distraction this lesson does not need.
+      // Channels 1-2 keep their gains so the student can PFL a channel that is
+      // patched correctly and compare. Channels 3-4 stay at zero gain: the
+      // crossed tails put the hot keys line on the bass channel, and the bass
+      // channel's healthy gain would drive it into the red, a distraction this
+      // lesson does not need.
       s.channels.forEach((c, i) => { if (i < 2) c.gain = (window.HEALTHY_GAIN_BY_CH && window.HEALTHY_GAIN_BY_CH[i]) || c.gain; });
-      // Vocal 2 is a condenser: its +48V comes back with its gain (normalize
-      // stripped it), so a student who PFLs channel 2 to compare sees the
-      // promise working there too, not a second mystery fault.
       s.channels[1].phantom = true;
       s.master = { ...s.master, mute: true, fader: 0 };
       s.outputs.pa_l = { ...s.outputs.pa_l, on: false, volume: 0 };
@@ -1864,7 +1902,7 @@ window.PATCHING = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
       return s;
     },
-    solution: 'Port N goes to tail N and lands on input N. Patched one to one, the stage box numbers match the console numbers. The outputs work the same way in reverse: each console output rides a numbered return back to the stage box. When a channel shows up in the wrong place, follow it back along the snake.',
+    solution: 'Tails 3 and 4 were crossed at the console fan-out, so the bass was coming up on the keys\' channel. The connection point above each channel names the snake input landing on it, so reading those against the Input List finds a cross in seconds. When a channel shows up in the wrong place, follow it back along the snake.',
     defaultInspect: 'pa',
   },
   {
