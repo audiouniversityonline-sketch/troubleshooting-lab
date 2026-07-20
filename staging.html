@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=190"></script>
+<script src="content-staging.js?v=191"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1504,7 +1504,7 @@ function detectGainStagingMistakes(state, audio, level) {
     } else if (lvl < COLD + 0.10 && ch.gain >= 0.85) {
       mistakes.push({
         kind: 'source_limited',
-        message: 'GAIN on Channel ' + chNum + ' is near max but the channel meter is still sitting low. The source itself is the limit. Real fix is at the source: get the performer closer to the mic, switch to a more sensitive mic, or check placement. Until then, use the fader to balance the channel against the band.',
+        message: 'GAIN on Channel ' + chNum + ' is near max but the channel meter is still sitting low. The source is the limit. Fix it at the source: get the performer closer to the mic, switch to a more sensitive mic, or check placement. Until then, use the fader to balance the channel against the band.',
       });
     }
   }
@@ -2476,7 +2476,7 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       </div>
 
       {walk('gain', <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={40} color="var(--accent)"
-        tip="Input gain. Sets how strong the source hits the preamp. Set it first, checking in PFL." />)}
+        tip="Input gain. Sets how hard the source hits the preamp. Set it first, in PFL." />)}
 
       <div style={{ width: '94%' }}>
         <PFLBar level={pflLevel} hot={ch.solo} mkey={'pfl:' + idx}/>
@@ -2800,7 +2800,7 @@ function DigitalSelStrip({ ch, idx, selected, onSelect, onSelectQuiet, onMute, o
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '0 5px' }}>
         {/* SELECT — points the channel-view screen at this channel. */}
         <BP active={isSel} onClick={() => onSelect(idx)} label="SELECT" color="var(--accent)" width={86} height={15} fontSize={7.5}
-          tip="Select this channel into the channel view (the screen below). On a digital desk one shared screen edits whatever is selected, so confirming what's selected is the core skill." />
+          tip="Select this channel into the channel view below. A digital desk has one screen for every channel, so it edits whatever is selected. Check what is selected before you touch anything." />
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
           <F value={ch.fader} onChange={(v) => onFader(v)} height={150} />
@@ -3805,7 +3805,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
               ) : (
                 byEar
                   ? <span>Listen for the ring, then pull that frequency's band down. No band glows in this mode; use your ear.</span>
-                  : <span>These are the graphic equalizers between the console and each monitor wedge. When a frequency is ringing, bring down that EQ band to eliminate mic feedback.</span>
+                  : <span>These are the graphic equalizers between the console and each monitor wedge. When a frequency rings, pull that band down to stop the feedback.</span>
               )}
             </div>
           );
@@ -3879,7 +3879,7 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   let best = pat, bestc = rej3;
   ['cardioid', 'super', 'hyper'].forEach((p) => { const cc = couplingP(p); if (cc < bestc - 0.03) { bestc = cc; best = p; } });
   let coach;
-  if (rej3 < 0.2) coach = 'Good. From here the ' + NAME[pat] + ' strongly rejects sound coming from the wedge, so you have real headroom before it rings.';
+  if (rej3 < 0.2) coach = 'Good. From here the ' + NAME[pat] + ' strongly rejects sound coming from the wedge, so you have headroom before it rings.';
   else if (best !== pat && bestc < 0.22) coach = capFirst(NAME[pat]) + ' is not the best fit at this angle. A ' + NAME[best] + ' would put its null closer to the wedge. Try the pattern, or aim the wedge and tilt so a null lands on it.';
   else coach = 'The wedge is in a sensitive part of the pattern, so the mic passes it back into the loop. Drag it toward a green null, or tilt the mic so a null swings onto the wedge.';
 
@@ -7407,7 +7407,7 @@ const SCENARIOS = [
   {
     id: 'sandbox', isSandbox: true,
     title: 'Free Play',
-    symptom: 'Nothing is broken here, and there is no goal. Move faders, set gains, build a monitor mix, and switch the surface between analog and digital. Turn the sound on to hear what changes. When you want a challenge, open the lessons or a practice round from the menu above.',
+    symptom: 'Nothing is broken and there is no goal. Move faders, set gains, build a monitor mix, and switch between the analog and digital surface. Turn the sound on to hear what changes. For a challenge, open the lessons or a practice round from the menu above.',
     conditions: [],
     involves: [1, 2, 3, 4],
     defaultInspect: 'pa',
@@ -8117,7 +8117,7 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
           onMouseLeave={(e) => e.currentTarget.style.borderColor = '#38383e'}>
           <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700 }}>LEARN THE FULL SETUP · 10 LESSONS</div>
           <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>Set up a live system with nothing powered on yet.</div>
-          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>Start at the beginning: patch it, power up in order, set your levels, build a monitor mix, and run a full show. Step by step.</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>Start at the beginning: patch it, power up in order, set your levels, build a monitor mix, and run a full show, step by step.</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--accent)', fontWeight: 800, letterSpacing: 0.6, marginTop: 3 }}>START THE ESSENTIALS →</div>
         </div>
       </div>
@@ -8146,7 +8146,7 @@ const WALK_STEPS = [
   },
   {
     act: 'The channel strip', title: 'PFL and the meter', target: 'ch1-pfl',
-    teach: "PFL, at the bottom of the strip, checks a channel in your headphones before the audience hears it. It stands for pre-fader listen, so you hear the channel no matter where the fader sits. Watch the meter while you listen: yellow is fine, red is too hot.",
+    teach: "PFL, at the bottom of the strip, checks a channel in your headphones before the audience hears it. It stands for pre-fader listen, so the fader position does not change what you hear. Watch the meter while you listen: yellow is fine, red is too hot.",
     prompt: "Press PFL on the lead vocal to hear just that channel. Press it again to drop back.",
     takeaway: "PFL sends a channel to your headphones and the meter so you can check it before the audience hears it. It is pre-fader, so the fader does not change what you hear.",
     test: (s, b) => (!!s.channels[WALK_LEAD].solo) !== b.solo,
@@ -8161,7 +8161,7 @@ const WALK_STEPS = [
   },
   {
     act: 'The channel strip', title: 'The channel fader', target: 'ch1-fader',
-    teach: "The channel fader is this channel's level in the main mix, the control you ride to blend the band during the show. Keep it near the U mark, unity: the scale is finer up there, so small moves make small changes. The mute next to it is the channel's on and off.",
+    teach: "The channel fader sets this channel's level in the main mix. Keep it near the U mark, unity: the scale is finer up there, so small moves make small changes. The mute next to it is the channel's on and off.",
     prompt: "Bring the lead vocal fader up into the mix. Try the mute too: the singer drops out, then comes back.",
     takeaway: "The channel fader is that channel's level in the mix. Keep it near unity (U) for the finest control. Mute is its on and off.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].fader ?? 0) - b.cfader) > 0.05 || (!!s.channels[WALK_LEAD].mute) !== b.mute,
