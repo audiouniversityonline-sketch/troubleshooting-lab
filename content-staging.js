@@ -1832,7 +1832,7 @@ window.PATCHING = [
     conditions: [],
     topology: { paRig: 'powered' },
     symptom: 'Every stage cable plugs into a numbered port on the stage box. The snake carries them all to the console, one to one: port 1 feeds console input 1, port 2 feeds input 2, and so on. Follow one channel from the stage to the console.',
-    hint: 'Open the Input List, then follow channel 1: Vocal 1 goes into stage port 1, the snake carries it up as tail 1, and tail 1 lands on console input 1. PFL channel 1 and the input meter proves it. Disengage PFL when you are done.',
+    hint: 'Open the Input List, then follow channel 1: Vocal 1 goes into stage port 1, the snake carries it up as tail 1, and tail 1 lands on console input 1. PFL channel 1 and watch the input meter. Disengage PFL when you are done.',
     hints: [
       { title: 'Open the Input List', target: 'iolist', teach: 'The Input List shows which channel each input and output belongs on.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || ctx.pflChecked) },
       { title: 'Follow channel 1 home', target: ['src-vocal', 'conn-stage-in-1', 'conn-in-0', 'ch1-pfl'], flow: { source: 'vocal' }, teach: 'Vocal 1 goes into stage box port 1. The snake carries port 1 to the console as tail 1, and tail 1 lands on console input 1. The lit path shows the whole run.', text: 'Press PFL (pre-fade listen) on channel 1 and watch its input meter move. That is Vocal 1 arriving on console input 1.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo)) },
@@ -1863,7 +1863,7 @@ window.PATCHING = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
       return s;
     },
-    solution: 'Stage box port 1 rides the snake to console input 1, port 2 to input 2, and so on down the line. Patched one to one, the stage box numbers match the console numbers. The outputs work the same way in reverse: each console output rides a numbered return back to the stage box.',
+    solution: 'Stage box port 1 goes through the snake to console input 1. Port 2 goes to input 2, and so on down the line. Because it is patched one to one, the stage box numbers match the console numbers. The outputs work the same way in reverse: each console output goes back to the stage box on a numbered return.',
     defaultInspect: 'pa',
   },
   {
@@ -1874,10 +1874,10 @@ window.PATCHING = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'Same system, one to one from the stage box to the console. On this board two channels do not match the Input List. Find them and put them right.',
+    symptom: 'The snake is patched one to one: stage box port 1 goes to console input 1, port 2 to input 2, and so on. On this board, two channels do not match the Input List. Find them and fix them.',
     hint: 'Open the Input List and compare it to the console. Channel 3 reads INPUT 4 and channel 4 reads INPUT 3, so tails 3 and 4 are crossed at the console fan-out. Drag either tail onto its matching channel and the two swap back.',
     hints: [
-      { title: 'Compare the console to the list', target: 'iolist', teach: 'The connection point above each channel shows which snake input is landing on it. Read those against the Input List and a cross shows up right away.', text: 'Open the Input List and compare it to the connection points on the console.', done: (ctx) => { const f = ctx.state.fanOut || []; return !!(ctx.ioListOpen || (f[2] === 3 && f[3] === 4)); } },
+      { title: 'Compare the console to the list', target: 'iolist', teach: 'The connection point above each channel shows which snake input is coming into it. Compare those to the Input List to find the cross.', text: 'Open the Input List and compare it to the connection points on the console.', done: (ctx) => { const f = ctx.state.fanOut || []; return !!(ctx.ioListOpen || (f[2] === 3 && f[3] === 4)); } },
       { title: 'Repatch inputs 3 and 4', target: ['conn-in-2', 'conn-in-3'], flow: { source: 'guitar' }, teach: 'Tail 3 landed on channel 4 and tail 4 on channel 3, so the bass comes up on the keys\' channel. The connection points show it: channel 3 reads INPUT 4, channel 4 reads INPUT 3. Drag either tail onto its matching channel and they swap back.', text: 'Drag tail 3 onto the connection point marked CH 3. The two crossed tails swap back in one move.', done: (ctx) => { const f = ctx.state.fanOut || []; return f[0] === 1 && f[1] === 2 && f[2] === 3 && f[3] === 4; } },
     ],
     sabotage: (s) => {
@@ -1902,7 +1902,7 @@ window.PATCHING = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
       return s;
     },
-    solution: 'Tails 3 and 4 were crossed at the console fan-out, so the bass was coming up on the keys\' channel. The connection point above each channel names the snake input landing on it, so reading those against the Input List finds a cross in seconds. When a channel shows up in the wrong place, follow it back along the snake.',
+    solution: 'Tails 3 and 4 were crossed at the console fan-out, so the bass was coming up on the keys\' channel. The connection point above each channel shows which snake input is coming into it. Compare those to the Input List and a cross is easy to spot. When a channel shows up in the wrong place, follow it back along the snake.',
     defaultInspect: 'pa',
   },
   {
@@ -1918,7 +1918,7 @@ window.PATCHING = [
     hints: [
       { title: 'Open the input list', target: 'iolist', teach: 'The input list is the plan, not the live cabling. It names the source on every channel and the port it patches to. Open it first, every time.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
       { title: 'Patch Vocal 1', target: ['iolist-ch1', 'src-vocal', 'conn-stage-in-1'], teach: 'The list puts Vocal 1 on channel 1, so its cable goes to stage-box port 1. Port colors: 1 brown, 2 red, 3 orange, 4 yellow.', text: 'Drag Vocal 1\'s cable onto stage-box port 1. You can also click its PATCH button to move it to the next port.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1) },
-      { title: 'Patch the rest of the list', target: ['src-vocal2', 'src-guitar', 'src-laptop', 'conn-stage-in-2', 'conn-stage-in-3', 'conn-stage-in-4'], teach: 'Same move three more times, against the list: Vocal 2 on port 2, the bass on port 3, the keys on port 4.', text: 'Patch Vocal 2, the Bass, and the Keys to the ports the list calls for.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal2 === 2 && ctx.state.cables.guitar === 3 && ctx.state.cables.laptop === 4) },
+      { title: 'Patch the rest of the list', target: ['src-vocal2', 'src-guitar', 'src-laptop', 'conn-stage-in-2', 'conn-stage-in-3', 'conn-stage-in-4'], teach: 'Do the same for the other three: Vocal 2 on port 2, the bass on port 3, the keys on port 4.', text: 'Patch Vocal 2, the Bass, and the Keys to the ports the list calls for.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal2 === 2 && ctx.state.cables.guitar === 3 && ctx.state.cables.laptop === 4) },
     ],
     sabotage: (s) => {
       // Only the inputs are loose. The snake fan-out, the returns, and the
@@ -1945,10 +1945,10 @@ window.PATCHING = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The inputs are patched, but the mix has no way out. The lines that carry the mix back to the speakers are called returns. Start at the speakers to see which return feeds each one, then connect the matching console output.',
+    symptom: 'You patched the inputs. Now patch the outputs. The lines that carry the mix from the console back to the speakers are called returns. Start at the speakers, find which return feeds each one, then connect the matching console output.',
     hint: 'At the stage box, patch each speaker line to its out port: Main L to out 1, Main R to out 2, Wedge 1 to out 3, Wedge 2 to out 4. Then connect each console output to the same-numbered return: Main L to return 1, Main R to return 2, AUX 1 to return 3, AUX 2 to return 4.',
     hints: [
-      { title: 'Open the input list', target: 'iolist', teach: 'The input list also maps the outputs: which console output feeds which speaker, and the snake return it rides. Open it for the plan.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass)) },
+      { title: 'Open the input list', target: 'iolist', teach: 'The input list also shows the outputs: which console output feeds which speaker, and which snake return it uses. Open it first.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass)) },
       { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'conn-stage-out-1', 'conn-stage-out-2', 'conn-stage-out-3', 'conn-stage-out-4', 'iolist-out-mainL', 'iolist-out-mainR', 'iolist-out-aux1', 'iolist-out-aux2'], teach: 'Each speaker line plugs into a numbered out port on the stage box. The input list shows which output feeds which speaker.', text: 'Patch each speaker line to its out port: Main L to out 1, Main R to out 2, Wedge 1 to out 3, Wedge 2 to out 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
       { title: 'Connect the console outputs', target: ['conn-out-MAIN L', 'conn-out-MAIN R', 'conn-out-AUX 1', 'conn-out-AUX 2'], teach: 'These four connection points are where the mix leaves the console. Each output plugs into the same snake return that feeds its speaker.', text: 'Connect each console output to its snake return: Main L to return 1, Main R to return 2, AUX 1 to return 3, AUX 2 to return 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
     ],
@@ -1969,7 +1969,7 @@ window.PATCHING = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
       return s;
     },
-    solution: 'Every speaker line is on its out port and each console output on the matching return, one to one, like the input side. The system is patched end to end. When you are not sure which line feeds which speaker, start at the speaker and trace it back. The rest of the course covers what to do when something goes wrong.',
+    solution: 'Every speaker line is on its out port, and each console output is on the matching return. One to one, the same as the input side. The system is now patched end to end. When you are not sure which line feeds which speaker, start at the speaker and trace it back. The rest of the course covers what to do when something goes wrong.',
     defaultInspect: 'pa',
   },
   {
@@ -1982,9 +1982,9 @@ window.PATCHING = [
       { source: 'vocal', dest: 'pa', min: 0.3 },
     ],
     symptom: 'The band is playing, but the lead vocal is missing. Channel 1 looks right: gain up, fader up, not muted. The input meter shows nothing. Find out why and get her back.',
-    hint: 'No signal at the input meter on channel 1. That means the signal isn\'t reaching the console. Check Vocal 1 against the Input List and verify it\'s connected correctly: the cable is out at the stage box. If you plug it straight into the live channel, the pop will teach you the rule. The safe order is mute the channel, connect the cable, then unmute.',
+    hint: 'There is no signal at the input meter on channel 1, so the signal is not reaching the console. Check Vocal 1 against the Input List: its cable is out at the stage box. Plugging a cable into a live channel pops the speakers. The safe order is mute the channel, connect the cable, then unmute.',
     hints: [
-      { title: 'Find why channel 1 is silent', target: ['src-vocal', 'conn-stage-in-1'], teach: 'No signal at the input meter on channel 1. That means the signal isn\'t reaching the console. Check Vocal 1 against the Input List and verify it\'s connected correctly.', text: 'Find the problem, then plug the Vocal 1 cable back in.', done: (ctx) => !!(ctx.hasPopped || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
+      { title: 'Find why channel 1 is silent', target: ['src-vocal', 'conn-stage-in-1'], teach: 'There is no signal at the input meter on channel 1, so the signal is not reaching the console. Check Vocal 1 against the Input List and see whether it is connected correctly.', text: 'Find the problem, then plug the Vocal 1 cable back in.', done: (ctx) => !!(ctx.hasPopped || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
       { title: 'Repatch it safely', target: 'ch1-mute', teach: 'Plugging into a live channel sends a contact pop through the main speakers at show level. The safe order, every time: mute the channel, connect the cable, then unmute.', text: 'Mute channel 1, reconnect the cable, then unmute it.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
     ],
     sabotage: (s) => {
@@ -2017,7 +2017,7 @@ window.PATCHING = [
     symptom: 'The band is playing. Push channel 1\'s fader and the other singer gets louder. Something is crossed between the stage and the console. Find it and fix it without popping the speakers.',
     hint: 'PFL channel 1 and listen: that is not Vocal 1. The two vocal cables are in each other\'s ports at the stage box. Changing a patch on a live channel pops the speakers, so mute both channels, then move the cables so they are connected according to the input list, and unmute.',
     hints: [
-      { title: 'Find who is really on channel 1', target: 'ch1-pfl', teach: 'The label on the strip only says what should be there. PFL (pre-fade listen) plays what actually is there. Check one against the other to find a cross-patch.', text: 'PFL channel 1 and listen, then open the Input List and compare it to the stage box.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) || (ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2)) },
+      { title: 'Find who is really on channel 1', target: 'ch1-pfl', teach: 'The label on the strip only tells you what should be there. PFL (pre-fade listen) lets you hear what is actually there. Compare the two to find a cross-patch.', text: 'PFL channel 1 and listen, then open the Input List and compare it to the stage box.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) || (ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2)) },
       { title: 'Repatch the inputs safely', target: ['ch1-mute', 'ch2-mute', 'src-vocal', 'conn-stage-in-1', 'conn-stage-in-2'], teach: 'Changing a patch on a live channel pops the speakers. Mute the channels, then move the cables so they are connected according to the input list: drag either vocal cable onto its right port and the two swap back in one move.', text: 'Mute channels 1 and 2, then drag Vocal 1\'s cable onto port 1.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2) },
       { title: 'Bring them back', target: ['ch1-pfl', 'ch1-mute', 'ch2-mute'], teach: 'The cables are right, so open the channels back up. Disengage PFL on channel 1.', text: 'Disengage PFL on channel 1, then unmute channels 1 and 2.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2 && hintReaches(ctx, 'vocal', 'pa', 0.3) && hintReaches(ctx, 'vocal2', 'pa', 0.3) && ctx.state.channels.every((c) => !c.solo)) },
     ],
@@ -2070,7 +2070,7 @@ window.PATCHING = [
     // The check ends with every speaker back on: a board whose mains never
     // came back is not a verified board.
     requireOutputsOn: ['pa_l', 'pa_r', 'wedge', 'wedge2'],
-    symptom: 'The system is patched and the band has not arrived. Test every output with the playback device, one at a time: left main speaker, right main speaker, then each wedge. Something is not where it should be.',
+    symptom: 'The system is patched and the band has not arrived. Test every output with the playback device, one at a time: left main speaker, right main speaker, then each wedge. Something is patched wrong, and the test will show you which one.',
     hint: 'Unmute PLAYBACK: it is already panned hard left (the BAL knob on the PLAYBACK strip), so only the left main speaker should answer. Here the right side plays instead, because the two main speaker lines are crossed at the stage box. Speakers off, swap the lines, speakers back. Then run the whole test again on the fixed lines: pan hard left, pan hard right, then send the playback to Wedge 1 and Wedge 2 with its AUX sends, one at a time. Zero the sends and mute the playback when you are done.',
     hints: [
       { title: 'Playback to the left main speaker', target: 'ch7-mute', teach: 'The playback device is your test signal. It is panned hard left, so only the left main speaker should play. Watch the SIG lights: if the right side plays instead, the main lines are crossed.', text: 'Unmute PLAYBACK. Watch which main speaker plays.', done: (ctx) => !!((ctx.verifyStatus && (ctx.verifyStatus.pa_l || ctx.verifyStatus.pa_r)) || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass) || (ctx.state.outPatch && !(ctx.state.outPatch.pa_l === 2 && ctx.state.outPatch.pa_r === 1))) },
