@@ -17,6 +17,152 @@
      - Only ever APPEND new scenarios. Never renumber existing ones.
    ============================================================ */
 
+/* ============================================================
+   GLOSSARY — the single source of truth for every definition the
+   student reads. Written and approved by Kyle 2026-07-20; see
+   GLOSSARY.md for sourcing and the accuracy rules.
+
+   A lesson does NOT carry prose. It carries `defs: ['wedge', ...]`
+   and the engine renders the term/definition list. This is
+   deliberate: there is no free-text field to fill, so a lesson
+   cannot contain scene-setting, instructions, or a description of
+   something the student can already see on screen.
+
+   Instructions live in the step's `text` (the green DO THIS).
+   Nowhere else.
+
+   Adding a term? Add it here once. Never reword it per lesson.
+   ============================================================ */
+window.GLOSSARY = {
+  // Signal path
+  'signal':        'The audio traveling through the cables and gear.',
+  'patch':         'To connect a signal from one device to another.',
+  'input channel': "One signal's path through the mixer, with its own controls and fader.",
+  'input':         'Where signal enters a device.',
+  'output':        'Where signal leaves a device.',
+  'snake':         'A multichannel cable carrying many signals between the stage and the mixer.',
+  'stage box':     'The connector box on stage where cables plug into the snake.',
+  'sub-snake':     'A short snake connecting one area of the stage to the main snake.',
+  'snake input':   'A line in the snake that carries sound from the stage to the mixer.',
+  'snake output':  'A line in the snake that carries sound from the mixer back to the stage.',
+  'cross-patch':   'A signal landing on the wrong channel.',
+
+  // Level
+  'gain':           'How much signal level is boosted or cut.',
+  'fader':          "The slider that sets a channel's level in the main mix.",
+  'unity':          'The setting where a signal passes through unchanged. On a fader, the 0 dB mark.',
+  'meter':          'Reads the signal level at a particular point in the signal chain.',
+  'headroom':       'The room between the signal level and the point where sound distorts.',
+  'clipping':       'The harsh distortion that is heard when a signal exceeds the available headroom.',
+  'gain structure': 'How signal level is set at every stage of the signal chain.',
+
+  // Microphones and inputs
+  'dynamic microphone':   'A passive moving-coil microphone that needs no power.',
+  'condenser microphone': 'A microphone with active electronics inside, which require power.',
+  'phantom power':        'Power required for active DIs and microphones (usually provided by the microphone preamp).',
+  'DI box':               'A device used when connecting a high-impedance source (instrument, laptop, etc) to a low-impedance input (mixer input).',
+  'active DI':            'A DI that requires external power (usually from a battery or phantom power). Usually used with passive sources.',
+  'passive DI':           'A DI that requires no power. Usually used with active sources.',
+  'high-pass filter':     'Reduces energy below a set frequency. Also called low-cut.',
+
+  // Monitors and routing
+  'wedge':       'A speaker on the stage pointing at a performer.',
+  'monitor mix': 'A mix built for a performer on stage, separate from the main mix.',
+  'aux send':    'Sends signal from a channel to a separate output mix.',
+  'pre-fader':   'A send that bypasses the channel fader. Monitor sends work this way.',
+  'main mix':    'The mix that goes to the speakers facing the audience.',
+  'mains':       'The main speakers pointed at the audience.',
+  'mute':        'Turns a channel off.',
+  'PFL':         'Routes audio to your headphones without changing what the audience hears.',
+
+  // Feedback and EQ
+  'feedback':    'An infinite loop where the output of a system feeds into its input.',
+  'ring out':    'Cutting the frequencies that feed back first, so monitors are clearer and louder.',
+  'graphic EQ':  'An EQ with a row of sliders, each cutting or boosting one fixed frequency band.',
+  'line check':  'Confirming every input reaches the console on the right channel and sounds clean.'
+};
+
+// Display labels. Most terms render as their key; these get a fuller
+// on-screen label so the lookup key can stay short.
+window.GLOSSARY_LABELS = {
+  'phantom power':    'Phantom power (+48V DC)',
+  'high-pass filter': 'High-pass filter (HPF)'
+};
+
+/* ------------------------------------------------------------------
+   GLOSSARY_ANCHORS — hovering a definition highlights the thing itself
+   on the board. Each value is a CSS selector matched against the
+   spotlight anchors the console and stage already carry (`data-walk`),
+   so one term can light up EVERY instance: hover "fader" and all the
+   channel faders plus the master fader light up together.
+
+   A term is listed only when the highlight is HONEST. Concepts with no
+   single home on screen (signal, patch, cross-patch, headroom, clipping,
+   gain structure, feedback, ring out, pre-fader, monitor mix, line
+   check) are deliberately absent, and the UI shows no hover affordance
+   for them. A hover that lights up the wrong thing teaches the wrong
+   thing; a hover that lights up nothing feels broken.
+
+   Microphone and DI types are absent for that reason: the stage source
+   cards share one `src-` anchor with no per-type distinction, so
+   "condenser microphone" would ring the dynamics too.
+   ------------------------------------------------------------------ */
+window.GLOSSARY_ANCHORS = {
+  // Console controls. The `$=` suffix match catches every channel plus
+  // the master where one exists (master-fader, master-aux).
+  'gain':             '[data-walk$="-gain"]',
+  'fader':            '[data-walk$="-fader"]',
+  // The U line on the fader scale, not the whole fader. Rendered as an
+  // arrow (see GLOSSARY_ANCHOR_STYLE) because a box around a 1px tick
+  // reads as a box around nothing.
+  'unity':            '[data-walk="unity-mark"]',
+  // The INPUT meter under the preamp, which is the meter the gain lessons
+  // mean. NOT the fader row, whose anchor also covers a meter.
+  'meter':            '[data-walk$="-inputmeter"]',
+  'mute':             '[data-walk$="-mute"]',
+  'PFL':              '[data-walk$="-pfl"]',
+  'phantom power':    '[data-walk$="-phantom"]',
+  'high-pass filter': '[data-walk$="-hpf"]',
+  'aux send':         '[data-walk$="-aux"]',
+  'input channel':    '[data-walk$="-strip"]',
+  'main mix':         '[data-walk="master-fader"]',
+  'graphic EQ':       '[data-walk="monitor-eq"]',
+
+  // Connection points, console end and stage end. Individual jacks are the
+  // right target for a LINE (a snake input is one line); a whole box is the
+  // right target for a BOX.
+  'input':            '[data-walk^="conn-in-"], [data-walk^="conn-stage-in-"]',
+  'output':           '[data-walk^="conn-out-"], [data-walk^="conn-stage-out-"]',
+  'snake input':      '[data-walk^="conn-stage-in-"]',
+  'snake output':     '[data-walk^="conn-stage-out-"]',
+  'stage box':        '[data-walk="stage-box"]',
+  'sub-snake':        '[data-walk="sub-snake-head"]',
+  // The snake is the WHOLE RUN, so it boxes both ends (the stage box and
+  // the snake block at the console) and the engine strokes the trunk along
+  // its real path between them. The run is the concept: one cable carries
+  // every channel from the stage to the desk, and two boxes with nothing
+  // between them would not show that.
+  'snake':            '[data-walk="stage-box"], [data-walk="snake-trunk"]',
+
+  // Speakers.
+  'wedge':            '[data-walk^="out-wedge"]',
+  'mains':            '[data-walk="out-pa-l"], [data-walk="out-pa-r"]',
+
+  // Stage sources, by type (SourceCard tags each card with data-srckind).
+  'dynamic microphone':  '[data-srckind="dynamic"]',
+  'condenser microphone': '[data-srckind="condenser"]',
+  'DI box':               '[data-srckind^="di-"]',
+  'active DI':            '[data-srckind="di-active"]',
+  'passive DI':           '[data-srckind="di-passive"]'
+};
+
+// How a term's highlight is drawn. Default is a box around the element.
+// A target that is a LINE rather than an area gets an arrow instead,
+// because a box around a 1px tick reads as a box around nothing.
+window.GLOSSARY_ANCHOR_STYLE = {
+  'unity': 'arrow'
+};
+
 // LEVELS — the Essentials free tier.
 //
 // Contract per level (kept intentionally small so the prose surface stays
@@ -1703,3 +1849,333 @@ window.MONITOR_WORLD = [
     toneGate: 0.8,
   },
 ];
+
+window.PATCHING = [
+  {
+    id: 'pt0',
+    title: 'Meet the Snake',
+    task: true,
+    requirePatch: true,
+    // Nothing is broken in this lesson, so the win cannot rest on the patch
+    // alone or the level would solve itself the moment it loads. It gates on
+    // the PFL workflow instead: check channel 1, then disengage. The student
+    // has to actually trace the channel.
+    requirePflCheck: true,
+    requireNoPfl: true,
+    involves: [],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    defs: ['snake', 'stage box', 'PFL'],
+    hint: 'Channel 1 is the first channel strip on the console. Its PFL button and its input meter are both on that strip. If nothing moves, check that PFL is engaged on channel 1 and not on another channel.',
+    hints: [
+      { title: 'Read the show plan', target: 'iolist', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || ctx.pflChecked) },
+      { title: 'Check channel 1', target: ['src-vocal', 'conn-stage-in-1', 'conn-in-0', 'ch1-pfl'], flow: { source: 'vocal' }, text: 'Press PFL on channel 1 to hear what stage box port 1 is sending, and watch its input meter.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo)) },
+      { title: 'Return to the main mix', target: 'ch1-pfl', text: 'Press PFL on channel 1 again to disengage it.', done: (ctx) => !!(ctx.pflChannels && ctx.pflChannels[1] && ctx.state.channels.every((c) => !c.solo)) },
+    ],
+    sabotage: (s) => {
+      // The concept lesson, and the board is patched CORRECTLY end to end.
+      // Tracing channel 1 has to PROVE the one-to-one rule, so nothing here
+      // contradicts it. The crossed fan-out moved to the next lesson, which
+      // tests the rule once it has been taught (Kyle, 2026-07-20).
+      // Console ON so the input meters are alive for the follow-it-home step;
+      // every speaker OFF and the master down, so nothing here can pop.
+      s.mixer = { on: true };
+      // involves: [] zeroes every strip (mute on, fader and gain at 0). Give
+      // all four band channels their input GAIN back, so whichever channel the
+      // student PFLs reads on the meter and the rule proves out across the
+      // board, not just on channel 1.
+      s.channels.forEach((c, i) => { if (i < 4) c.gain = (window.HEALTHY_GAIN_BY_CH && window.HEALTHY_GAIN_BY_CH[i]) || c.gain; });
+      // Vocal 2 is a condenser and the bass is an active DI. Both need +48V to
+      // read at all (normalize stripped it), so a student who PFLs 2 or 3 sees
+      // the rule working there too instead of a second mystery.
+      s.channels[1].phantom = true;
+      s.channels[2].phantom = true;
+      s.master = { ...s.master, mute: true, fader: 0 };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: false, volume: 0 };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: false, volume: 0 };
+      s.outputs.wedge = { ...s.outputs.wedge, on: false, volume: 0 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
+      return s;
+    },
+    solution: 'You checked channel 1 against the Input List using PFL and the input meter. Use that same check on any channel to confirm a port is landing where the plan says.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pt0b',
+    title: 'Crossed at the Console',
+    task: true,
+    requirePatch: true,
+    involves: [],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    defs: ['input channel', 'cross-patch'],
+    hint: 'Open the Input List and read what it says for channels 3 and 4. Compare that with what is plugged in above each of those channels. Tail 3 is the one sitting on channel 4 right now.',
+    hints: [
+      { title: 'Read the connection points', target: 'iolist', text: 'Look at the connection points above channels 3 and 4 and find which input is landing on the wrong channel.', done: (ctx) => { const f = ctx.state.fanOut || []; return !!(ctx.ioListOpen || (f[2] === 3 && f[3] === 4)); } },
+      { title: 'Repatch inputs 3 and 4', target: ['conn-in-2', 'conn-in-3'], flow: { source: 'guitar' }, text: 'Drag tail 3 off channel 4 and onto the connection point marked CH 3.', done: (ctx) => { const f = ctx.state.fanOut || []; return f[0] === 1 && f[1] === 2 && f[2] === 3 && f[3] === 4; } },
+    ],
+    sabotage: (s) => {
+      // The test for the concept pt0 just taught. Everything at the stage is
+      // patched right; the snake's fan-out at the console has tails 3 and 4
+      // crossed. Console ON so the connection points and meters read; every
+      // speaker OFF and the master down, so no repatch here can pop anything
+      // (the pop discipline is taught later, in Fader Up, No Signal).
+      s.fanOut = [1, 2, 4, 3];
+      s.mixer = { on: true };
+      // Channels 1-2 keep their gains so the student can PFL a channel that is
+      // patched correctly and compare. Channels 3-4 stay at zero gain: the
+      // crossed tails put the hot keys line on the bass channel, and the bass
+      // channel's healthy gain would drive it into the red, a distraction this
+      // lesson does not need.
+      s.channels.forEach((c, i) => { if (i < 2) c.gain = (window.HEALTHY_GAIN_BY_CH && window.HEALTHY_GAIN_BY_CH[i]) || c.gain; });
+      s.channels[1].phantom = true;
+      s.master = { ...s.master, mute: true, fader: 0 };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: false, volume: 0 };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: false, volume: 0 };
+      s.outputs.wedge = { ...s.outputs.wedge, on: false, volume: 0 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
+      return s;
+    },
+    solution: 'The bass was coming up on the channel set aside for the keys. No GAIN or fader adjustment would have fixed that, only moving the tails back.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pt1',
+    title: 'Read the Input List',
+    task: true,
+    requirePatch: true,
+    involves: [],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    defs: ['patch', 'snake input'],
+    hint: 'The ports on the stage box are color coded: 1 brown, 2 red, 3 orange, 4 yellow. If you drop a cable on a port that already has a cable in it, the two swap.',
+    hints: [
+      { title: 'Start with the plan', target: 'iolist', text: 'Open the Input List in the top bar to see which port each source plugs into.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
+      { title: 'Patch Vocal 1', target: ['iolist-ch1', 'src-vocal', 'conn-stage-in-1'], text: 'Drag Vocal 1\'s cable to port 1, or click PATCH on that row.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1) },
+      { title: 'Patch the rest of the list', target: ['src-vocal2', 'src-guitar', 'src-laptop', 'conn-stage-in-2', 'conn-stage-in-3', 'conn-stage-in-4'], text: 'Patch Vocal 2, Bass, and Keys to the ports the list calls for.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal2 === 2 && ctx.state.cables.guitar === 3 && ctx.state.cables.laptop === 4) },
+    ],
+    sabotage: (s) => {
+      // Only the inputs are loose. The snake fan-out, the returns, and the
+      // speakers stay connected, so requirePatch reads identity again the moment
+      // the four input cables land on their ports. Rig off while patching: you
+      // connect a dead system, so nothing pops (patching live is taught later).
+      s.cables = { vocal: 0, vocal2: 0, guitar: 0, laptop: 0 };
+      s.mixer = { on: false };
+      s.master = { ...s.master, mute: true, fader: 0 };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: false, volume: 0 };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: false, volume: 0 };
+      s.outputs.wedge = { ...s.outputs.wedge, on: false, volume: 0 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
+      return s;
+    },
+    solution: 'All four sources are on the ports the list called for. Every port number came from reading the Input List first.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pt2',
+    title: 'Patch the Outputs',
+    task: true,
+    requirePatch: true,
+    involves: [],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    defs: ['snake output', 'wedge'],
+    hint: 'The Input List has the answers, so open it and read the output rows. Each row names a console output, the out port its speaker plugs into, and the snake output that carries the mix. Match by number at both ends: same number on the stage box, same number at the console.',
+    hints: [
+      { title: 'Read the output plan', target: 'iolist', text: 'Open the Input List in the top bar and read the output plan.', done: (ctx) => !!(ctx.ioListOpen || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass)) },
+      { title: 'Connect the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2', 'conn-stage-out-1', 'conn-stage-out-2', 'conn-stage-out-3', 'conn-stage-out-4', 'iolist-out-mainL', 'iolist-out-mainR', 'iolist-out-aux1', 'iolist-out-aux2'], text: 'On the stage box, patch Main L to out 1, Main R to out 2, Wedge 1 to out 3, Wedge 2 to out 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass },
+      { title: 'Match outputs to snake outputs', target: ['conn-out-MAIN L', 'conn-out-MAIN R', 'conn-out-AUX 1', 'conn-out-AUX 2'], text: 'Match by number: Main L to snake output 1, Main R to snake output 2, AUX 1 to snake output 3, AUX 2 to snake output 4.', done: (ctx) => ctx.patchStatus && ctx.patchStatus[2] && ctx.patchStatus[2].pass },
+    ],
+    sabotage: (s) => {
+      // Inputs stay patched; only the return side the MX-8 actually uses is loose:
+      // Main L/R + the two wedges (outFan returns 1-4, outPatch pa_l/pa_r/wedge/
+      // wedge2). Returns 5-6 (aux3/aux4) and wedges 3-4 stay on their default
+      // connection, so requirePatch (which checks all six) still latches once the
+      // four real outputs are patched, and the user is never asked to touch 5-6.
+      // Rig off while patching, so connecting a speaker line cannot pop.
+      s.outFan = { ...s.outFan, 1: null, 2: null, 3: null, 4: null };
+      s.outPatch = { ...s.outPatch, pa_l: null, pa_r: null, wedge: null, wedge2: null };
+      s.mixer = { on: false };
+      s.master = { ...s.master, mute: true, fader: 0 };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: false, volume: 0 };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: false, volume: 0 };
+      s.outputs.wedge = { ...s.outputs.wedge, on: false, volume: 0 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
+      return s;
+    },
+    solution: 'The mix now has a path from the console, through the snake, out to every speaker.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pt3',
+    title: 'Fader Up, No Signal',
+    task: true,
+    requirePatch: true,
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'pa', min: 0.3 },
+    ],
+    defs: ['fader', 'mute'],
+    hint: 'MUTE is on channel 1\'s strip on the console. Press it and wait until the channel is silent before you touch the cable. Press MUTE again once the cable is fully seated.',
+    hints: [
+      { title: 'Get signal to channel 1', target: ['src-vocal', 'conn-stage-in-1'], text: 'Plug the Vocal 1 cable back into stage box port 1.', done: (ctx) => !!(ctx.hasPopped || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
+      { title: 'Do it without the pop', target: 'ch1-mute', text: 'Mute channel 1, reconnect the cable, then unmute channel 1.', done: (ctx) => hintReaches(ctx, 'vocal', 'pa', 0.3) },
+    ],
+    sabotage: (s) => {
+      // A healthy, fully patched show, then the lead vocal's cable pulled loose.
+      // The lesson INVITES the mistake: step 1 says plug it back in, the pop
+      // block fires (plug into a live channel), and the reset hands the board
+      // back with the cable out again. Step 1 stays checked through the reset
+      // via ctx.hasPopped (the popped latch survives Reset), so step 2 can
+      // teach the safe order to someone who now knows why it exists. A player
+      // who mutes first and never pops sails through both steps clean.
+      mwBoard(s);
+      s.cables.vocal = 0;
+      return s;
+    },
+    solution: 'A channel can look fine at the console and still be silent because of one loose cable on stage. Checking the physical connection is the first move when a fader is up and nothing comes through.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pt4',
+    title: 'The Wrong Voice on Channel 1',
+    task: true,
+    requirePatch: true,
+    // The lesson's wrap-up step is "disengage PFL" — the win waits for it.
+    requireNoPfl: true,
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'pa', min: 0.3 },
+      { source: 'vocal2', dest: 'pa', min: 0.3 },
+    ],
+    defs: [],
+    hint: 'Listen on PFL and compare what you hear with the Input List. The microphone on channel 1 is the one the Input List assigns to channel 2. Order matters here: mute first, move the cable second, unmute last.',
+    hints: [
+      { title: 'Identify the microphone', target: 'ch1-pfl', text: 'Press PFL on channel 1 and listen to find out which microphone is on it.', done: (ctx) => !!((ctx.pflChannels && ctx.pflChannels[1]) || (ctx.state.channels[0] && ctx.state.channels[0].solo) || (ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2)) },
+      { title: 'Repatch without a pop', target: ['ch1-mute', 'ch2-mute', 'src-vocal', 'conn-stage-in-1', 'conn-stage-in-2'], text: 'Mute channels 1 and 2, then drag Vocal 1\'s cable from port 2 to port 1.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2) },
+      { title: 'Restore the main mix', target: ['ch1-pfl', 'ch1-mute', 'ch2-mute'], text: 'Disengage PFL on channel 1, then unmute channels 1 and 2.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.vocal === 1 && ctx.state.cables.vocal2 === 2 && hintReaches(ctx, 'vocal', 'pa', 0.3) && hintReaches(ctx, 'vocal2', 'pa', 0.3) && ctx.state.channels.every((c) => !c.solo)) },
+    ],
+    sabotage: (s) => {
+      // A live soundcheck with the two VOCAL cables crossed at the stage box.
+      // The two vocal channels run near-identical healthy gains, so nothing
+      // distorts and nothing starves: the board sounds fine, and the only
+      // tells are the wrong voice under each fader and the patch itself. That
+      // keeps all the attention on the skill this lesson practices, the
+      // patch. Swapping cables on live channels pops (patch_live), so the fix
+      // is the safe repatch from the last lesson, scaled up to two channels:
+      // mute both, swap, unmute.
+      mwBoard(s);
+      s.cables.vocal = 2;
+      s.cables.vocal2 = 1;
+      // +48V stays on across both vocal strips (the way last night's engineer
+      // left them): Vocal 2 is a condenser, and without phantom on channel 1
+      // the crossed mic would arrive silent instead of as the wrong voice.
+      s.channels[0].phantom = true;
+      return s;
+    },
+    solution: 'When the wrong source comes up on a channel, compare what you hear on PFL with the Input List. Mute both channels before moving a cable and the repatch is silent.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'ptSwap',
+    title: 'Check Every Output',
+    task: true,
+    requirePatch: true,
+    involves: [],
+    // The check ends with the test signal back out of the system: sends down
+    // or the channel muted. The win cannot fire mid-test.
+    conditions: [
+      { source: 'playback', dest: 'pa', min: 0, max: 0.05 },
+      { source: 'playback', dest: 'wedge', min: 0, max: 0.05 },
+      { source: 'playback', dest: 'wedge2', min: 0, max: 0.05 },
+    ],
+    // Each output latches the moment the playback reaches it, so the win
+    // requires every output to have actually played the test signal. The two
+    // mains are one-sided checks (othersMax): Main L only counts while Main R
+    // is silent, so a center-pan blast cannot tick both at once — and the
+    // engine clears every latch when the output patch moves, so checks made
+    // through the crossed lines do not survive the fix.
+    verifyEach: [
+      { source: 'playback', dest: 'pa_l', min: 0.2, othersMax: { pa_r: 0.05 }, label: 'Main L checked' },
+      { source: 'playback', dest: 'pa_r', min: 0.2, othersMax: { pa_l: 0.05 }, label: 'Main R checked' },
+      { source: 'playback', dest: 'wedge', min: 0.2, label: 'Wedge 1 checked' },
+      { source: 'playback', dest: 'wedge2', min: 0.2, label: 'Wedge 2 checked' },
+    ],
+    // The check ends with every speaker back on: a board whose mains never
+    // came back is not a verified board.
+    requireOutputsOn: ['pa_l', 'pa_r', 'wedge', 'wedge2'],
+    defs: ['mains', 'aux send'],
+    hint: 'PLAYBACK is panned hard left, so only the left main speaker should play. If the right one plays instead, the two main speaker cables are swapped. Switch the speakers off before you move a cable, or you get a loud pop.',
+    hints: [
+      { title: 'Playback to the left main speaker', target: 'ch7-mute', text: 'Switch the MUTE button off on PLAYBACK and watch which main speaker plays.', done: (ctx) => !!((ctx.verifyStatus && (ctx.verifyStatus.pa_l || ctx.verifyStatus.pa_r)) || (ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass) || (ctx.state.outPatch && !(ctx.state.outPatch.pa_l === 2 && ctx.state.outPatch.pa_r === 1))) },
+      { title: 'Repatch the outputs safely', target: ['out-pa-l', 'out-pa-r', 'conn-stage-out-1', 'conn-stage-out-2'], text: 'Switch both main speakers off, swap the two cables, then switch them back on.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass && ctx.state.outputs.pa_l.on && ctx.state.outputs.pa_r.on) },
+      { title: 'Prove left and right', target: 'ch7-pan', text: 'Set the playback hard left with the BAL knob, listen, then hard right.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus[3] && ctx.patchStatus[3].pass && ctx.verifyStatus && ctx.verifyStatus.pa_l && ctx.verifyStatus.pa_r) },
+      { title: 'Check the wedges, one at a time', target: 'ch7-aux', text: 'Send playback to Wedge 1 with AUX 1, then Wedge 2 with AUX 2.', done: (ctx) => !!(ctx.verifyStatus && ctx.verifyStatus.wedge && ctx.verifyStatus.wedge2) },
+      { title: 'Clear the test signal', target: 'ch7-strip', text: 'Pull the AUX sends down, center BAL, mute PLAYBACK, leave every speaker on.', done: (ctx) => { const v = ctx.verifyStatus; if (!(v && v.pa_l && v.pa_r && v.wedge && v.wedge2)) return false; const o = ctx.state.outputs; if (!(o.pa_l.on && o.pa_r.on && o.wedge.on && o.wedge2.on)) return false; const a = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!a) return false; return Math.max(a.pa_l || 0, a.pa_r || 0, a.wedge || 0, a.wedge2 || 0) <= 0.05; } },
+    ],
+    sabotage: (s) => {
+      // The pre-show output check, the way it actually happens: the band's
+      // channels stay muted and the playback device is the test signal. The
+      // two PA lines are crossed at the stage box; the left-pan test exposes
+      // it (both PA meters read the same on a left-right swap, so only a
+      // one-side test can catch it). verifyEach latches each output as the
+      // playback reaches it, and the max conditions demand the test signal is
+      // zeroed again before the win, so the whole check has to happen.
+      mwBoard(s);
+      s.channels[0].mute = true;
+      s.channels[1].mute = true;
+      s.channels[2].mute = true;
+      s.channels[3].mute = true;
+      const pb = s.channels[6];
+      if (pb) {
+        // Pan starts HARD LEFT so the very first unmute IS the one-side test:
+        // at center pan both mains carry the signal and the crossed lines
+        // would be invisible (and both verify latches would tick at once).
+        pb.mute = true; pb.fader = 0.72; pb.pan = 0; pb.aux1 = 0; pb.aux2 = 0;
+        // The playback line arrives pre-gained (this lesson checks outputs,
+        // not gain staging): hard-panned it reaches ~0.46, comfortably over
+        // the 0.2 verify latches.
+        pb.gain = (window.HEALTHY_GAIN_BY_CH && window.HEALTHY_GAIN_BY_CH[6]) || 0.2;
+      }
+      s.outPatch = { ...s.outPatch, pa_l: 2, pa_r: 1 };
+      return s;
+    },
+    solution: 'Nothing on the console shows a left-right swap, so the only way to catch one is to test every output, one at a time, before the show.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pt5',
+    title: 'Loose at the Sub-Snake',
+    task: true,
+    requirePatch: true,
+    involves: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+    conditions: [],
+    defs: ['sub-snake'],
+    hint: 'Follow the cable from each drum microphone into the drum sub-snake, then follow the sub-snake to the stage box. The Input List gives every microphone a channel number, and it puts the kick drum microphone on channel 1. That is the line that came loose.',
+    hints: [
+      { title: 'Check the channel plan', target: 'iolist', text: 'Open the Input List to check each microphone\'s channel.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.kick === 1)) },
+      { title: 'Reconnect the drum mic', target: ['src-kick', 'conn-stage-in-1'], text: 'Reconnect the loose drum line, or click PATCH for that line.', done: (ctx) => !!(ctx.state.cables && ctx.state.cables.kick === 1) },
+    ],
+    sabotage: (s) => {
+      // The full 16-channel band. Rig off (line check before the show), and the
+      // kick drum's tail is loose at the drum sub-snake, so channel 1 is dead.
+      // requirePatch (big16PatchOk) latches when the kick is back on channel 1.
+      const b = bandState();
+      b.cables.kick = 0;
+      b.mixer = { on: false };
+      b.master = { ...b.master, mute: true, fader: 0 };
+      ['pa_l', 'pa_r', 'wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => { if (b.outputs[k]) b.outputs[k] = { ...b.outputs[k], on: false, volume: 0 }; });
+      return b;
+    },
+    solution: 'The kick drum line was loose where the drum sub-snake plugs into the stage box. Check both ends of a sub-snake, the microphone end and the stage box end.',
+    defaultInspect: 'pa',
+  },
+];
+
+// ── POWER course (staging prototype) ─────────────────────────────────────
+// Power Up / Power Down as its own mini-course: the order discipline first
+// (up, then down), a recovery lesson for finding a system half-powered in the
+// wrong order, then two dead-system fault hunts (MX-8, then the 16-channel
+// board). Wins ride requirePowerOn / requirePowerOff, which are board-aware.
+// Step checks read ctx.powerStatus, the same board-aware map the objective
+// checklist renders from, so the steps and the win can never disagree.

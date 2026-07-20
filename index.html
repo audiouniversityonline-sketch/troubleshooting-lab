@@ -104,13 +104,27 @@
     0%, 100% { box-shadow: 0 0 0 2px rgba(74,222,128,0.22), 0 0 10px 2px rgba(74,222,128,0.30); }
     50%      { box-shadow: 0 0 0 3px rgba(74,222,128,0.50), 0 0 22px 6px rgba(74,222,128,0.55); }
   }
+  /* The walkthrough's pointing arrow — bobs toward a connection point. Cable
+     jacks are too small for a ring; an arrow says "right here" instead. */
+  @keyframes walkArrowBob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(5px); }
+  }
+  @keyframes walkArrowBobXL {
+    0%, 100% { transform: translateX(0); }
+    50%      { transform: translateX(-5px); }
+  }
+  @keyframes walkArrowBobUp {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-5px); }
+  }
 </style>
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=96"></script>
+<script src="content.js?v=97"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1490,7 +1504,7 @@ function detectGainStagingMistakes(state, audio, level) {
     } else if (lvl < COLD + 0.10 && ch.gain >= 0.85) {
       mistakes.push({
         kind: 'source_limited',
-        message: 'GAIN on Channel ' + chNum + ' is near max but the channel meter is still sitting low. The source itself is the limit. Real fix is at the source: get the performer closer to the mic, switch to a more sensitive mic, or check placement. Until then, use the fader to balance the channel against the band.',
+        message: 'GAIN on Channel ' + chNum + ' is near max but the channel meter is still sitting low. The source is the limit. Fix it at the source: get the performer closer to the mic, switch to a more sensitive mic, or check placement. Until then, use the fader to balance the channel against the band.',
       });
     }
   }
@@ -1815,6 +1829,16 @@ const { useState, useEffect, useRef, useCallback } = React;
 const FitScaleContext = React.createContext(1);
 window.FitScaleContext = FitScaleContext;
 
+// A lesson step can ask the board to TRACE one signal path — light the whole
+// run and animate signal flowing along it so the eye follows source → snake →
+// console (or the mirror: console → snake → speaker). The active step's `flow`
+// spec rides this context down to the cable overlay in Chain, exactly the way
+// the fit scale rides FitScaleContext. null = no trace (the normal board).
+// Spec shapes: { source: 'vocal' } | { channel: 1 } trace an input path;
+// { out: 'wedge1' } traces an output path. See _resolveFlow in Chain.
+const FlowTraceContext = React.createContext(null);
+window.FlowTraceContext = FlowTraceContext;
+
 function Knob({ value, onChange, min = 0, max = 1, size = 44, label, sublabel, color = 'var(--accent)', track = 'var(--line)', detentAt = null, format = null, disabled = false, tip = null }) {
   const ref = useRef(null);
   const startRef = useRef(null);
@@ -1997,7 +2021,10 @@ function Fader({ value, onChange, height = 180, color = '#dcd7c6', tickLabels = 
       {tickLabels && (
         <div style={{ position: 'relative', height: trackH, width: 18, fontSize: 7, color: 'var(--ink-3)' }} className="mono">
           {ticks.map(t => (
-            <div key={t.label} style={{ position: 'absolute', right: 0, top: (1 - t.v) * (trackH - capH) + capH / 2 - 4, lineHeight: 1 }}>{t.label}</div>
+            /* The U tick carries an anchor so hovering "unity" in the
+               definitions panel can point an arrow at the exact line,
+               rather than washing the whole fader. */
+            <div key={t.label} data-walk={t.label === 'U' ? 'unity-mark' : undefined} style={{ position: 'absolute', right: 0, top: (1 - t.v) * (trackH - capH) + capH / 2 - 4, lineHeight: 1}}>{t.label}</div>
           ))}
         </div>
       )}
@@ -2452,9 +2479,12 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       </div>
 
       {walk('gain', <K value={ch.gain} onChange={(v) => set({ gain: v })} label="Gain" size={40} color="var(--accent)"
-        tip="Input gain. Sets how strong the source hits the preamp. Set it first, checking in PFL." />)}
+        tip="Input gain. Sets how hard the source hits the preamp. Set it first, in PFL." />)}
 
-      <div style={{ width: '94%' }}>
+      {/* The INPUT meter, right under the preamp. This is the meter the
+          gain-setting lessons mean, so it gets its own anchor separate
+          from the fader row's. */}
+      <div data-walk={'ch' + (idx + 1) + '-inputmeter'} style={{ width: '94%' }}>
         <PFLBar level={pflLevel} hot={ch.solo} mkey={'pfl:' + idx}/>
         <div className="mono" style={{ fontSize: 6.5, color: ch.solo ? 'var(--amber)' : 'var(--ink-3)', textAlign: 'center', marginTop: 1, letterSpacing: 0.5, fontWeight: 700 }}>
           {ch.solo ? 'PFL' : 'INPUT'}
@@ -2776,7 +2806,7 @@ function DigitalSelStrip({ ch, idx, selected, onSelect, onSelectQuiet, onMute, o
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '0 5px' }}>
         {/* SELECT — points the channel-view screen at this channel. */}
         <BP active={isSel} onClick={() => onSelect(idx)} label="SELECT" color="var(--accent)" width={86} height={15} fontSize={7.5}
-          tip="Select this channel into the channel view (the screen below). On a digital desk one shared screen edits whatever is selected, so confirming what's selected is the core skill." />
+          tip="Select this channel into the channel view below. A digital desk has one screen for every channel, so it edits whatever is selected. Check what is selected before you touch anything." />
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
           <F value={ch.fader} onChange={(v) => onFader(v)} height={150} />
@@ -2979,7 +3009,7 @@ function DigitalPatch({ channels, inputPatch, onRepatch, powered }) {
               border: '1px solid ' + (assigned ? '#38383e' : 'var(--hot)'), borderRadius: 3,
               padding: '3px 7px', minWidth: 44,
             }}
-              title={assigned ? ('Channel ' + (i + 1) + ' is patched to physical input ' + inNum + '. Click to unassign.') : ('Channel ' + (i + 1) + ' has no input assigned, so it is dead even though the cable is fine. Click to re-patch it.')}>
+              title={assigned ? ('Channel ' + (i + 1) + ' is patched to physical input ' + inNum + '. Click to unassign.') : ('Channel ' + (i + 1) + ' has no input assigned, so it stays silent even though the cable is fine. Click to re-patch it.')}>
               <span style={{ fontSize: 8, fontWeight: 800, color: assigned ? 'var(--ink-2)' : 'var(--hot)' }}>CH {c.stereo ? (i + 1) + '/' + (i + 2) : (i + 1)}</span>
               <span style={{ fontSize: 7.5, fontWeight: 700, color: assigned ? 'var(--label)' : 'var(--hot)' }}>{assigned ? ('IN ' + inNum) : '— NONE'}</span>
             </div>
@@ -3100,7 +3130,7 @@ function DigitalMainStrip({ master, onChange, onInspect, paLevel, paRLevel, powe
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '2px 6px 0' }}>
         <BP active={master.mute} onClick={() => onChange({ ...master, mute: !master.mute })} label="MUTE" color="var(--hot)" width={90} height={16} fontSize={8}
-          tip="Mute the main mix. The whole room goes quiet." />
+          tip="Mute the main mix. The whole audience goes quiet." />
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4 }}>
           <F value={master.fader} onChange={(v) => { onChange({ ...master, fader: v }); if (onInspect) onInspect('pa'); }} height={148} />
           <div style={{ display: 'flex', gap: 2 }}>
@@ -3462,6 +3492,11 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
   const iconSz = compact ? 20 : 28;
   return (
     <div
+      data-walk={'src-' + srcKey}
+      /* Source TYPE, so hovering "condenser microphone" in the definitions
+         panel can light up the condensers only. `data-walk` is one shared
+         `src-` key with no type in it, which would ring every card. */
+      data-srckind={kind === 'di' ? (diActive ? 'di-active' : 'di-passive') : kind}
       onClick={onTest}
       className="ui-no-select"
       style={{
@@ -3780,7 +3815,7 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
               ) : (
                 byEar
                   ? <span>Listen for the ring, then pull that frequency's band down. No band glows in this mode; use your ear.</span>
-                  : <span>These are the graphic equalizers between the console and each monitor wedge. When a frequency is ringing, bring down that EQ band to eliminate mic feedback.</span>
+                  : <span>These are the graphic equalizers between the console and each monitor wedge. When a frequency rings, pull that band down to stop the feedback.</span>
               )}
             </div>
           );
@@ -3854,7 +3889,7 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   let best = pat, bestc = rej3;
   ['cardioid', 'super', 'hyper'].forEach((p) => { const cc = couplingP(p); if (cc < bestc - 0.03) { bestc = cc; best = p; } });
   let coach;
-  if (rej3 < 0.2) coach = 'Good. From here the ' + NAME[pat] + ' strongly rejects sound coming from the wedge, so you have real headroom before it rings.';
+  if (rej3 < 0.2) coach = 'Good. From here the ' + NAME[pat] + ' strongly rejects sound coming from the wedge, so you have headroom before it rings.';
   else if (best !== pat && bestc < 0.22) coach = capFirst(NAME[pat]) + ' is not the best fit at this angle. A ' + NAME[best] + ' would put its null closer to the wedge. Try the pattern, or aim the wedge and tilt so a null lands on it.';
   else coach = 'The wedge is in a sensitive part of the pattern, so the mic passes it back into the loop. Drag it toward a green null, or tilt the mic so a null swings onto the wedge.';
 
@@ -4128,7 +4163,7 @@ function StageBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive, nPor
     active: !!(retActive && retActive[ch]),
   }));
   return (
-    <div className="ui-no-select" style={{
+    <div className="ui-no-select" data-walk="stage-box" style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
       border: '1px solid #0a0a0c', borderRadius: 4,
       padding: '5px 8px 8px',
@@ -4217,7 +4252,7 @@ function NativeSnakeBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive
     </div>
   );
   return (
-    <div className="ui-no-select" style={{ background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)', border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 7px 6px', position: 'relative', width: 80, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)' }}>
+    <div className="ui-no-select" data-walk="stage-box" style={{ background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)', border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 7px 6px', position: 'relative', width: 80, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)' }}>
       <div className="mono" style={{ fontSize: 6.5, color: 'var(--cool)', letterSpacing: 0.8, fontWeight: 700, textAlign: 'center' }}>STAGE BOX</div>
       <div className="mono" style={{ fontSize: 5, color: 'var(--ink-3)', fontWeight: 700, letterSpacing: 0.3, marginTop: 2, marginBottom: 1 }}>IN → FOH</div>
       {[1, 2, 3, 4].map(p => {
@@ -4226,7 +4261,7 @@ function NativeSnakeBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive
         const chColor = (window.SNAKE_COLORS || [])[(p - 1) % 8] || '#38383e';
         return (
           <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 3, height: 13 }}>
-            <div ref={el => portRefs.current[p] = el} style={{ flex: '0 0 auto' }}>{jack(chColor, flowing, active ? active.color : '#222')}</div>
+            <div ref={el => portRefs.current[p] = el} data-walk={'conn-stage-in-' + p} style={{ flex: '0 0 auto' }}>{jack(chColor, flowing, active ? active.color : '#222')}</div>
             <div className="mono" style={{ fontSize: 6.5, color: '#e9e6df', fontWeight: 700, width: 9, textAlign: 'right' }}>{p}</div>
           </div>
         );
@@ -4235,7 +4270,7 @@ function NativeSnakeBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive
       <div className="mono" style={{ fontSize: 5, color: 'var(--ink-3)', fontWeight: 700, letterSpacing: 0.3, marginBottom: 1 }}>OUT · returns</div>
       {outs.map(o => (
         <div key={o.key} style={{ display: 'flex', alignItems: 'center', gap: 3, height: 13 }}>
-          <div ref={el => outRefs.current[o.key] = el} style={{ flex: '0 0 auto' }}>{jack(o.color, o.active, o.active ? o.color : o.color)}</div>
+          <div ref={el => outRefs.current[o.key] = el} data-walk={'conn-stage-out-' + o.key} style={{ flex: '0 0 auto' }}>{jack(o.color, o.active, o.active ? o.color : o.color)}</div>
           <div className="mono" style={{ fontSize: 6.5, color: '#e9e6df', fontWeight: 700, width: 9, textAlign: 'right' }}>{o.key}</div>
         </div>
       ))}
@@ -4253,7 +4288,7 @@ function SubSnakeHead({ label, items, subJackRefs, outRef }) {
   // order. Each channel shows its LOCAL number, the instrument, and (when the
   // patch is non-1:1) where it lands on the main stage box, e.g. "→14".
   return (
-    <div className="ui-no-select" style={{
+    <div className="ui-no-select" data-walk="sub-snake-head" style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
       border: '1px solid #0a0a0c', borderRadius: 4, padding: '4px 8px 6px',
       position: 'relative', boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
@@ -4263,11 +4298,11 @@ function SubSnakeHead({ label, items, subJackRefs, outRef }) {
         {items.map(it => (
           <div key={it.empty ? 'e' + it.localCh : it.srcKey} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 30 }}>
             <div className="mono" style={{ fontSize: 6, color: 'var(--ink-3)', fontWeight: 700, lineHeight: 1 }}>{it.localCh}</div>
-            <div ref={el => { if (!it.empty) subJackRefs.current[it.srcKey] = el; }} style={{ width: 11, height: 11, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (it.empty ? '#38383e' : it.color), display: 'grid', placeItems: 'center', boxShadow: it.flowing ? `0 0 4px ${it.color}` : 'inset 0 0 2px #000', margin: '1px 0', opacity: it.empty ? 0.5 : 1 }}>
+            <div ref={el => { if (!it.empty) subJackRefs.current[it.srcKey] = el; }} data-walk={it.empty ? undefined : 'conn-sub-' + it.srcKey} style={{ width: 11, height: 11, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (it.empty ? '#38383e' : it.color), display: 'grid', placeItems: 'center', boxShadow: it.flowing ? `0 0 4px ${it.color}` : 'inset 0 0 2px #000', margin: '1px 0', opacity: it.empty ? 0.5 : 1 }}>
               <div style={{ width: 3, height: 3, borderRadius: '50%', background: it.empty ? '#222' : it.color }}/>
             </div>
             <div className="mono" style={{ fontSize: 5, color: '#c8c8d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>{it.empty ? '—' : it.label}</div>
-            <div className="mono" style={{ fontSize: 5, color: it.localCh === it.stageCh ? 'var(--ink-3)' : 'var(--amber)', fontWeight: 700, lineHeight: 1.1 }}>{it.empty ? '' : '→' + it.stageCh}</div>
+            <div className="mono" style={{ fontSize: 5, color: it.localCh === it.stageCh ? 'var(--ink-3)' : 'var(--amber)', fontWeight: 700, lineHeight: 1.1 }}>{it.empty ? '' : (it.stageCh ? '→' + it.stageCh : 'loose')}</div>
           </div>
         ))}
       </div>
@@ -4290,7 +4325,7 @@ function SideStageBox({ inChannels, stageChRefs, outRefs, snakeOutRef, retActive
     <React.Fragment key={c.ch}>
       {i === 8 && <div style={{ height: 4, borderTop: '1px dashed #38383e', margin: '2px 0' }}/>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 3, height: 12.5 }}>
-        <div ref={el => { if (stageChRefs) stageChRefs.current[c.ch] = el; }} style={{ width: 9, height: 9, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (c.color || '#38383e'), display: 'grid', placeItems: 'center', boxShadow: c.flowing ? `0 0 4px ${c.color}` : 'inset 0 0 2px #000', flex: '0 0 auto' }}>
+        <div ref={el => { if (stageChRefs) stageChRefs.current[c.ch] = el; }} data-walk={'conn-stage-in-' + c.ch} style={{ width: 9, height: 9, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (c.color || '#38383e'), display: 'grid', placeItems: 'center', boxShadow: c.flowing ? `0 0 4px ${c.color}` : 'inset 0 0 2px #000', flex: '0 0 auto' }}>
           <div style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: c.srcKey ? c.color : '#222' }}/>
         </div>
         <div className="mono" style={{ fontSize: 6, color: '#e9e6df', fontWeight: 700, width: 9, textAlign: 'right', flex: '0 0 auto' }}>{c.ch}</div>
@@ -4299,7 +4334,7 @@ function SideStageBox({ inChannels, stageChRefs, outRefs, snakeOutRef, retActive
     </React.Fragment>
   );
   return (
-    <div className="ui-no-select" style={{
+    <div className="ui-no-select" data-walk="stage-box" style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
       border: '1px solid #0a0a0c', borderRadius: 4, padding: '5px 6px 6px',
       position: 'relative', width: 92, boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
@@ -4312,7 +4347,7 @@ function SideStageBox({ inChannels, stageChRefs, outRefs, snakeOutRef, retActive
       <div className="mono" style={{ fontSize: 5, color: 'var(--ink-3)', fontWeight: 700, letterSpacing: 0.3, marginBottom: 1 }}>OUT 1-8 · returns</div>
       {outs.map(o => (
         <div key={o.key} style={{ display: 'flex', alignItems: 'center', gap: 3, height: 12.5 }}>
-          <div ref={el => outRefs.current[o.key] = el} style={{ width: 9, height: 9, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + o.color, display: 'grid', placeItems: 'center', boxShadow: o.active ? `0 0 4px ${o.color}` : 'inset 0 0 2px #000', flex: '0 0 auto' }}>
+          <div ref={el => outRefs.current[o.key] = el} data-walk={'conn-stage-out-' + o.key} style={{ width: 9, height: 9, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + o.color, display: 'grid', placeItems: 'center', boxShadow: o.active ? `0 0 4px ${o.color}` : 'inset 0 0 2px #000', flex: '0 0 auto' }}>
             <div style={{ width: 2.5, height: 2.5, borderRadius: '50%', background: o.color, opacity: o.active ? 1 : 0.55 }}/>
           </div>
           <div className="mono" style={{ fontSize: 6, color: '#e9e6df', fontWeight: 700, width: 9, textAlign: 'right' }}>{o.key}</div>
@@ -4330,7 +4365,7 @@ function FanOutPoint({ fanOutRef }) {
   // colored fan-out tails out). No colored bars or rectangles inside the
   // anchor block; the cables tell the whole story.
   return (
-    <div ref={fanOutRef} className="ui-no-select" style={{
+    <div ref={fanOutRef} className="ui-no-select" data-walk="snake-trunk" style={{
       width: 80,
       padding: '4px 8px',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -5236,6 +5271,24 @@ function Stage16({ state, setState, audio }) {
   );
 }
 
+// One traced segment of a signal path: a soft lit halo in the channel's snake
+// colour plus marching dashes that travel from `from` to `to`, so a run of these
+// laid end to end reads as signal flowing source → console. Given the same `d`
+// the base cable already drew, so the glow tracks the cable exactly.
+function FlowStream({ d, color }) {
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <path d={d} stroke={color} strokeWidth="7" fill="none" opacity="0.22"
+        strokeLinecap="round" strokeLinejoin="round"
+        style={{ filter: `drop-shadow(0 0 6px ${color})` }}/>
+      <path d={d} stroke={color} strokeWidth="2.3" fill="none" opacity="0.95"
+        strokeLinecap="round" strokeLinejoin="round" strokeDasharray="2 8">
+        <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.7s" repeatCount="indefinite"/>
+      </path>
+    </g>
+  );
+}
+
 function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, onSetSurface, canDigital, surfaceLocked, wedgeMargins, onOpenPlacement, onZoomTo, onZoomReset, zoomActive, stageHidden, stage16Open, briefBelow = false }) {
   // The stage's source list follows the board: the four MX-8 inputs, or the full
   // 14-input band on the big desk. This is what makes the cable system, the
@@ -5306,6 +5359,44 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
   // drives rendering; the ref version drives the move/up handlers.
   const dragRef = useR2(null);
   useE2(() => { dragRef.current = dragState; }, [dragState]);
+
+  // SIGNAL-PATH TRACE. The active lesson step may ask (via FlowTraceContext) to
+  // light one channel's whole run so the student can follow it end to end. We
+  // resolve the spec here into which stage cable / snake tail / channel it
+  // touches, plus the colour to paint. `flowT` is null on a normal board (no
+  // trace), so every `flowT && …` guard below is a no-op the rest of the time.
+  const flowTrace = React.useContext(window.FlowTraceContext) || null;
+  // Which glossary term the student is hovering, so the snake trunk can be
+  // traced along its real path (see the snake block below).
+  const defTerm = React.useContext(window.DefTermContext) || null;
+  const flowT = (() => {
+    if (!flowTrace) return null;
+    const fanOut = state.fanOut || [1, 2, 3, 4];
+    const cables = state.cables || {};
+    // INPUT trace: from a source (or by console channel) → snake → its channel.
+    if (flowTrace.source != null || flowTrace.channel != null) {
+      let src = flowTrace.source != null ? flowTrace.source : null;
+      let port = null;
+      if (src != null) {
+        port = cables[src] != null ? cables[src] : null;             // stage-box port the source patches to
+      } else {
+        port = fanOut.findIndex(c => c === flowTrace.channel) + 1;   // channel → the port that feeds it
+        if (port <= 0) port = flowTrace.channel;
+        for (const k in cables) { if (cables[k] === port) { src = k; break; } }
+      }
+      const ch = flowTrace.channel != null ? flowTrace.channel : (port ? (fanOut[port - 1] || port) : null);
+      if (ch == null) return null;
+      const colors = window.SNAKE_COLORS || [];
+      return { kind: 'in', src, port, ch, color: colors[ch - 1] || '#8ab4ff' };
+    }
+    // OUTPUT trace: a console bus → snake return → stage box out → its speaker.
+    if (flowTrace.out != null) {
+      const colors = window.SNAKE_COLORS || [];
+      return { kind: 'out', out: flowTrace.out, color: colors[0] || '#8ab4ff' };
+    }
+    return null;
+  })();
+  const flowInActive = !!(flowT && flowT.kind === 'in');
 
   // Translate a clientX/Y into containerRef-relative coordinates so the
   // ghost-cable endpoint lines up with the rendered SVG.
@@ -6121,11 +6212,15 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         const chanEnd = isDragged ? dragState.cursor : c.to;
         const midY = (c.from.y + chanEnd.y) / 2 - 6;
         const d = `M ${c.from.x} ${c.from.y} C ${c.from.x} ${midY}, ${chanEnd.x} ${midY}, ${chanEnd.x} ${chanEnd.y}`;
-        const opacity = someOtherDragged ? 0.18 : (c.unplugged ? 0.6 : (c.srcKey ? 0.95 : 0.35));
+        // Signal-path trace: this fan-out tail is the last leg into the desk.
+        const traced = flowInActive && c.ch === flowT.ch;
+        const flowDim = flowInActive && !traced;
+        const opacity = someOtherDragged ? 0.18 : (flowDim ? 0.2 : (c.unplugged ? 0.6 : (c.srcKey ? 0.95 : 0.35)));
         return (
           <g key={i} style={{ pointerEvents: 'none' }}>
             <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round"/>
             <path d={d} stroke={c.color} strokeWidth={isDragged ? 4 : 3} fill="none" opacity={opacity} strokeLinecap="round"/>
+            {traced && <FlowStream d={d} color={flowT.color}/>}
             <circle cx={c.from.x} cy={c.from.y} r="2" fill={c.color} stroke="#0a0a0c" strokeWidth="0.5" opacity={someOtherDragged ? 0.3 : 1}/>
             {!isDragged && (
               <circle cx={c.to.x} cy={c.to.y} r="2.5" fill={c.color} stroke="#0a0a0c" strokeWidth="0.8" opacity={someOtherDragged ? 0.3 : 1}/>
@@ -6418,6 +6513,10 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             // snake head and the fan-out tails, not on the stage cables.
             const hovered = hoverCable === 'src:' + c.src;
             const color = hovered ? '#eae7e0' : '#7d7a72';
+            // Signal-path trace: this source cable is the first leg of the run
+            // the lesson is following; the others dim back so the eye stays on it.
+            const traced = flowInActive && c.src === flowT.src;
+            const flowDim = flowInActive && !traced;
             const rank = xSorted.indexOf(c);
             const n = xSorted.length;
             const railOffset = (rank - (n - 1) / 2) * 6;
@@ -6449,13 +6548,14 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                       : (nativeInput
                           ? window._polyRound([c.from, { x: c.from.x, y: laneY }, { x: fanX, y: laneY }, { x: fanX, y: c.to.y }, c.to], 8)
                           : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY))));
-            const opacity = someOtherDragged ? 0.18 : (hovered ? 1 : 0.95);
+            const opacity = someOtherDragged ? 0.18 : (flowDim ? 0.2 : (hovered ? 1 : 0.95));
             // No "unplugged" badge: the loose cable dangling from the source
             // is enough to read that it needs patching.
             return (
               <g key={c.src} style={{ pointerEvents: 'none' }}>
                 <path d={d} stroke="#000" strokeWidth="5" fill="none" opacity={someOtherDragged ? 0.1 : 0.4} strokeLinecap="round" strokeLinejoin="round"/>
                 <path d={d} stroke={color} strokeWidth={isDragged ? 4 : 3} fill="none" opacity={opacity} strokeLinecap="round" strokeLinejoin="round"/>
+                {traced && <FlowStream d={d} color={flowT.color}/>}
                 {!dragState && (
                   <path d={d} stroke="transparent" strokeWidth="12" fill="none" style={{ pointerEvents: 'stroke' }}
                     onPointerEnter={() => setHoverCable('src:' + c.src)} onPointerLeave={() => setHoverCable(null)}/>
@@ -6537,6 +6637,19 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
               <path d={d} stroke="#1a1a1d" strokeWidth="12" fill="none" opacity="0.95" strokeLinecap="round" strokeLinejoin="round"/>
               <path d={d} stroke="#3a3a40" strokeWidth="9" fill="none" opacity="1" strokeLinecap="round" strokeLinejoin="round"/>
               <path d={d} stroke="#6c6a64" strokeWidth="1.2" fill="none" opacity="0.6" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 8"/>
+              {/* The traced channel travels INSIDE this multicore: light it so the
+                  eye carries from the stage-box tail up the snake to the desk. */}
+              {flowInActive && <FlowStream d={d} color={flowT.color}/>}
+              {/* Hovering "snake" in the definitions panel traces the trunk
+                  itself, connecting the highlighted stage box to the
+                  highlighted snake block at the console. The run is the
+                  concept; two boxes with nothing between them would not
+                  show that one cable carries every channel. */}
+              {defTerm === 'snake' && (
+                <path d={d} stroke="var(--gold, #f0b429)" strokeWidth="7" fill="none"
+                  opacity="0.85" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ filter: 'drop-shadow(0 0 7px rgba(240,180,41,0.85))' }}/>
+              )}
               {s.toFOH && (
                 <text x={s.to.x + 4} y={s.to.y + 3} fill="var(--cool)" fontFamily="Geist Mono" fontSize="7" fontWeight="700" letterSpacing="0.5">→ FOH</text>
               )}
@@ -6776,8 +6889,11 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                 onPointerDown={(e) => startDrag(e, { type: 'source', id: t.srcKey })}
                 onPointerEnter={() => setHoverCable('src:' + t.srcKey)} onPointerLeave={() => setHoverCable(null)}/>;
             })}
-            {(paths.outCables || []).map(c => (c.to && c.unplugged) ? (
-              <circle key={'gh-o-' + c.spk} className="cable-hit" cx={c.to.x} cy={c.to.y} r="11" fill="transparent"
+            {(paths.outCables || []).map(c => (c.from && c.unplugged) ? (
+              // Grab the LOOSE end (c.from, the stage-box jack side with the OPEN
+              // badge), which is the end that follows the cursor on a drag — not
+              // c.to (the fixed speaker end).
+              <circle key={'gh-o-' + c.spk} className="cable-hit" cx={c.from.x} cy={c.from.y} r="11" fill="transparent"
                 onPointerDown={(e) => startDrag(e, { type: 'outpatch', id: c.spk })}
                 onPointerEnter={() => setHoverCable('out:' + c.spk)} onPointerLeave={() => setHoverCable(null)}/>
             ) : null)}
@@ -7174,7 +7290,7 @@ function MobileNotice({ onCapture, optedIn }) {
     }}>
       <img src={window.AU_LOGO} alt="Audio University" style={{ height: 72, width: 72, display: 'block', marginBottom: 16 }}/>
       <div className="display" style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.8, lineHeight: 1 }}>Troubleshooting Lab</div>
-      <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 4 }}>Interactive Mixing Console Trainer</div>
+      <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 4 }}>Live Sound Simulator</div>
       <div style={{
         marginTop: 24, padding: '18px', width: '100%', maxWidth: 360, boxSizing: 'border-box',
         background: 'rgba(14,36,21,0.7)', border: '1px solid var(--green)', borderRadius: 10,
@@ -7314,7 +7430,7 @@ const SCENARIOS = [
   {
     id: 'sandbox', isSandbox: true,
     title: 'Free Play',
-    symptom: 'Nothing is broken here, and there is no goal. Move faders, set gains, build a monitor mix, and switch the surface between analog and digital. Turn the sound on to hear what changes. When you want a challenge, open the lessons or a practice round from the menu above.',
+    symptom: 'Nothing is broken and there is no goal. Move faders, set gains, build a monitor mix, and switch between the analog and digital surface. Turn the sound on to hear what changes. For a challenge, open the lessons or a practice round from the menu above.',
     conditions: [],
     involves: [1, 2, 3, 4],
     defaultInspect: 'pa',
@@ -7399,6 +7515,23 @@ if (Array.isArray(window.SCENARIO_LIBRARY)) {
 // Member-gated via isLesson; isMonitor groups them under their own picker mode.
 if (Array.isArray(window.MONITOR_WORLD)) {
   window.MONITOR_WORLD.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isMonitor: true }));
+}
+// Patching course (members). isPatching groups them under their own PATCHING
+// picker band; member-gated via isLesson (not isStartHere). Pushed after the
+// LEVELS.length Practice index is fixed, so scenario indices don't shift.
+if (Array.isArray(window.PATCHING)) {
+  window.PATCHING.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isPatching: true }));
+}
+
+// Power course (members). Same shape as Patching: its own POWER picker band,
+// member-gated via isLesson.
+if (Array.isArray(window.POWER)) {
+  window.POWER.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isPower: true }));
+}
+
+// Input Setup course (members). Same shape: its own INPUT picker band.
+if (Array.isArray(window.INPUT_SETUP)) {
+  window.INPUT_SETUP.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isInputSetup: true }));
 }
 
 // A custom scenario opened from a ?scenario= link gets appended as its own
@@ -7490,6 +7623,12 @@ const MIXER_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isMi
 // email opt-in + join CTA fire).
 const START_HERE_INDEX = SCENARIOS.findIndex((s) => s.isStartHere);
 const START_HERE_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isStartHere);
+// Patching course lesson indices, for the "PATCHING · 01 / 03" top-bar label.
+const PATCHING_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isPatching);
+// Power course lesson indices, for the "POWER · 01 / 05" top-bar label.
+const POWER_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isPower);
+// Input Setup course lesson indices, for the "INPUT SETUP · 01 / 05" label.
+const INPUT_SETUP_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isInputSetup);
 const SH_FINALE_ID = 105;
 // Where a visitor lands with no resume target: members go to lesson 1 of Run
 // the show; the free tier (lessons locked) lands on Free Play, never on a
@@ -7515,6 +7654,9 @@ const FREE_ET_BYEAR = 1;
 function bandOf(l) {
   if (l.isWalkthrough) return 'PLAY';  // the guided tour, entered directly, never a picker row
   if (l.isMonitor) return 'MONITOR';   // Monitor World course (members)
+  if (l.isPatching) return 'PATCHING'; // Patching course (members)
+  if (l.isPower) return 'POWER';       // Power Up / Power Down course (members)
+  if (l.isInputSetup) return 'INPUT';  // Input Setup course (members)
   if (l.isSandbox) return 'PLAY';      // free, no-goal exploration
   if (l.isLibrary) return 'LIBRARY';   // curated, browsable real-world scenarios
   if (l.isChallenge) return 'DRILL';   // Practice + Feedback Mode + any future packs
@@ -7911,7 +8053,7 @@ function EmailGate({ open, onSubmit, onSkip }) {
           <>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9, fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
           <div>In Practice Mode, you'll find and solve problems in the sound system.</div>
-          <div>First, let us send you the Soundcheck Checklist, so you can apply these steps at your next show. Enter your email and we'll send you the checklist.</div>
+          <div>First, the Soundcheck Checklist, so you can run these steps at your next show. Enter your email and we'll send it over.</div>
           <div>Then we can continue to Practice Mode and Ear Training Mode.</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -7998,7 +8140,7 @@ function WelcomeChooser({ open, onQuickFix, onEssentials }) {
           onMouseLeave={(e) => e.currentTarget.style.borderColor = '#38383e'}>
           <div className="mono" style={{ fontSize: 8.5, color: 'var(--accent)', letterSpacing: 1.6, fontWeight: 700 }}>LEARN THE FULL SETUP · 10 LESSONS</div>
           <div className="display" style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15 }}>Set up a live system with nothing powered on yet.</div>
-          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>Start at the beginning: patch it, power up in order, set your levels, build a monitor mix, and run a full show. Step by step.</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>Start at the beginning: patch it, power up in order, set your levels, build a monitor mix, and run a full show, step by step.</div>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--accent)', fontWeight: 800, letterSpacing: 0.6, marginTop: 3 }}>START THE ESSENTIALS →</div>
         </div>
       </div>
@@ -8027,7 +8169,7 @@ const WALK_STEPS = [
   },
   {
     act: 'The channel strip', title: 'PFL and the meter', target: 'ch1-pfl',
-    teach: "PFL, at the bottom of the strip, checks a channel in your headphones before the audience hears it. It stands for pre-fader listen, so you hear the channel no matter where the fader sits. Watch the meter while you listen: yellow is fine, red is too hot.",
+    teach: "PFL, at the bottom of the strip, checks a channel in your headphones before the audience hears it. It stands for pre-fader listen, so the fader position does not change what you hear. Watch the meter while you listen: yellow is fine, red is too hot.",
     prompt: "Press PFL on the lead vocal to hear just that channel. Press it again to drop back.",
     takeaway: "PFL sends a channel to your headphones and the meter so you can check it before the audience hears it. It is pre-fader, so the fader does not change what you hear.",
     test: (s, b) => (!!s.channels[WALK_LEAD].solo) !== b.solo,
@@ -8042,7 +8184,7 @@ const WALK_STEPS = [
   },
   {
     act: 'The channel strip', title: 'The channel fader', target: 'ch1-fader',
-    teach: "The channel fader is this channel's level in the main mix, the control you ride to blend the band during the show. Keep it near the U mark, unity: the scale is finer up there, so small moves make small changes. The mute next to it is the channel's on and off.",
+    teach: "The channel fader sets this channel's level in the main mix. Keep it near the U mark, unity: the scale is finer up there, so small moves make small changes. The mute next to it is the channel's on and off.",
     prompt: "Bring the lead vocal fader up into the mix. Try the mute too: the singer drops out, then comes back.",
     takeaway: "The channel fader is that channel's level in the mix. Keep it near unity (U) for the finest control. Mute is its on and off.",
     test: (s, b) => Math.abs((s.channels[WALK_LEAD].fader ?? 0) - b.cfader) > 0.05 || (!!s.channels[WALK_LEAD].mute) !== b.mute,
@@ -8143,6 +8285,148 @@ function lessonActiveIndex(steps, ctx) {
   return steps.length;
 }
 
+// DEFINITIONS PANEL — the only prose a lesson shows outside its steps.
+//
+// A lesson declares `defs: ['wedge', 'aux send']` and this renders the
+// term/definition pairs from window.GLOSSARY. There is deliberately NO
+// free-text field: a lesson cannot set a scene, restate the DO THIS, or
+// describe something the student can already see on the console. If a
+// lesson has nothing to define, it shows nothing at all.
+//
+// Unknown keys are skipped rather than rendered raw, so a typo shows up as
+// a missing definition in the lint rather than as garbage on screen.
+// Hovering a definition tells the app which term to light up on the board.
+// The App owns the state (the highlight layer renders at the top level,
+// above the board), so this context just hands the setter down.
+const DefHoverContext = React.createContext(null);
+window.DefHoverContext = DefHoverContext;
+
+// The hovered term itself, for a highlight that must be drawn INSIDE the
+// board's SVG rather than as a screen-space box. The snake trunk is a
+// cornered multicore path, so the only honest way to trace it is to stroke
+// the real path where its geometry already lives.
+const DefTermContext = React.createContext(null);
+window.DefTermContext = DefTermContext;
+
+// GLOSSARY HIGHLIGHT — "show me what that word means".
+//
+// Deliberately NOT the walkthrough spotlight. That ring pulses green and
+// means "do this next"; this is a calm, static amber wash that means
+// "this is the thing I just defined". Different intent, different look,
+// so a student never confuses a definition with an instruction.
+//
+// Highlights EVERY match, so hovering "fader" lights up all of them at
+// once, which is the point: the word names a kind of control, not one
+// control.
+function GlossaryHighlight({ term }) {
+  const [rects, setRects] = uS([]);
+  const sel = (term && window.GLOSSARY_ANCHORS && window.GLOSSARY_ANCHORS[term]) || '';
+  uE(() => {
+    if (!sel) { setRects([]); return; }
+    const measure = () => {
+      const boxes = [];
+      document.querySelectorAll(sel).forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) return;
+        // Anything scrolled out of view would otherwise draw a box pinned
+        // to the viewport edge.
+        if (r.bottom < 0 || r.top > window.innerHeight) return;
+        boxes.push({ left: r.left, top: r.top, w: r.width, h: r.height,
+                     inPanel: !!el.closest('[data-iolist-card]') });
+      });
+      setRects((prev) => {
+        const same = boxes.length === prev.length && boxes.every((b, i) => {
+          const p = prev[i];
+          return p && Math.abs(p.left - b.left) < 0.5 && Math.abs(p.top - b.top) < 0.5
+              && Math.abs(p.w - b.w) < 0.5 && Math.abs(p.h - b.h) < 0.5;
+        });
+        return same ? prev : boxes;
+      });
+    };
+    measure();
+    // Track the board's scale-to-fit transform and any panel drag, the
+    // same way the walkthrough spotlight does.
+    let raf;
+    const loop = () => { measure(); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
+    window.addEventListener('resize', measure);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measure); };
+  }, [sel]);
+  if (!sel || !rects.length) return null;
+  const style = (window.GLOSSARY_ANCHOR_STYLE || {})[term] || 'box';
+  // A LINE target (the fader's U mark) gets an arrow pointing at it from the
+  // left. A box drawn around a 1px tick reads as a box around nothing.
+  if (style === 'arrow') {
+    return (
+      <>
+        {rects.map((r, i) => (
+          <div key={i} style={{
+            position: 'fixed', left: r.left - 20, top: r.top + r.h / 2 - 6.5,
+            width: 17, height: 13, pointerEvents: 'none',
+            zIndex: r.inPanel ? 96 : 87,
+            filter: 'drop-shadow(0 0 5px rgba(240,180,41,0.9))',
+          }}>
+            <svg viewBox="0 0 17 13" width="17" height="13" style={{ display: 'block' }}>
+              <path d="M17 6.5 L9 1 L9 4 L0 4 L0 9 L9 9 L9 12 Z" fill="var(--gold, #f0b429)"/>
+            </svg>
+          </div>
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      {rects.map((r, i) => (
+        <div key={i} style={{
+          position: 'fixed', left: r.left - 3, top: r.top - 3,
+          width: r.w + 6, height: r.h + 6,
+          border: '1.5px solid var(--gold, #f0b429)',
+          background: 'rgba(240,180,41,0.13)',
+          borderRadius: r.h < 40 ? 3 : 6,
+          pointerEvents: 'none', zIndex: r.inPanel ? 96 : 87,
+          boxShadow: '0 0 10px rgba(240,180,41,0.45)',
+        }}/>
+      ))}
+    </>
+  );
+}
+window.GlossaryHighlight = GlossaryHighlight;
+
+function DefList({ defs }) {
+  if (!Array.isArray(defs) || defs.length === 0) return null;
+  const G = window.GLOSSARY || {};
+  const L = window.GLOSSARY_LABELS || {};
+  const A = window.GLOSSARY_ANCHORS || {};
+  const setHover = React.useContext(window.DefHoverContext) || null;
+  const rows = defs.filter((k) => G[k]);
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {rows.map((k) => {
+        // Only terms that map to something real on the board get the
+        // hover affordance. A dotted underline on a word that lights
+        // nothing up reads as a broken feature.
+        const canPoint = !!(A[k] && setHover);
+        return (
+          <div key={k}
+            onMouseEnter={canPoint ? () => setHover(k) : undefined}
+            onMouseLeave={canPoint ? () => setHover(null) : undefined}
+            style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5,
+                     cursor: canPoint ? 'help' : 'default' }}>
+            <span style={{
+              color: 'var(--ink)', fontWeight: 700,
+              borderBottom: canPoint ? '1px dotted var(--ink-2)' : 'none',
+            }}>{L[k] || k}</span>
+            <span style={{ opacity: 0.5 }}>{'  ·  '}</span>
+            {G[k]}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+window.DefList = DefList;
+
 function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
   const total = steps.length;
   const allDone = activeIndex >= total;
@@ -8161,6 +8445,16 @@ function LessonGuide({ level, steps, ctx, activeIndex, onReset, phantomPop }) {
           {allDone ? 'DONE' : ('STEP ' + (activeIndex + 1) + ' OF ' + total)}
         </div>
       </div>
+
+      {/* Definitions only. A lesson declares which terms it introduces and
+          this renders them from the glossary. Instructions belong in the
+          step's DO THIS; board state belongs on the console, not in prose.
+          `symptom` is still honored for Practice and custom scenarios (which
+          need a goal statement), but lessons must not use it. */}
+      <DefList defs={level.defs} />
+      {!level.defs && level.symptom && (
+        <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.5 }}>{level.symptom}</div>
+      )}
 
       {popped && (
         <div style={{ fontSize: 11, color: 'var(--hot)', lineHeight: 1.45, padding: '6px 9px', background: 'rgba(255,70,48,0.1)', border: '1px solid rgba(255,70,48,0.4)', borderRadius: 6 }}>
@@ -8273,51 +8567,113 @@ function WalkthroughWrap({ open, onLessons, onExplore }) {
 // scale-to-fit transform. pointer-events:none so the user clicks straight
 // through the ring to the control.
 function WalkthroughSpotlight({ target }) {
-  const [rect, setRect] = uS(null);
+  // Draws ONE ring per target element (not a union box), so a step can glow two
+  // far-apart things — e.g. the Input List row AND the source card — without the
+  // ring ballooning to span everything in between.
+  const [rects, setRects] = uS([]);
   const targetKey = Array.isArray(target) ? target.join(',') : (target || '');
   uE(() => {
-    if (!target) { setRect(null); return; }
+    if (!target) { setRects([]); return; }
     const keys = Array.isArray(target) ? target : [target];
     const measure = () => {
-      let box = null;
-      let inPanel = false;
+      const boxes = [];
       keys.forEach((k) => {
         const el = document.querySelector('[data-walk="' + k + '"]');
         if (!el) return;
         const r = el.getBoundingClientRect();
         if (r.width === 0 && r.height === 0) return;
-        if (el.closest('[data-iolist-card]')) inPanel = true;
-        box = box
-          ? { left: Math.min(box.left, r.left), top: Math.min(box.top, r.top), right: Math.max(box.right, r.right), bottom: Math.max(box.bottom, r.bottom) }
-          : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        // The Input List panel floats ABOVE the board and the ring layer, so a
+        // ring for a target that lives INSIDE the panel has to render above
+        // the panel too; every other ring stays under it (a ring for a control
+        // the panel happens to cover should not draw on top of the paperwork).
+        const inPanel = !!el.closest('[data-iolist-card]');
+        boxes.push({ key: k, left: r.left, top: r.top, w: r.width, h: r.height, inPanel });
       });
-      setRect((prev) => {
-        if (!box) return prev ? null : prev;
-        const next = { left: box.left, top: box.top, w: box.right - box.left, h: box.bottom - box.top, inPanel };
-        if (prev && Math.abs(prev.left - next.left) < 0.5 && Math.abs(prev.top - next.top) < 0.5 && Math.abs(prev.w - next.w) < 0.5 && Math.abs(prev.h - next.h) < 0.5 && prev.inPanel === next.inPanel) return prev;
-        return next;
+      setRects((prev) => {
+        const same = boxes.length === prev.length && boxes.every((b, i) => {
+          const p = prev[i];
+          return p && p.key === b.key && Math.abs(p.left - b.left) < 0.5 && Math.abs(p.top - b.top) < 0.5 && Math.abs(p.w - b.w) < 0.5 && Math.abs(p.h - b.h) < 0.5 && p.inPanel === b.inPanel;
+        });
+        return same ? prev : boxes;
       });
     };
     measure();
-    const id = setInterval(measure, 200);
+    // Re-measure every frame so a ring tracks a target that moves — e.g. the
+    // draggable Input List panel. setRects only re-renders when a box actually
+    // shifts (>0.5px), so an idle target costs nothing.
+    let raf;
+    const loop = () => { measure(); raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop);
     window.addEventListener('resize', measure);
-    return () => { clearInterval(id); window.removeEventListener('resize', measure); };
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', measure); };
   }, [targetKey]);
-  if (!target || !rect) return null;
+  if (!target || !rects.length) return null;
   // Short targets (table rows, chips) get a tight ring: a 7px halo around a
   // ~24px row overlaps the neighboring rows and reads as clutter.
-  const pad = rect.h < 40 ? 2 : 7;
+  const padFor = (h) => (h < 40 ? 2 : 7);
   return (
-    <div style={{
-      position: 'fixed', left: rect.left - pad, top: rect.top - pad,
-      width: rect.w + pad * 2, height: rect.h + pad * 2,
-      border: '2px solid var(--green)', borderRadius: pad < 7 ? 5 : 8,
-      animation: 'walkPulse 1.6s ease-in-out infinite',
-      // Rings for targets inside the Input List panel (zIndex 90) render above
-      // it; everything else stays under, so a ring never draws over paperwork
-      // that happens to cover its control.
-      pointerEvents: 'none', zIndex: rect.inPanel ? 95 : 88,
-    }}/>
+    <>
+      {rects.map((rect, i) => {
+        // Connection points (cable jacks, data-walk "conn-*") get a bobbing
+        // arrow instead of a ring: the jacks sit in a tight row, so a box
+        // around one blurs into its neighbors, but an arrow says "right here".
+        // Everything else — sources, buttons, list rows — keeps the ring.
+        if (rect.key && rect.key.indexOf('conn-') === 0) {
+          // The arrow must NEVER sit over a cable or a dangling tail — the
+          // cable is the thing the student has to see and grab. So each arrow
+          // approaches from the side the cables don't use:
+          // - stage-box jacks: cables plug in from the LEFT, so the arrow
+          //   sits INSIDE the box to the right of the jack and points left.
+          // - console jacks + sub-snake heads: tails and lines arrive from
+          //   ABOVE, so the arrow points up from BELOW the connection point.
+          if (rect.key.indexOf('conn-stage-') === 0) {
+            // Sit to the RIGHT of the port-number column (jack + gap + number,
+            // ~13px past the jack) so the arrow never covers the number the
+            // step copy names. Short (13px) so that on steps targeting
+            // adjacent ports the arrows on 13px-pitch rows don't stack into a
+            // blob. Points left, back at the jack.
+            return (
+              <div key={i} style={{
+                position: 'fixed', left: rect.left + rect.w + 13,
+                top: rect.top + rect.h / 2 - 6.5,
+                width: 17, height: 13, pointerEvents: 'none',
+                zIndex: rect.inPanel ? 95 : 88,
+                animation: 'walkArrowBobXL 1.1s ease-in-out infinite',
+                filter: 'drop-shadow(0 0 5px rgba(74,222,128,0.9))',
+              }}>
+                <svg viewBox="0 0 17 13" width="17" height="13" style={{ display: 'block' }}>
+                  <path d="M0 6.5 L8 1 L8 4 L17 4 L17 9 L8 9 L8 12 Z" fill="var(--green)"/>
+                </svg>
+              </div>
+            );
+          }
+          return (
+            <div key={i} style={{
+              position: 'fixed', left: rect.left + rect.w / 2 - 11,
+              top: rect.top + rect.h + 8,
+              width: 22, height: 26, pointerEvents: 'none',
+              zIndex: rect.inPanel ? 95 : 88,
+              animation: 'walkArrowBobUp 1.1s ease-in-out infinite',
+              filter: 'drop-shadow(0 0 6px rgba(74,222,128,0.85))',
+            }}>
+              <svg viewBox="0 0 22 26" width="22" height="26" style={{ display: 'block', transform: 'rotate(180deg)' }}>
+                <path d="M11 26 L1 13 L6.5 13 L6.5 0 L15.5 0 L15.5 13 L21 13 Z" fill="var(--green)"/>
+              </svg>
+            </div>
+          );
+        }
+        const pad = padFor(rect.h);
+        return (
+          <div key={i} style={{
+            position: 'fixed', left: rect.left - pad, top: rect.top - pad,
+            width: rect.w + pad * 2, height: rect.h + pad * 2,
+            border: '2px solid var(--green)', borderRadius: pad < 7 ? 5 : 8,
+            animation: 'walkPulse 1.6s ease-in-out infinite',
+            pointerEvents: 'none', zIndex: rect.inPanel ? 95 : 88,
+          }}/>
+        );
+      })}
+    </>
   );
 }
 
@@ -8368,16 +8724,23 @@ function IoListPanel({ open, onClose, state }) {
     return src.kind || '—';
   };
   // One row per fader. The Input List is the PAPERWORK: it shows the INTENDED
-  // patch (what belongs on each channel), not the current live cabling — so it's
-  // a usable map even before the first cable goes in (Patch the System starts
-  // fully unpatched). We read the plan off a reference patch: identity fan-out,
-  // each source on its home port. For the standard band that home layout is
-  // fixed; other boards (the 16-input band) never start unpatched, so their live
-  // cabling already IS the plan.
+  // patch (what belongs on each channel), never the current live cabling — so
+  // it's a usable map even when a line is loose or crossed. We read the plan
+  // off each board's canonical home layout: the standard band's fixed mapping,
+  // or the 16-input band's natural BAND_KEYS order (the same mapping
+  // big16PatchOk treats as correct), with identity fan-out.
   const liveCables = s.cables || {};
   const isStdBand = ['vocal', 'vocal2', 'guitar', 'laptop'].every((k) => k in liveCables) && Object.keys(liveCables).length <= 6;
-  const planCables = isStdBand ? { vocal: 1, vocal2: 2, guitar: 3, laptop: 4 } : liveCables;
-  const planFanOut = isStdBand ? [1, 2, 3, 4] : (s.fanOut || [1, 2, 3, 4]);
+  const planCables = isStdBand
+    ? { vocal: 1, vocal2: 2, guitar: 3, laptop: 4 }
+    : (s.big16 && window.BAND_KEYS
+      ? window.BAND_KEYS.reduce((m, k, i) => { m[k] = i + 1; return m; }, {})
+      : liveCables);
+  const planFanOut = isStdBand
+    ? [1, 2, 3, 4]
+    : (s.big16 && window.BAND_KEYS
+      ? window.BAND_KEYS.map((_, i) => i + 1)
+      : (s.fanOut || [1, 2, 3, 4]));
   const planStereoIdx = s.channels.findIndex((c) => c.stereo);
   const srcKeysAll = Object.keys(window.SOURCES || {});
   // The intended channel for a source: its home snake port carried through the
@@ -8394,12 +8757,33 @@ function IoListPanel({ open, onClose, state }) {
     if (s.channels[i] && s.channels[i].stereo) return s.noPlayback ? null : 'playback';
     return srcKeysAll.find((k) => k !== 'playback' && planChannelFor(k) === i + 1) || null;
   };
+  // On the big board the mics reach the stage box in sub-snakes, so the
+  // paperwork has to name the sub-snake and the channel ON it, the way a real
+  // input list does ("Drum 3"). Local numbering matches the stage exactly: a
+  // source's slot is its position within its own group, the same `natural()`
+  // rule SubSnakeHead uses. Read off BAND_KEYS so it stays the PLAN, not the
+  // live micIn cabling.
+  const SUBSNAKE_NAMES = { up: 'Drum', inst: 'Backline', down: 'Vocal' };
+  const subSnakeFor = (k) => {
+    const src = window.SOURCES[k];
+    if (!s.big16 || !src || !src.snake) return null;
+    const grp = (window.BAND_KEYS || []).filter((kk) => window.SOURCES[kk] && window.SOURCES[kk].snake === src.snake);
+    const local = grp.indexOf(k) + 1;
+    if (local < 1) return null;
+    return (SUBSNAKE_NAMES[src.snake] || src.snake) + ' ' + local;
+  };
   const inputRows = s.channels.map((ch, i) => {
     const srcKey = planSourceForChannel(i);
     const src = srcKey ? window.SOURCES[srcKey] : null;
     const chNum = ch.stereo ? `${i + 1}/${i + 2}` : `${i + 1}`;
-    const snakeIdx = (src && srcKey !== 'playback') ? planChannelFor(srcKey) : null;
-    return { key: i, chNum, source: src ? src.label : 'Empty', type: typeLabel(src), snakeIdx, empty: !src };
+    // Snake channel and mixer channel are DIFFERENT facts and get their own
+    // columns: the snake channel is the stage-box port the source patches to,
+    // the mixer channel is the console strip it lands on. Patched one to one
+    // they read the same number, which is the whole point of the paperwork.
+    // Playback is a FOH line input, so it rides no snake channel at all.
+    const snakeCh = (src && srcKey !== 'playback') ? (planCables[srcKey] || null) : null;
+    const sub = (src && srcKey !== 'playback') ? subSnakeFor(srcKey) : null;
+    return { key: i, chNum, source: src ? src.label : 'Empty', type: typeLabel(src), snakeCh, sub, empty: !src };
   });
   // Every console output bus and the return channel it rides. Like the inputs,
   // this is the PLAN (the paperwork): when the board is unpatched (Patch the
@@ -8439,7 +8823,9 @@ function IoListPanel({ open, onClose, state }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 90, pointerEvents: 'none' }}>
       <div data-iolist-card style={{
         position: 'fixed', ...dock,
-        width: 400, maxWidth: '94vw', maxHeight: '78vh', overflow: 'auto',
+        // The big board adds a sub-snake column (five in all), so it needs the
+        // extra room or the Type column wraps every row.
+        width: s.big16 ? 560 : 440, maxWidth: '94vw', maxHeight: '78vh', overflow: 'auto',
         background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
         border: '1px solid #38383e', borderRadius: 8, padding: '16px 18px',
         boxShadow: '0 12px 40px rgba(0,0,0,0.7)', pointerEvents: 'auto',
@@ -8457,12 +8843,15 @@ function IoListPanel({ open, onClose, state }) {
         {sectionTitle('INPUTS · FROM THE STAGE')}
         <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
           <thead><tr>
-            <th style={th}>Channel</th><th style={th}>Source</th><th style={th}>Type</th>
+            {s.big16 && <th style={th}>Sub-snake</th>}
+            <th style={th}>Snake input</th><th style={th}>Mixer ch</th><th style={th}>Source</th><th style={th}>Type</th>
           </tr></thead>
           <tbody>
             {inputRows.map((r) => (
-              <tr key={r.key}>
-                <td style={td}>{chCell(r.snakeIdx, 'CH ' + r.chNum)}</td>
+              <tr key={r.key} data-walk={'iolist-ch' + r.chNum}>
+                {s.big16 && <td style={{ ...td, color: r.sub ? 'var(--ink-2)' : 'var(--ink-3)' }}>{r.sub || '—'}</td>}
+                <td style={td}>{chCell(r.snakeCh, r.snakeCh ? String(r.snakeCh) : '—')}</td>
+                <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink)' }}>{r.chNum}</td>
                 <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink)' }}>{r.source}</td>
                 <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink-2)' }}>{r.type}</td>
               </tr>
@@ -8472,14 +8861,14 @@ function IoListPanel({ open, onClose, state }) {
         {sectionTitle('OUTPUTS · TO THE SPEAKERS')}
         <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
           <thead><tr>
-            <th style={th}>Return</th><th style={th}>Signal</th><th style={th}>Goes to</th>
+            <th style={th}>Snake output</th><th style={th}>Console output</th><th style={th}>Goes to</th>
           </tr></thead>
           <tbody>
             {outputDefs.map((o) => {
               const p = portFor(o.bus);
               return (
-                <tr key={o.bus}>
-                  <td style={td}>{chCell(p, p ? 'OUT ' + p : '—')}</td>
+                <tr key={o.bus} data-walk={'iolist-out-' + o.bus}>
+                  <td style={td}>{chCell(p, p ? String(p) : '—')}</td>
                   <td style={td}>{o.label}</td>
                   <td style={td}>{o.to}</td>
                 </tr>
@@ -8792,6 +9181,9 @@ function App() {
   // using the hint is counted into the debrief, not punished.
   const [hintCount, setHintCount] = uS(0);
   const hintsUsedRef = uR(0);
+  // Latch "the Input List has been opened this level" the moment it opens, so
+  // the guide's step 1 stays satisfied even after the panel is closed again.
+  uE(() => { if (ioListOpen) ioListOpenedRef.current = true; }, [ioListOpen]);
   // Gesture-level move counter for the debrief: one fader drag is one move,
   // not fifty state updates. Counted by diffing consecutive states at the
   // app's single state choke point (the effect below).
@@ -9108,6 +9500,9 @@ function App() {
   // Power-Down (lesson 10) is a wind-down the student can still finish after.
   // Stable ids are append-only, so completed[9] is The Gig for good.
   const [ctaOpen, setCtaOpen] = uS(false);
+  // Which glossary term the student is hovering in the definitions panel.
+  // Drives GlossaryHighlight, which washes the matching controls in amber.
+  const [defHover, setDefHover] = uS(null);
   // Finale of the free Start Here course (SH_FINALE_ID). Fires once: a free
   // viewer who has not given an email gets the opt-in first (then the CTA);
   // members and already-subscribed viewers get the CTA straight away.
@@ -9156,12 +9551,22 @@ function App() {
   // -> true). Drives requirePflEach (Mic Inputs / DI Boxes: PFL each input
   // before you bring it up). Reset on level change.
   const pflChannelsRef = uR({});
+  // One-way latch: has the Input List been opened at least once this level?
+  // The "Open the Input List" step in the patch lessons reads this instead of
+  // the live ioListOpen so that closing the (deliberately non-modal) panel
+  // mid-lesson can't un-check step 1 and snap the guide backward. Reset per
+  // level; the live ioListOpen still drives the panel itself.
+  const ioListOpenedRef = uR(false);
 
   // Per-destination "checked" latch for verifyEach levels (Test the System).
   // Once playback reaches a speaker, that speaker stays checked for the rest
   // of the attempt, so the student verifies them one at a time. Reset on
   // level change. Keyed by dest (pa_l, pa_r, wedge, wedge2).
   const verifiedRef = uR({});
+  // Signature of the output patch the verify latches were earned against. A
+  // repatch invalidates every check made before it: a speaker "verified"
+  // through the wrong line was never verified.
+  const verifiedPatchSigRef = uR(null);
 
   // Per-source amplitude envelope state. Updated every animation frame so
   // meters bounce and audio breathes like a real signal. The ref is read by
@@ -9258,21 +9663,21 @@ function App() {
   const wedgeRinging = !!(feedback && feedback.wedgeRing);
   uE(() => { if (wedgeRinging) setEqPanelOpen(true); }, [wedgeRinging]);
 
-  // Fault warning modal. Pops, distortion, and PA imbalance announce
-  // themselves in a centered dismissible modal instead of stacking text into
-  // the brief card. Feedback is excluded — it has its own ring-out flow (the
-  // Monitor EQ auto-opens above). Keyed by a fault signature so a brand-new
-  // event reopens the modal, but dismissing an ongoing fault sticks until the
-  // engineer fixes it (or it clears on its own).
+  // Fault warning modal. Pops and distortion announce themselves in a centered
+  // dismissible modal instead of stacking text into the brief card. Feedback is
+  // excluded (it has its own ring-out flow, the Monitor EQ auto-opens above), and
+  // PA imbalance is excluded too: the small IMBALANCED tag in the objective area
+  // is enough, and the modal was more annoying than useful. Keyed by a fault
+  // signature so a brand-new event reopens the modal, but dismissing an ongoing
+  // fault sticks until the engineer fixes it (or it clears on its own).
   const [warnOpen, setWarnOpen] = uS(false);
   const warnDismissedSigRef = uR(null);
-  // Suppress the warning modal only for a real wedge ring (it has its own ring-out
-  // flow above). A mains-only howl still falls through to the clip/distortion
-  // warning, which is what actually points at the too-hot gain.
+  // Suppress the warning modal for a real wedge ring (its own ring-out flow above)
+  // and for PA imbalance (objective tag only). A mains-only howl still falls
+  // through to the clip/distortion warning, which points at the too-hot gain.
   const faultSig = wedgeRinging ? null
                 : state.phantomPop ? ('pop:' + state.phantomPop.at)
                 : (clipsStable && clipsStable.length) ? 'clip'
-                : paBalanceIssue ? 'bal'
                 : null;
   uE(() => {
     if (faultSig == null) { setWarnOpen(false); warnDismissedSigRef.current = null; return; }
@@ -9373,11 +9778,21 @@ function App() {
     // state change that completes the last check, so there's no one-frame lag.
     let verifiedOk = true;
     if (level.verifyEach && level.verifyEach.length) {
+      // Moving the output patch clears every latch: whatever played before the
+      // move played through the old lines, so those checks no longer stand.
+      const patchSig = JSON.stringify([state.outPatch || null, state.outFan || null]);
+      if (verifiedPatchSigRef.current !== null && verifiedPatchSigRef.current !== patchSig) {
+        verifiedRef.current = {};
+      }
+      verifiedPatchSigRef.current = patchSig;
       const va = window.computeAudio(state);
       for (const v of level.verifyEach) {
         const cont = va.contributions[v.source];
         const lvl = cont ? (v.dest === 'pa' ? Math.max(cont.pa_l, cont.pa_r) : (cont[v.dest] || 0)) : 0;
-        if (lvl >= (v.min != null ? v.min : 0.25)) verifiedRef.current[v.dest] = true;
+        // othersMax makes a check one-sided: Main L only counts as checked
+        // while Main R is silent, so a center-pan blast cannot tick both.
+        const oneSided = !v.othersMax || Object.keys(v.othersMax).every((k) => (cont ? (cont[k] || 0) : 0) <= v.othersMax[k]);
+        if (lvl >= (v.min != null ? v.min : 0.25) && oneSided) verifiedRef.current[v.dest] = true;
         if (!verifiedRef.current[v.dest]) verifiedOk = false;
       }
     }
@@ -9396,6 +9811,17 @@ function App() {
         const lvl = (a.chanInBaseline && a.chanInBaseline[(gs.refChannel || 1) - 1]) || 0;
         inputOk = lvl >= gs.inputBand[0] && lvl <= gs.inputBand[1];
       }
+      // inputBandAll = every listed input channel's gain sits in the healthy meter
+      // band (the final-exam check, so a starved gain cannot be faked with a
+      // cranked fader). Same band the single-channel input lessons gate on.
+      if (gs.inputBandAll) {
+        const aAll = window.computeAudio(state);
+        const chs = gs.inputChannels || [1, 2, 3, 4];
+        inputOk = inputOk && chs.every((ch) => {
+          const lvl = (aAll.chanInBaseline && aAll.chanInBaseline[ch - 1]) || 0;
+          return lvl >= gs.inputBandAll[0] && lvl <= gs.inputBandAll[1];
+        });
+      }
       // gainOnly = test the input gain and nothing else. The fader position is a
       // mix choice, not a pass/fail — requiring it at unity would teach that a
       // fader must always sit at unity, which is false (Kyle 2026-07-06).
@@ -9403,7 +9829,7 @@ function App() {
       const masterOk = !state.master.mute && Math.abs(state.master.fader - unity) <= tol;
       // No refChannel = master-only gain lesson (The Gig: playback gets pulled
       // back down after the speaker test, so no single channel is pinned).
-      if (!gs.refChannel) return masterOk;
+      if (!gs.refChannel) return masterOk && inputOk;
       const refCh = state.channels[gs.refChannel - 1];
       if (!refCh) return false;
       // "Up at unity" = unmuted AND fader at the unity mark. Used by the guided
@@ -9448,7 +9874,14 @@ function App() {
       });
     }
     const adjustOk = !level.requireAdjust || level.requireAdjust.every((ch) => !!adjustLatchRef.current[ch]);
-    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk;
+    // Mixing Monitors: a lesson can require the high-pass filter engaged on a
+    // set of channels (requireHpfOn: [1, 2]). State-checked like the mute or
+    // phantom switches: the HPF button is either in or out.
+    const hpfOk = !level.requireHpfOn || level.requireHpfOn.every((ch) => { const c = state.channels[ch - 1]; return !!(c && c.highpass); });
+    // Output-check lesson: the test ends with every listed speaker switched
+    // back on. Stops a "solved" board whose mains never came back.
+    const outputsOnOk = !level.requireOutputsOn || level.requireOutputsOn.every((k) => { const o = state.outputs[k]; return !!(o && o.on); });
+    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk && outputsOnOk;
     // Mirror the live, truly-winnable state so the sign-off button can tell a
     // correct "system is healthy" call from a premature one.
     wonRef.current = won && !blocked;
@@ -10432,11 +10865,15 @@ function App() {
     // workflow rather than counting an earlier solo as a check.
     pflCheckedRef.current = false;
     pflChannelsRef.current = {};
+    // Each level scores its own "did they open the list" latch; the live
+    // ioListOpen still reflects whether the panel is open right now.
+    ioListOpenedRef.current = false;
     // The popped latch survives a same-level Reset (the pop forces one) and
     // clears only when the player moves to a different level.
     if (i !== levelIdx) hasPoppedRef.current = false;
     // Reset the per-speaker verify latches so each attempt starts unchecked.
     verifiedRef.current = {};
+    verifiedPatchSigRef.current = null;
     // Fresh attempt: move counter and hint state restart, and the diff
     // baseline jumps to the new start state so the load itself isn't a move.
     movesRef.current = 0;
@@ -10870,6 +11307,9 @@ function App() {
   // the fit uses and the combined scale is passed down as fitScale, so the cable
   // overlay (which divides screen deltas by fitScale) stays pixel-accurate.
   const [zoom, setZoom] = uS(null);
+  // Overall zoom (user-controlled): 1 = fit-to-window, up to 2.0. Multiplies the
+  // fit scale; the viewport scrolls when the board grows past the window. The
+  // knob/cable math already divides by the applied scale, so it compensates.
   const ZOOM_MIN = 1, ZOOM_MAX = 2, ZOOM_STEP = 0.25;
   const [userZoom, setUserZoom] = uS(() => { const z = Number(profileRef.current.userZoom); return (z >= ZOOM_MIN && z <= ZOOM_MAX) ? z : 1; });
   const bumpZoom = React.useCallback((d) => setUserZoom((z) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round((z + d) * 100) / 100))), []);
@@ -10972,6 +11412,8 @@ function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [!!zoom]);
+  // Ctrl/Cmd +/-/0 drive the overall zoom (browser zoom is cancelled by the
+  // fit-to-window refit, so the app owns these keys instead).
   React.useEffect(() => {
     const onKey = (e) => {
       if (!(e.ctrlKey || e.metaKey)) return;
@@ -11051,7 +11493,12 @@ function App() {
     for (const v of level.verifyEach) {
       const cont = audio.contributions[v.source];
       const lvl = cont ? (v.dest === 'pa' ? Math.max(cont.pa_l, cont.pa_r) : (cont[v.dest] || 0)) : 0;
-      const liveNow = lvl >= (v.min != null ? v.min : 0.25);
+      // Mirror the win latch exactly, including the othersMax one-sided
+      // guard: the display must never show a check the latch would refuse
+      // (a center-pan blast would otherwise tick both mains here while the
+      // real latch stays unset, and the step would un-check later).
+      const oneSided = !v.othersMax || Object.keys(v.othersMax).every((k) => (cont ? (cont[k] || 0) : 0) <= v.othersMax[k]);
+      const liveNow = lvl >= (v.min != null ? v.min : 0.25) && oneSided;
       verifyStatus[v.dest] = !!verifiedRef.current[v.dest] || liveNow;
     }
   }
@@ -11188,7 +11635,7 @@ function App() {
     state, audio: audioBaseline, powerStatus, gainStatus, verifyStatus, pflEachStatus,
     zeroStatus, patchStatus, feedback, audioOn, adjustBase: adjustBaseRef.current, adjustLatched: adjustLatchRef.current,
     pflChannels: pflChannelsRef.current, pflChecked: pflCheckedRef.current,
-    hasPopped: hasPoppedRef.current,
+    ioListOpen: ioListOpen || ioListOpenedRef.current, hasPopped: hasPoppedRef.current,
   };
   const hintDefs = level.hints || (level.hint ? [{ text: level.hint, done: () => false }] : []);
   const pendingHints = hintDefs
@@ -11204,7 +11651,18 @@ function App() {
   const guideTarget = (guideSteps && guideActiveIndex >= 0 && guideActiveIndex < guideSteps.length)
     ? guideSteps[guideActiveIndex].target : null;
 
+  // The active step can also ask the board to TRACE a signal path — light one
+  // channel's whole run and flow signal along it (see FlowTraceContext). Read
+  // the step's `flow` spec, suppressed while any pop-up owns the top layer,
+  // exactly like the spotlight target above.
+  const flowSpec = (eqPanelOpen || catalogOpen || pitchFor || ctaOpen) ? null
+    : (walkPhase === 'steps'
+        ? (walkSteps[walkStep] && walkSteps[walkStep].flow)
+        : (guideSteps && guideActiveIndex >= 0 && guideActiveIndex < guideSteps.length
+            ? guideSteps[guideActiveIndex].flow : null)) || null;
+
   return (
+   <window.DefHoverContext.Provider value={setDefHover}>
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'radial-gradient(ellipse at 30% 0%, #1a1a1f 0%, #0e0e10 50%, #08080a 100%)', position: 'relative' }}>
       <TopBar
         level={level} levelIdx={levelIdx} totalLevels={SCENARIOS.length}
@@ -11247,6 +11705,11 @@ function App() {
           layer: the spotlight ring hides while one is open so it can't draw in
           front of the window. */}
       <WalkthroughSpotlight target={(eqPanelOpen || catalogOpen || pitchFor || ctaOpen) ? null : (walkPhase === 'steps' ? (walkSteps[walkStep] && walkSteps[walkStep].target) : (guideTarget || null))}/>
+      {/* Hovering a definition washes the matching controls in amber. The
+          Monitor EQ stays allowed here (unlike the spotlight above) because
+          "graphic EQ" points AT that panel; the rest hide behind a pop-up
+          for the same reason the ring does. */}
+      <GlossaryHighlight term={(catalogOpen || pitchFor || ctaOpen) ? null : defHover}/>
       <CompletionCta open={ctaOpen} onClose={() => setCtaOpen(false)} tier={TIER}
         onGoPractice={() => { setCtaOpen(false); loadLevel(window.LEVELS.length); }}/>
       {/* Free-tier email opt-in. Fires at the FINALE of the free Start Here
@@ -11319,7 +11782,7 @@ function App() {
                 : pitchFor.isDigital
                 ? 'Build the confidence to walk up to a digital console and mix the show.'
                 : pitchFor.isLibrary
-                ? 'A growing library of real-world scenarios to troubleshoot, each a different board.'
+                ? 'A growing library of scenarios to troubleshoot, each on a different board.'
                 : pitchFor.isFeedbackMode
                 ? 'That is your free ear training. Members get unlimited rounds, guided and by ear, plus the full live-sound course.'
                 : (pitchFor.isPractice && freePractice >= FREE_PRACTICE_LIMIT)
@@ -11355,6 +11818,8 @@ function App() {
           never overlap regardless of window size; we only ever change the zoom.
           overflow:hidden because scaling guarantees fit (no stray scrollbars). */}
       <div ref={fitViewportRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: (!zoom && userZoom > 1.001) ? 'auto' : 'hidden' }}>
+       <window.DefTermContext.Provider value={defHover}>
+       <window.FlowTraceContext.Provider value={flowSpec}>
         <window.FitScaleContext.Provider value={appliedScale}>
           <div style={(!zoom && userZoom > 1.001)
             ? { width: designW * appliedScale, height: designH * appliedScale, minWidth: '100%', minHeight: '100%' }
@@ -11379,7 +11844,7 @@ function App() {
                           // Solving the LAST lesson of a member course is a course
                           // pass, and the debrief says so instead of quietly
                           // rolling into the next course's first lesson.
-                          const names = { MONITOR: 'Monitor World' };
+                          const names = { PATCHING: 'Patching', POWER: 'Power', INPUT: 'Input Setup', MONITOR: 'Mixing Monitors' };
                           const b = bandOf(level);
                           if (!names[b]) return null;
                           const nxt = SCENARIOS[levelIdx + 1];
@@ -11437,6 +11902,8 @@ function App() {
             </div>
           </div>
         </window.FitScaleContext.Provider>
+       </window.FlowTraceContext.Provider>
+       </window.DefTermContext.Provider>
         {/* Zoom-out control — sits OUTSIDE the scaled canvas so it stays pinned
             at a fixed size while the board underneath is magnified. */}
         {zoom && (
@@ -11520,11 +11987,13 @@ function App() {
           );
         })()}
         <window.AudienceSplMeter paL={audio.outputs.pa_l} paR={audio.outputs.pa_r} target={(() => {
-          // A level that caps the room level (a dest:'pa' condition with a max)
-          // is teaching "set the room level" — surface that band on the loudness
-          // meter so the objective is visible on the gauge, not just an abstract
-          // percentage in the brief. Map the condition's linear min/max to dB SPL.
-          const rc = (level.conditions || []).find(c => c.dest === 'pa' && c.max != null);
+          // A level that caps the room level (a dest:'pa' condition with a max
+          // AND a real floor) is teaching "set the room level" — surface that
+          // band on the loudness meter. min > 0 matters: a zero-band silence
+          // condition (e.g. "the test signal is zeroed at the end") is a win
+          // gate, not a room-level target, and must not tell the student to
+          // lower the system all lesson.
+          const rc = (level.conditions || []).find(c => c.dest === 'pa' && c.max != null && c.min > 0);
           if (!rc) return null;
           return { lo: dbSplFromPa(rc.min != null ? rc.min : 0.0005), hi: dbSplFromPa(rc.max) };
         })()}/>
@@ -11568,6 +12037,7 @@ function App() {
         </div>
       )}
     </div>
+   </window.DefHoverContext.Provider>
   );
 }
 
@@ -11598,7 +12068,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // Free visitors land with Mixer Tutorial expanded (their starting course);
   // members get a clean list unless they're mid-course.
   const initialOpenCourse = level
-    ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : (bandOf(level) === 'LEARN' ? 'show' : (TIER !== 'member' ? 'mixer' : null)))
+    ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : level.isPatching ? 'patching' : (bandOf(level) === 'LEARN' ? 'show' : (TIER !== 'member' ? 'mixer' : null)))
     : (TIER !== 'member' ? 'mixer' : null);
   const [openCourse, setOpenCourse] = uS(initialOpenCourse);
   // When the picker is open on load, the resume effect may swap the level in
@@ -11608,11 +12078,11 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // never fights a manual mode switch.
   uE(() => { setMode(curMode); }, [levelIdx]);
   const isMember = TIER === 'member';
-  const lessons = []; const libraries = []; const monitors = []; const startHere = [];
+  const lessons = []; const libraries = []; const monitors = []; const patching = []; const power = []; const inputSetup = []; const startHere = [];
   SCENARIOS.forEach((s, i) => {
     if (s.isStartHere) { startHere.push({ s, i }); return; }
     const b = bandOf(s);
-    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i });
+    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i }); else if (b === 'INPUT') inputSetup.push({ s, i });
   });
   const practiceIdx = SCENARIOS.findIndex((s) => s.isPractice);
   const feedbackIdx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
@@ -11650,8 +12120,11 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // expander on them.
   const COURSES = [];
   if (startHere.length) COURSES.push({ key: 'starthere', label: 'START HERE', color: 'var(--green)', tag: 'FREE', free: true, blurb: 'Start here to learn the essential skills, one step at a time.', rows: startHere });
+  if (patching.length > 0) COURSES.push({ key: 'patching', label: 'PATCHING', color: 'var(--cool)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Read the input list, patch the system, and find the fault when a cable is wrong.', rows: patching });
+  if (power.length > 0) COURSES.push({ key: 'power', label: 'POWER', color: 'var(--amber)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Power the system up and down in the right order, and find the box that is off when part of the system stays silent.', rows: power });
+  if (inputSetup.length > 0) COURSES.push({ key: 'inputsetup', label: 'INPUT SETUP', color: '#4dd0c4', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Bring any input up the right way: PFL first, gain by the meter, power what needs it, and fix the channels that were set by ear.', rows: inputSetup });
   COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a system from nothing and run a full show. Ten lessons, in order.', rows: lessons });
-  if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MONITOR WORLD', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build a separate monitor mix for each performer, and ring it out so it stays clean.', rows: monitors });
+  if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MIXING MONITORS', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build each performer\'s monitor mix, keep it clean, and handle "more me" without making the wedge ring.', rows: monitors });
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 680, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>
@@ -11839,7 +12312,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
              style={{ height: 36, width: 36, display: 'block' }}/>
         <div>
           <div className="display" style={{ fontSize: 17, fontWeight: 800, letterSpacing: -0.4, lineHeight: 1 }}>Troubleshooting Lab</div>
-          <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 }}>Interactive Mixing Console Trainer</div>
+          <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 }}>Live Sound Simulator</div>
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, justifyContent: 'center' }}>
@@ -11853,7 +12326,13 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
               : level.isSandbox
               ? 'FREE PLAY · NO GOAL'
               : level.isMonitor
-              ? 'MONITOR WORLD · MEMBERS'
+              ? 'MIXING MONITORS · MEMBERS'
+              : level.isPatching
+              ? `PATCHING · ${String(PATCHING_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(PATCHING_INDEXES.length).padStart(2, '0')}`
+              : level.isPower
+              ? `POWER · ${String(POWER_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(POWER_INDEXES.length).padStart(2, '0')}`
+              : level.isInputSetup
+              ? `INPUT SETUP · ${String(INPUT_SETUP_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(INPUT_SETUP_INDEXES.length).padStart(2, '0')}`
               : level.isStartHere
               ? `START HERE · ${String(START_HERE_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(START_HERE_INDEXES.length).padStart(2, '0')}`
               : `LEVEL ${String(levelIdx + 1).padStart(2, '0')} / ${String(window.LEVELS.length).padStart(2, '0')}`}
@@ -11907,10 +12386,10 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             color: eqOpen ? '#0a0a0c' : (eqRinging ? 'var(--hot)' : 'var(--ink-2)'),
             borderColor: eqOpen ? '#c79a1f' : (eqRinging ? 'var(--hot)' : '#38383e'),
             boxShadow: eqRinging && !eqOpen ? '0 0 8px rgba(255,70,48,0.4)' : 'none', fontWeight: 700,
-          }}>MONITOR EQ</button>
+          }} data-walk="monitor-eq">MONITOR EQ</button>
         )}
         {onOpenIoList && (
-          <button onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>INPUT LIST</button>
+          <button data-walk="iolist" onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>INPUT LIST</button>
         )}
         {onToggleStage && (
           <button onClick={onToggleStage} className="mono ui-no-select" title={big16 ? (stage16Open ? 'Back to the mixer' : 'Open the stage: sub-snakes, inputs, and the signal path') : (stageHidden ? 'Show the stage: sources, cables, and speakers' : 'Hide the stage to give the console the whole screen')} style={{ ...navBtn, padding: '6px 12px' }}>{big16 ? (stage16Open ? 'MIXER' : 'STAGE') : (stageHidden ? 'SHOW STAGE' : 'HIDE STAGE')}</button>
@@ -12094,7 +12573,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   })();
   const workChip = (
     <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
+      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : level.isPatching ? 'PATCHING' : level.isPower ? 'POWER' : level.isInputSetup ? 'INPUT SETUP' : level.isMonitor ? 'MIXING MONITORS' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
     </div>
   );
 
@@ -12360,7 +12839,7 @@ function SolvedCard({ level, onNext, hasNext, feedbackLabel, feedbackCaption, fe
           <div style={{ fontSize: 9, color: 'var(--ink-2)', lineHeight: 1.4 }}>
             {dropouts > 0
               ? <>The audience heard <b style={{ color: 'var(--hot)' }}>{dropouts} dropout{dropouts === 1 ? '' : 's'}</b> while you worked. PFL lets you check a channel in your headphones without the audience hearing it, and the master never needs to move.</>
-              : <>The room <b style={{ color: 'var(--green)' }}>never heard you working</b>. You found it with PFL and the meters. That's the live-show standard.</>}
+              : <>The audience <b style={{ color: 'var(--green)' }}>never heard you working</b>. You found it with PFL and the meters. That's the live-show standard.</>}
           </div>
         </div>
       )}
