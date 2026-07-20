@@ -121,14 +121,14 @@ for lid, blk in lessons:
         if len(keys) != len(set(keys)):
             err(lid, "defs has a duplicate key")
 
-    # 3. teach is gone
+    # 3. teach is gone. No exceptions, no length allowance: gray text is
+    #    DEFINITIONS ONLY (Kyle, 2026-07-20). An earlier version of this lint
+    #    only errored past 12 words, which let a short rule-of-thumb survive in
+    #    Run the Show. A rule is not a definition; it belongs in the DO THIS,
+    #    the hint, or the after-solve recap.
     for t in re.findall(r"teach: '((?:[^'\\]|\\.)*)'", blk):
-        if not t.strip():
-            continue
-        if len(t.split()) > 12:
-            err(lid, f"step `teach` prose survives ({len(t.split())} words): {t[:60]}...")
-        else:
-            warn(lid, f"step keeps a short `teach`: {t}")
+        if t.strip():
+            err(lid, f"step has `teach` prose; gray text is definitions only: {t[:70]}")
 
     # 4. every step has an instruction, and it reads like one
     for t in re.findall(r"text: '((?:[^'\\]|\\.)*)'", blk):

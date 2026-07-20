@@ -350,7 +350,7 @@ window.LEVELS = [
     defs: [],
     hint: 'All four speakers are off right now, so nothing is powered up to play the console\'s thump. Once the console is on, the thump is over and the speakers can go on in any order.',
     hints: [
-      { title: 'Console on first', target: 'mixer-power', teach: 'Gear can pop at power-up, so power it after its source.', text: 'Turn the console on first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
+      { title: 'Console on first', target: 'mixer-power', text: 'Turn the console on first.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.console },
       { title: 'Then the speakers', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], text: 'Turn on both main speakers and both wedges.', done: (ctx) => ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges },
     ],
     conditions: [],
