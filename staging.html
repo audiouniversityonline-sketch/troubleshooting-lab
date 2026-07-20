@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=194"></script>
+<script src="content-staging.js?v=195"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -8589,12 +8589,33 @@ function IoListPanel({ open, onClose, state }) {
     if (s.channels[i] && s.channels[i].stereo) return s.noPlayback ? null : 'playback';
     return srcKeysAll.find((k) => k !== 'playback' && planChannelFor(k) === i + 1) || null;
   };
+  // On the big board the mics reach the stage box in sub-snakes, so the
+  // paperwork has to name the sub-snake and the channel ON it, the way a real
+  // input list does ("Drum 3"). Local numbering matches the stage exactly: a
+  // source's slot is its position within its own group, the same `natural()`
+  // rule SubSnakeHead uses. Read off BAND_KEYS so it stays the PLAN, not the
+  // live micIn cabling.
+  const SUBSNAKE_NAMES = { up: 'Drum', inst: 'Backline', down: 'Vocal' };
+  const subSnakeFor = (k) => {
+    const src = window.SOURCES[k];
+    if (!s.big16 || !src || !src.snake) return null;
+    const grp = (window.BAND_KEYS || []).filter((kk) => window.SOURCES[kk] && window.SOURCES[kk].snake === src.snake);
+    const local = grp.indexOf(k) + 1;
+    if (local < 1) return null;
+    return (SUBSNAKE_NAMES[src.snake] || src.snake) + ' ' + local;
+  };
   const inputRows = s.channels.map((ch, i) => {
     const srcKey = planSourceForChannel(i);
     const src = srcKey ? window.SOURCES[srcKey] : null;
     const chNum = ch.stereo ? `${i + 1}/${i + 2}` : `${i + 1}`;
-    const snakeIdx = (src && srcKey !== 'playback') ? planChannelFor(srcKey) : null;
-    return { key: i, chNum, source: src ? src.label : 'Empty', type: typeLabel(src), snakeIdx, empty: !src };
+    // Snake channel and mixer channel are DIFFERENT facts and get their own
+    // columns: the snake channel is the stage-box port the source patches to,
+    // the mixer channel is the console strip it lands on. Patched one to one
+    // they read the same number, which is the whole point of the paperwork.
+    // Playback is a FOH line input, so it rides no snake channel at all.
+    const snakeCh = (src && srcKey !== 'playback') ? (planCables[srcKey] || null) : null;
+    const sub = (src && srcKey !== 'playback') ? subSnakeFor(srcKey) : null;
+    return { key: i, chNum, source: src ? src.label : 'Empty', type: typeLabel(src), snakeCh, sub, empty: !src };
   });
   // Every console output bus and the return channel it rides. Like the inputs,
   // this is the PLAN (the paperwork): when the board is unpatched (Patch the
@@ -8634,7 +8655,9 @@ function IoListPanel({ open, onClose, state }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 90, pointerEvents: 'none' }}>
       <div data-iolist-card style={{
         position: 'fixed', ...dock,
-        width: 400, maxWidth: '94vw', maxHeight: '78vh', overflow: 'auto',
+        // The big board adds a sub-snake column (five in all), so it needs the
+        // extra room or the Type column wraps every row.
+        width: s.big16 ? 560 : 440, maxWidth: '94vw', maxHeight: '78vh', overflow: 'auto',
         background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)',
         border: '1px solid #38383e', borderRadius: 8, padding: '16px 18px',
         boxShadow: '0 12px 40px rgba(0,0,0,0.7)', pointerEvents: 'auto',
@@ -8652,12 +8675,15 @@ function IoListPanel({ open, onClose, state }) {
         {sectionTitle('INPUTS · FROM THE STAGE')}
         <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
           <thead><tr>
-            <th style={th}>Channel</th><th style={th}>Source</th><th style={th}>Type</th>
+            {s.big16 && <th style={th}>Sub-snake</th>}
+            <th style={th}>Snake ch</th><th style={th}>Mixer ch</th><th style={th}>Source</th><th style={th}>Type</th>
           </tr></thead>
           <tbody>
             {inputRows.map((r) => (
               <tr key={r.key} data-walk={'iolist-ch' + r.chNum}>
-                <td style={td}>{chCell(r.snakeIdx, 'CH ' + r.chNum)}</td>
+                {s.big16 && <td style={{ ...td, color: r.sub ? 'var(--ink-2)' : 'var(--ink-3)' }}>{r.sub || '—'}</td>}
+                <td style={td}>{chCell(r.snakeCh, r.snakeCh ? String(r.snakeCh) : '—')}</td>
+                <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink)' }}>{r.chNum}</td>
                 <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink)' }}>{r.source}</td>
                 <td style={{ ...td, color: r.empty ? 'var(--ink-3)' : 'var(--ink-2)' }}>{r.type}</td>
               </tr>
@@ -8667,14 +8693,14 @@ function IoListPanel({ open, onClose, state }) {
         {sectionTitle('OUTPUTS · TO THE SPEAKERS')}
         <table style={{ width: '100%', borderCollapse: 'collapse' }} className="ui-no-select">
           <thead><tr>
-            <th style={th}>Return</th><th style={th}>Signal</th><th style={th}>Goes to</th>
+            <th style={th}>Snake ch</th><th style={th}>Console output</th><th style={th}>Goes to</th>
           </tr></thead>
           <tbody>
             {outputDefs.map((o) => {
               const p = portFor(o.bus);
               return (
                 <tr key={o.bus} data-walk={'iolist-out-' + o.bus}>
-                  <td style={td}>{chCell(p, p ? 'OUT ' + p : '—')}</td>
+                  <td style={td}>{chCell(p, p ? String(p) : '—')}</td>
                   <td style={td}>{o.label}</td>
                   <td style={td}>{o.to}</td>
                 </tr>

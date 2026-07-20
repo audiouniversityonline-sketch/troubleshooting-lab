@@ -1863,7 +1863,7 @@ window.PATCHING = [
       s.outputs.wedge2 = { ...s.outputs.wedge2, on: false, volume: 0 };
       return s;
     },
-    solution: 'Port N goes to tail N and lands on input N. Patched one to one, the stage box numbers match the console numbers. The outputs work the same way in reverse: each console output rides a numbered return back to the stage box.',
+    solution: 'Stage box port 1 rides the snake to console input 1, port 2 to input 2, and so on down the line. Patched one to one, the stage box numbers match the console numbers. The outputs work the same way in reverse: each console output rides a numbered return back to the stage box.',
     defaultInspect: 'pa',
   },
   {
@@ -1913,7 +1913,7 @@ window.PATCHING = [
     involves: [],
     conditions: [],
     topology: { paRig: 'powered' },
-    symptom: 'The input list shows every channel, its source, and the port it patches to. Open it in the top bar, then patch each source to the port it lists. The outputs are already connected. You patch those in the next lesson.',
+    symptom: 'The input list shows every channel, its source, and the port it patches to. Open it in the top bar, then patch each source to the port it lists.',
     hint: 'Open the Input List in the top bar. Drag each source cable onto a numbered port on the stage box. The snake carries them from there to the console. Port colors: 1 brown, 2 red, 3 orange, 4 yellow. Dropping on a taken port swaps the two.',
     hints: [
       { title: 'Open the input list', target: 'iolist', teach: 'The input list is the plan, not the live cabling. It names the source on every channel and the port it patches to. Open it first, every time.', text: 'Open the Input List in the top bar.', done: (ctx) => !!(ctx.ioListOpen || (ctx.state.cables && ctx.state.cables.vocal === 1)) },
