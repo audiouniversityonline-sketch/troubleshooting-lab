@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=206"></script>
+<script src="content-staging.js?v=207"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7534,6 +7534,19 @@ if (Array.isArray(window.INPUT_SETUP)) {
   window.INPUT_SETUP.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isInputSetup: true }));
 }
 
+// System Level course (members): how loud the system should be, set from a
+// reference track at the speakers rather than at the master fader.
+if (Array.isArray(window.SYSTEM_LEVEL)) {
+  window.SYSTEM_LEVEL.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isSystemLevel: true }));
+}
+
+// The Gig (members): the capstone challenge. isLesson keeps it member-gated
+// and puts it in the picker; isChallenge on the entry itself hides the answer
+// key and puts the hint behind a button, the way Practice does.
+if (Array.isArray(window.THE_GIG)) {
+  window.THE_GIG.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isTheGig: true }));
+}
+
 // A custom scenario opened from a ?scenario= link gets appended as its own
 // scenario. It behaves like a challenge (hint behind a button, a debrief, no
 // answer key), wins on the authored conditions, and its sabotage just lays down
@@ -7629,6 +7642,8 @@ const PATCHING_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].i
 const POWER_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isPower);
 // Input Setup course lesson indices, for the "INPUT SETUP · 01 / 05" label.
 const INPUT_SETUP_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isInputSetup);
+const SYSTEM_LEVEL_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isSystemLevel);
+const THE_GIG_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isTheGig);
 const SH_FINALE_ID = 105;
 // Where a visitor lands with no resume target: members go to lesson 1 of Run
 // the show; the free tier (lessons locked) lands on Free Play, never on a
@@ -7655,6 +7670,8 @@ function bandOf(l) {
   if (l.isWalkthrough) return 'PLAY';  // the guided tour, entered directly, never a picker row
   if (l.isMonitor) return 'MONITOR';   // Monitor World course (members)
   if (l.isPatching) return 'PATCHING'; // Patching course (members)
+  if (l.isSystemLevel) return 'SYSTEM';  // System Level course (members)
+  if (l.isTheGig) return 'GIG';          // The Gig capstone (members)
   if (l.isPower) return 'POWER';       // Power Up / Power Down course (members)
   if (l.isInputSetup) return 'INPUT';  // Input Setup course (members)
   if (l.isSandbox) return 'PLAY';      // free, no-goal exploration
@@ -12078,11 +12095,11 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // never fights a manual mode switch.
   uE(() => { setMode(curMode); }, [levelIdx]);
   const isMember = TIER === 'member';
-  const lessons = []; const libraries = []; const monitors = []; const patching = []; const power = []; const inputSetup = []; const startHere = [];
+  const lessons = []; const libraries = []; const monitors = []; const patching = []; const power = []; const inputSetup = []; const startHere = []; const systemLevel = []; const theGig = [];
   SCENARIOS.forEach((s, i) => {
     if (s.isStartHere) { startHere.push({ s, i }); return; }
     const b = bandOf(s);
-    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i }); else if (b === 'INPUT') inputSetup.push({ s, i });
+    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i }); else if (b === 'INPUT') inputSetup.push({ s, i }); else if (b === 'SYSTEM') systemLevel.push({ s, i }); else if (b === 'GIG') theGig.push({ s, i });
   });
   const practiceIdx = SCENARIOS.findIndex((s) => s.isPractice);
   const feedbackIdx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
@@ -12123,6 +12140,8 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   if (patching.length > 0) COURSES.push({ key: 'patching', label: 'PATCHING', color: 'var(--cool)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Read the input list, patch the system, and find the fault when a cable is wrong.', rows: patching });
   if (power.length > 0) COURSES.push({ key: 'power', label: 'POWER', color: 'var(--amber)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Power the system up and down in the right order, and find the box that is off when part of the system stays silent.', rows: power });
   if (inputSetup.length > 0) COURSES.push({ key: 'inputsetup', label: 'INPUT SETUP', color: '#4dd0c4', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Bring any input up the right way: PFL first, gain by the meter, power what needs it, and fix the channels that were set by ear.', rows: inputSetup });
+  if (systemLevel.length > 0) COURSES.push({ key: 'systemlevel', label: 'SYSTEM LEVEL', color: '#e8944a', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set how loud the system should be: reference track in, console at unity, and the room level set at the speakers.', rows: systemLevel });
+  if (theGig.length > 0) COURSES.push({ key: 'thegig', label: 'THE GIG', color: 'var(--hot)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'The capstone. A 16-channel system, nothing connected and nothing switched on. Get the show running.', rows: theGig });
   COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a system from nothing and run a full show. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MIXING MONITORS', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build each performer\'s monitor mix, keep it clean, and handle "more me" without making the wedge ring.', rows: monitors });
   return (

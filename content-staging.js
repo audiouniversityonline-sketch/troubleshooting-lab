@@ -2673,3 +2673,178 @@ window.INPUT_SETUP = [
     defaultInspect: 'pa',
   },
 ];
+
+
+/* ============================================================
+   SYSTEM LEVEL (members) — how loud the system should be.
+   Straight from Kyle's Soundcheck Checklist, section 1 "Gain
+   Structure": connect a playback device, set the reference track
+   level on the meters, put the MASTER at unity, then set the room
+   level at the SPEAKER volume controls, not at the master fader.
+   That order is the whole point of the course.
+   MX-8 (Kyle 2026-07-20): fewer channels, so the lesson is about
+   the speakers rather than the desk.
+   ============================================================ */
+window.SYSTEM_LEVEL = [
+  {
+    id: 'sy1', task: true,
+    title: 'Play a Reference Track',
+    involves: [7],
+    defs: ['main mix', 'unity'],
+    // Win = playback channel open at unity AND the master at unity. The
+    // speakers stay low; setting the room level is the next lessons.
+    gainStructure: { refChannel: 7, unity: 0.75, faderTol: 0.06 },
+    conditions: [],
+    hint: 'A reference track is music you know well. You set the system by it, so the level is honest before a single microphone is on.',
+    hints: [
+      { title: 'Open the playback channel', target: ['ch7-mute', 'ch7-fader'], text: 'Switch MUTE off on the playback channel and raise its fader to the U mark.', done: (ctx) => ctx.state.channels[6] && !ctx.state.channels[6].mute && Math.abs(ctx.state.channels[6].fader - 0.75) <= 0.06 },
+      { title: 'Main fader to unity', target: ['master-section', 'master-fader'], text: 'Unmute MAIN and set the MAIN fader to the U mark.', done: (ctx) => !ctx.state.master.mute && Math.abs(ctx.state.master.fader - 0.75) <= 0.06 },
+    ],
+    sabotage: (s) => {
+      s.mixer = { on: true };
+      s.master = { ...s.master, mute: true, fader: 0 };
+      s.channels[6].mute = true; s.channels[6].fader = 0;
+      s.channels[6].gain = window.HEALTHY_GAIN_BY_CH[6];
+      s.outputs.pa_l.volume = 0.12; s.outputs.pa_r.volume = 0.12;
+      return s;
+    },
+    solution: 'The reference track is up and the console is at unity. Nothing has been set for the audience yet; that happens at the speakers.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'sy2', task: true,
+    title: 'Set the Track Level',
+    involves: [7],
+    defs: ['gain structure', 'meter'],
+    requirePflCheck: true,
+    gainStructure: { refChannel: 7, inputBand: [0.645, 4.566], gainOnly: true },
+    conditions: [],
+    hint: 'Set the level at the top of the chain. A track that arrives too quiet makes you push everything downstream; too hot and it distorts before it ever reaches a speaker.',
+    hints: [
+      { title: 'Listen in your headphones', target: 'ch7-pfl', text: 'Press PFL on the playback channel.', done: (ctx) => !!(ctx.pflChannels && ctx.pflChannels[7]) },
+      { title: 'Set the gain', target: ['ch7-gain', 'ch7-inputmeter'], text: 'Turn GAIN up until the input meter peaks near the top of the green.', done: (ctx) => { var l = (ctx.audio && ctx.audio.chanInBaseline && ctx.audio.chanInBaseline[6]) || 0; return l >= 0.645 && l <= 4.566; } },
+    ],
+    sabotage: (s) => {
+      s.mixer = { on: true };
+      s.master = { ...s.master, mute: false, fader: 0.75 };
+      s.channels[6].mute = false; s.channels[6].fader = 0.75; s.channels[6].gain = 0.05;
+      s.outputs.pa_l.volume = 0.12; s.outputs.pa_r.volume = 0.12;
+      return s;
+    },
+    solution: 'The track now hits the console at a healthy level, so everything after it starts from a known place.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'sy3', task: true,
+    title: 'Set the Main Speaker Level',
+    involves: [7],
+    defs: ['mains'],
+    // The audience level is set HERE, at the speakers, with the master left
+    // at unity. A condition with BOTH min and max renders a target band on
+    // the loudness meter, which is what the student aims at.
+    conditions: [
+      { source: 'laptop', dest: 'pa', min: 0.30, max: 0.65 },
+    ],
+    hint: 'Leave the MAIN fader at unity. If you set the room level with the master fader instead, you lose your reference and every show starts from a different place.',
+    hints: [
+      { title: 'Raise the main speakers', target: ['out-pa-l', 'out-pa-r'], text: 'Leave the MAIN fader at U. Raise the volume on both main speakers until the loudness meter sits inside the target band.', done: (ctx) => { var c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.playback; if (!c) return false; var l = Math.max(c.pa_l || 0, c.pa_r || 0); return l >= 0.30 && l <= 0.65; } },
+    ],
+    sabotage: (s) => {
+      s.mixer = { on: true };
+      s.master = { ...s.master, mute: false, fader: 0.75 };
+      s.channels[6].mute = false; s.channels[6].fader = 0.75;
+      s.channels[6].gain = window.HEALTHY_GAIN_BY_CH[6];
+      s.outputs.pa_l.volume = 0.05; s.outputs.pa_r.volume = 0.05;
+      return s;
+    },
+    solution: 'Room level is set at the speakers with the console at unity. Now the MAIN fader is a real reference: unity is show level.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'sy4', task: true,
+    title: 'Set the Wedge Levels',
+    involves: [7],
+    defs: ['wedge', 'aux send'],
+    conditions: [],
+    verifyEach: [{ dest: 'wedge' }, { dest: 'wedge2' }],
+    hint: 'Set each wedge with the same reference track you used for the mains. Matching them now means a monitor mix built later behaves the same in both.',
+    hints: [
+      { title: 'Level Wedge 1', target: ['ch7-aux', 'out-wedge1'], text: 'Turn AUX 1 up on the playback channel, then raise the volume on Wedge 1 until you can hear the track on stage.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge },
+      { title: 'Level Wedge 2', target: ['ch7-aux', 'out-wedge2'], text: 'Turn AUX 2 up on the playback channel, then raise the volume on Wedge 2 to match.', done: (ctx) => ctx.verifyStatus && ctx.verifyStatus.wedge2 },
+    ],
+    sabotage: (s) => {
+      s.mixer = { on: true };
+      s.master = { ...s.master, mute: false, fader: 0.75 };
+      s.channels[6].mute = false; s.channels[6].fader = 0.75;
+      s.channels[6].gain = window.HEALTHY_GAIN_BY_CH[6];
+      s.channels[6].aux1 = 0; s.channels[6].aux2 = 0;
+      s.outputs.pa_l.volume = 0.5; s.outputs.pa_r.volume = 0.5;
+      s.outputs.wedge = { ...s.outputs.wedge, on: true, mute: false, volume: 0.05 };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: true, mute: false, volume: 0.05 };
+      return s;
+    },
+    solution: 'Every speaker in the system is now set against the same track, so the whole rig starts the night from one reference.',
+    defaultInspect: 'wedge',
+  },
+];
+
+
+/* ============================================================
+   THE GIG (members) — the capstone. Not a lesson: a challenge.
+   Kyle 2026-07-20: "it just doesn't really tell the person what to
+   do exactly. It's just more of a challenge. They go in, the system
+   is completely disconnected and turned off. It's a 16-channel
+   mixer, and they have to go through and get the system running."
+
+   The four steps below are COARSE CHECKPOINTS, not instructions.
+   They name the phase and nothing else, and they deliberately carry
+   NO `target`, so no green spotlight appears. This is the one place
+   in the app where an unanchored step is correct: a spotlight would
+   tell the student where to look, which is the thing being tested.
+   The hint stays behind the button for anyone who stalls.
+   ============================================================ */
+window.THE_GIG = [
+  {
+    id: 'gig1',
+    title: 'The Gig',
+    isChallenge: true,
+    requirePatch: true,
+    requirePowerOn: true,
+    requireNoPfl: true,
+    involves: [],
+    defs: [],
+    hint: 'Work in signal order and nothing surprises you: patch the stage, patch the outputs, power up console first and speakers last, set each input in PFL, then feed the wedges. The Input List in the top bar is the plan for every cable.',
+    hints: [
+      { title: 'Patch the system', target: null, text: 'Connect the stage, the snake and the speakers.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus.every && ctx.patchStatus.every((p) => p.pass)) },
+      { title: 'Power it up', target: null, text: 'Bring the system up in the right order.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console && ctx.powerStatus.paStage && ctx.powerStatus.wedges) },
+      { title: 'Get the band into the main mix', target: null, text: 'Every input set and audible to the audience.', done: (ctx) => ['vocal', 'vocal2', 'guitar', 'laptop'].every((k) => hintReaches(ctx, k, 'pa', 0.25)) },
+      { title: 'Feed the monitors', target: null, text: 'Every wedge carrying a mix.', done: (ctx) => { var a = ctx.audio && ctx.audio.contributions; if (!a) return false; return ['wedge', 'wedge2'].every((w) => Object.keys(a).some((k) => (a[k] || {})[w] > 0.15)); } },
+    ],
+    conditions: [
+      { source: 'vocal',  dest: 'pa', min: 0.25 },
+      { source: 'vocal2', dest: 'pa', min: 0.25 },
+      { source: 'guitar', dest: 'pa', min: 0.25 },
+      { source: 'laptop', dest: 'pa', min: 0.25 },
+    ],
+    sabotage: (s) => {
+      // Load-in on the big system: the full 16-channel band, nothing
+      // connected anywhere, nothing switched on. Same starting point as a
+      // real load-in, and the same four patch stages Run the Show used to
+      // walk through one at a time.
+      const b = window.bandState();
+      b.cables = {};
+      (window.BAND_KEYS || []).forEach((k) => { b.cables[k] = 0; });
+      b.fanOut = (b.fanOut || []).map(() => 0);
+      b.outFan = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
+      b.outPatch = { pa_l: null, pa_r: null, wedge: null, wedge2: null, wedge3: null, wedge4: null };
+      b.mixer = { on: false };
+      b.master = { ...b.master, mute: true, fader: 0 };
+      ['pa_l', 'pa_r', 'wedge', 'wedge2', 'wedge3', 'wedge4'].forEach((k) => {
+        if (b.outputs[k]) b.outputs[k] = { ...b.outputs[k], on: false };
+      });
+      return b;
+    },
+    solution: 'You took a system from a pile of loose cables to a running show: patched, powered in order, every input set at the top of the chain, and the stage fed. That is the job.',
+    defaultInspect: 'pa',
+  },
+];
