@@ -87,7 +87,11 @@ BANNED = [
 IMPERATIVE = re.compile(
     r'^(Turn|Bring|Set|Push|Pull|Send|Find|Fix|Open|Move|Switch|Check|Cut|Unmute|'
     r'Mute|Patch|Build|Confirm|Get|Leave|Drag|Raise|Lower|Start|Repatch|Trace|'
-    r'Follow|Use|Make|Ring|Press|Engage|Disengage|Connect|Match|Zero)\b')
+    r'Follow|Use|Make|Ring|Press|Engage|Disengage|Connect|Match|Zero|'
+    # Verbs that showed up in real DO THIS lines and were flagged as false
+    # positives. A too-noisy lint gets skimmed, which is how a real one hides.
+    r'Read|Do|Look|Plug|Reconnect|Slide|Power|Test|Add|Listen|Drop|Aim|'
+    r'Compare|Repeat|Play|Tap|Note|Hold|Keep|Give|Sweep|Wait)\b')
 
 baseline = {}
 bpath = os.path.join(HERE, 'copy-baseline.json')

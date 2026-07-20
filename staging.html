@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=208"></script>
+<script src="content-staging.js?v=209"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -577,12 +577,40 @@ function effectiveChannel(s, srcKey) {
     const i = s.channels ? s.channels.findIndex((c) => c.stereo) : -1;
     return i >= 0 ? i + 1 : 0;
   }
+  // 16-channel stage: the mic end has to be in a sub-snake input too. micIn 0
+  // means the XLR is out of the box, so nothing reaches the console no matter
+  // where the tail is patched. (undefined = the natural slot, the normal case.)
+  if (s.big16 && s.micIn && s.micIn[srcKey] === 0) return 0;
   const port = s.cables[srcKey];
   if (!port || port < 1) return 0;
   const fan = s.fanOut || [1, 2, 3, 4];
   const ch = fan[port - 1];
   return ch >= 1 && ch <= s.channels.length ? ch : 0;
 }
+// The sub-snake input SLOT a source's mic sits in: 0 = unplugged, undefined =
+// the natural 1:1 slot. One helper so the falsy-zero trap (`micIn[k] || n`)
+// can't creep back in — it silently reads "unplugged" as "natural".
+function micSlot(s, srcKey, natural) {
+  const v = s && s.micIn ? s.micIn[srcKey] : undefined;
+  if (v === 0) return 0;
+  return v || natural;
+}
+window.micSlot = micSlot;
+// The slot a source's mic sits in when nothing has been moved: its position
+// among the sources sharing that sub-snake, in board order.
+function naturalSlotOf(keys, k) {
+  const SRC = window.SOURCES || {};
+  const sn = SRC[k] && SRC[k].snake;
+  if (!sn) return 0;
+  let i = 0;
+  for (const kk of keys) {
+    if (!SRC[kk] || SRC[kk].snake !== sn) continue;
+    i++;
+    if (kk === k) return i;
+  }
+  return 0;
+}
+window.naturalSlotOf = naturalSlotOf;
 
 function sourceFor(s, chIdxZero) {
   for (const k of Object.keys(SOURCES)) {
@@ -1370,6 +1398,11 @@ window.defaultState = defaultState;
 // the SOURCES catalog, just unpatched.)
 const BAND_KEYS = ['kick','snare','rack','floor','ohl','ohr','bass','egtr','agtr','keys','vx1','vx2','vx3','vx4'];
 window.BAND_KEYS = BAND_KEYS;
+// Sub-snakes come in standard channel counts, so each head is padded up to the
+// next size: drums 7 sources on an 8, backline 4 on a 4, vocals 3 on a 4. The
+// padding channels are real inputs, so a mic can be moved into one.
+const SUBSNAKE_SIZE = { up: 8, inst: 4, down: 4 };
+window.SUBSNAKE_SIZE = SUBSNAKE_SIZE;
 // Every band input meters + plays its recorded stem, so it needs the analyser
 // tap the meter loop reads. (playback + the four MX-8 sources are already listed.)
 BAND_KEYS.forEach((k) => { if (!METER_SOURCES.includes(k)) METER_SOURCES.push(k); });
@@ -4283,12 +4316,12 @@ function NativeSnakeBox({ portRefs, outRefs, activePorts, snakeOutRef, retActive
 // inputs plug into (each port registers portRefs[port] so the source→port cable
 // still draws), with an out anchor on the right for the sub-snake bundle that
 // runs to the side-stage box.
-function SubSnakeHead({ label, items, subJackRefs, outRef }) {
+function SubSnakeHead({ label, group, items, subJackRefs, outRef }) {
   // items: [{ srcKey, localCh, label, color, flowing, stageCh }] in local-channel
   // order. Each channel shows its LOCAL number, the instrument, and (when the
   // patch is non-1:1) where it lands on the main stage box, e.g. "→14".
   return (
-    <div className="ui-no-select" data-walk="sub-snake-head" style={{
+    <div className="ui-no-select" data-walk={'sub-snake-' + group} style={{
       background: 'linear-gradient(180deg, #2a2a2e 0%, #141418 100%)',
       border: '1px solid #0a0a0c', borderRadius: 4, padding: '4px 8px 6px',
       position: 'relative', boxShadow: 'inset 0 1px 0 #3a3a40, 0 4px 12px rgba(0,0,0,0.6)',
@@ -4298,7 +4331,10 @@ function SubSnakeHead({ label, items, subJackRefs, outRef }) {
         {items.map(it => (
           <div key={it.empty ? 'e' + it.localCh : it.srcKey} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 30 }}>
             <div className="mono" style={{ fontSize: 6, color: 'var(--ink-3)', fontWeight: 700, lineHeight: 1 }}>{it.localCh}</div>
-            <div ref={el => { if (!it.empty) subJackRefs.current[it.srcKey] = el; }} data-walk={it.empty ? undefined : 'conn-sub-' + it.srcKey} style={{ width: 11, height: 11, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (it.empty ? '#38383e' : it.color), display: 'grid', placeItems: 'center', boxShadow: it.flowing ? `0 0 4px ${it.color}` : 'inset 0 0 2px #000', margin: '1px 0', opacity: it.empty ? 0.5 : 1 }}>
+            {/* Two refs on the same jack: by SOURCE (so its XLR cable can draw to
+                it) and by SLOT (so an unplugged mic has an empty input to be
+                dropped onto — an empty slot has no source to key off). */}
+            <div ref={el => { if (!it.empty) subJackRefs.current[it.srcKey] = el; subJackRefs.current['@' + group + ':' + it.localCh] = el; }} data-walk={it.empty ? undefined : 'conn-sub-' + it.srcKey} style={{ width: 11, height: 11, borderRadius: '50%', background: 'radial-gradient(circle at 35% 30%, #2a2a2e, #0a0a0c)', border: '1.5px solid ' + (it.empty ? '#38383e' : it.color), display: 'grid', placeItems: 'center', boxShadow: it.flowing ? `0 0 4px ${it.color}` : 'inset 0 0 2px #000', margin: '1px 0', opacity: it.empty ? 0.5 : 1 }}>
               <div style={{ width: 3, height: 3, borderRadius: '50%', background: it.empty ? '#222' : it.color }}/>
             </div>
             <div className="mono" style={{ fontSize: 5, color: '#c8c8d0', fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap' }}>{it.empty ? '—' : it.label}</div>
@@ -4576,19 +4612,18 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     // Render by SLOT (input jack position). Each slot shows whichever source's
     // mic is currently plugged into it (state.micIn); default is the natural
     // 1:1 slot. Colour is by slot = the conductor the mic rides.
-    const micIn = state.micIn || {};
     const natural = (k) => grp.indexOf(k) + 1;
     const items = [];
     for (let slot = 1; slot <= size; slot++) {
-      const k = grp.find(kk => (micIn[kk] || natural(kk)) === slot);
+      const k = grp.find(kk => micSlot(state, kk, natural(kk)) === slot);
       if (k) items.push({ srcKey: k, localCh: slot, label: window.SOURCES[k].short, color: codeColor(slot), flowing: flowOf(k), stageCh: state.cables[k] || 0 });
       else items.push({ srcKey: null, localCh: slot, color: codeColor(slot), flowing: false, stageCh: 0, empty: true });
     }
     return items;
   };
-  const drumItems = big16 ? buildItems(bySnake('up'), 8) : [];
-  const instItems = big16 ? buildItems(bySnake('inst'), 4) : [];
-  const voxItems  = big16 ? buildItems(bySnake('down'), 4) : [];
+  const drumItems = big16 ? buildItems(bySnake('up'), SUBSNAKE_SIZE.up) : [];
+  const instItems = big16 ? buildItems(bySnake('inst'), SUBSNAKE_SIZE.inst) : [];
+  const voxItems  = big16 ? buildItems(bySnake('down'), SUBSNAKE_SIZE.down) : [];
   // Main stage box IN channels 1..16, coloured by the box channel's own place in
   // the colour code (banks of 8). The band fills 14 (drums 1-6, backline 7-10,
   // vocals 11-13, drummer vocal cross-patched to 14); 15-16 spare.
@@ -4870,14 +4905,14 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 frames the whole kit-to-snake patch and the runs stay traceable. */}
             <div data-zoomable data-zoom-key="drum" style={{ position: 'absolute', left: '29%', width: '42%', top: 14, height: 300, pointerEvents: 'none' }}/>
             <div style={{ position: 'absolute', top: 256, left: '50%', transform: 'translateX(-50%)' }}>
-              <SubSnakeHead label="DRUM SUB-SNAKE" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
+              <SubSnakeHead label="DRUM SUB-SNAKE" group="up" items={drumItems} subJackRefs={subJackRefs} outRef={upHeadOutRef}/>
             </div>
             {/* Backline sub-snake — centred just downstage of the two sub-snake
                 boxes, with an open lane above it: the flanking bass, guitars and
                 keys drop DOWN off the backline row into that lane and in to their
                 channels. */}
             <div data-zoomable data-zoom-key="backline" style={{ position: 'absolute', top: 356, left: '46%', transform: 'translateX(-50%)' }}>
-              <SubSnakeHead label="BACKLINE SUB-SNAKE" items={instItems} subJackRefs={subJackRefs} outRef={instHeadOutRef}/>
+              <SubSnakeHead label="BACKLINE SUB-SNAKE" group="inst" items={instItems} subJackRefs={subJackRefs} outRef={instHeadOutRef}/>
             </div>
             {/* Vocal sub-snake box — pushed downstage BELOW the wedge line, in
                 the gap between Wedge 1 and Wedge 2, so nothing sits between each
@@ -4886,7 +4921,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 up and over to the main box on the LEFT of the stage, clear of
                 Wedge 4's return on the right. */}
             <div data-zoomable data-zoom-key="vocal" style={{ position: 'absolute', top: 760, left: '36%', transform: 'translateX(-50%)' }}>
-              <SubSnakeHead label="VOCAL SUB-SNAKE" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
+              <SubSnakeHead label="VOCAL SUB-SNAKE" group="down" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
                 edge. The drum snake fans into IN 1-6 (+ the drummer's vocal
@@ -5443,15 +5478,19 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         }
       }
     } else if (drag.type === 'mic') {
-      // A mic being moved at the sub-snake can plug into any OTHER input on the
-      // SAME sub-snake (dropping on an occupied input swaps the two mics).
+      // A mic in hand can go into any input SLOT on its own sub-snake: an empty
+      // one takes it, an occupied one swaps the two mics. Targeting the slot
+      // (not the source sitting in it) is what lets an unplugged mic be put
+      // back into a free input — an empty slot has no source to key off.
       const sn = window.SOURCES[drag.id] && window.SOURCES[drag.id].snake;
-      for (const k of sourceKeys) {
-        if (k === drag.id || !window.SOURCES[k] || window.SOURCES[k].snake !== sn) continue;
-        const el = subJackRefs.current[k];
+      const size = (window.SUBSNAKE_SIZE || {})[sn] || 0;
+      const mine = micSlot(state, drag.id, naturalSlotOf(sourceKeys, drag.id));
+      for (let slot = 1; slot <= size; slot++) {
+        if (slot === mine) continue;             // already in this input
+        const el = subJackRefs.current['@' + sn + ':' + slot];
         if (!el) continue;
         const { x, y } = local(el);
-        targets.push({ key: `mic-${k}`, x, y, payload: k });
+        targets.push({ key: `mic-${sn}-${slot}`, x, y, payload: slot });
       }
     } else if (drag.type === 'fanout') {
       // Snake tails land on any MONO mic/line channel — the whole desk, not a
@@ -5597,24 +5636,36 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         return next;
       });
     } else if (drag.type === 'mic') {
-      // drag.id = source whose mic is in hand; target = the source key of the
-      // input it was dropped on. Swapping two mics at the sub-snake trades both
-      // which input slot they sit in (micIn) AND the box channel they land on
-      // (cables) — the mic follows its conductor. This is how "the kick mic is
-      // in the snare input, so kick comes up on the snare channel" gets built.
-      const a = drag.id, b = target;
-      if (a === b) return;
+      // drag.id = source whose mic is in hand; target = the sub-snake input SLOT
+      // it was dropped on. Landing on an OCCUPIED input swaps the two mics,
+      // trading both the slot they sit in (micIn) AND the box channel they land
+      // on (cables) — the mic follows its conductor. This is how "the kick mic
+      // is in the snare input, so kick comes up on the snare channel" gets
+      // built. Landing on a FREE input just seats this mic there.
+      const a = drag.id, slot = target;
       setState(s => {
+        const nat = (k) => naturalSlotOf(sourceKeys, k);
+        const sn = window.SOURCES[a] && window.SOURCES[a].snake;
+        const b = sourceKeys.find(k => k !== a && window.SOURCES[k]
+                                       && window.SOURCES[k].snake === sn
+                                       && micSlot(s, k, nat(k)) === slot);
         const micIn = { ...(s.micIn || {}) };
         const cables = { ...s.cables };
-        const ma = micIn[a], mb = micIn[b]; micIn[a] = mb; micIn[b] = ma;
-        const ca = cables[a], cb = cables[b]; cables[a] = cb; cables[b] = ca;
+        // Channels touched by this move, read BEFORE it is applied: seating a
+        // loose mic touches only its own channel; a swap touches both.
+        const touched = b ? [s.cables[a], s.cables[b]] : [s.cables[a]];
+        if (b) {
+          const ma = micSlot(s, a, nat(a)), mb = micSlot(s, b, nat(b));
+          micIn[a] = mb; micIn[b] = ma;
+          cables[a] = s.cables[b]; cables[b] = s.cables[a];
+        } else {
+          micIn[a] = slot;
+        }
         const next = { ...s, micIn, cables };
-        // Swapping two mics disconnects and reconnects BOTH the channels they
-        // feed, so it pops if either of those channels is live to a speaker
-        // (muted channel / muted speakers → silent). Checked against the state
-        // before the swap.
-        const hot = [ca, cb].find(c => c >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, c - 1));
+        // Plugging or swapping disconnects and reconnects the channel(s) that
+        // feed, so it pops if any of them is live to a speaker (muted channel /
+        // muted speakers → silent).
+        const hot = touched.find(c => c >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, c - 1));
         if (hot) next.phantomPop = { channel: hot - 1, at: Date.now(), cause: 'patch_live' };
         return next;
       });
@@ -5635,6 +5686,21 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         // Pulling a live channel's input out pops, same rule as connecting.
         const fanOut = s.fanOut || [1, 2, 3, 4];
         const oldCh = fanOut[oldPort - 1];
+        if (oldCh >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, oldCh - 1)) {
+          next.phantomPop = { channel: oldCh - 1, at: Date.now(), cause: 'patch_live' };
+        }
+        return next;
+      });
+    } else if (drag.type === 'mic') {
+      // 16-channel stage: pull the mic's XLR out of its sub-snake input. The
+      // tail at the far end stays patched to whatever box channel it was on —
+      // this is only the mic end.
+      const srcKey = drag.id;
+      if (micSlot(state, srcKey, naturalSlotOf(sourceKeys, srcKey)) === 0) return;
+      setState(s => {
+        const next = { ...s, micIn: { ...(s.micIn || {}), [srcKey]: 0 } };
+        const port = s.cables[srcKey];
+        const oldCh = port >= 1 ? (s.fanOut || [])[port - 1] : 0;
         if (oldCh >= 1 && window.wouldPopPhantom && window.wouldPopPhantom(s, oldCh - 1)) {
           next.phantomPop = { channel: oldCh - 1, at: Date.now(), cause: 'patch_live' };
         }
@@ -5795,7 +5861,15 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           const sk = d && d.snake;
           const jack = subJackRefs.current[k];
           const jc = jack ? anchorPos(jack, 'center') : null;
-          if (!jc) return null;
+          // Mic pulled out of the sub-snake (micIn 0): the XLR hangs off the
+          // source with a grab handle so it can always be plugged back in.
+          // Same rule as the loose sub-snake tails at the fan-out.
+          if (!jc) {
+            if (micSlot(state, k, naturalSlotOf(sourceKeys, k)) !== 0) return null;
+            const bot = anchorPos(src, 'bottom');
+            return { src: k, from: bot, to: { x: bot.x + 13, y: bot.y + 22 },
+                     port, unplugged: true, xlr: true, looseMic: true };
+          }
           // Drum mics: every cable drops into a COLLECTOR LANE that sits in the
           // open gap between the kit and the drum sub-snake (below every drum
           // card, above the box), runs along that lane to its channel, then
@@ -5903,7 +5977,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         // Conductor a source rides = the sub-snake input SLOT its mic is in
         // (state.micIn). Tail colour is that slot's colour; default is natural.
         const localIdx = {};
-        for (const g of ['up', 'inst', 'down']) { let i = 0; for (const k of sourceKeys) if (window.SOURCES[k] && window.SOURCES[k].snake === g) { i++; localIdx[k] = (state.micIn && state.micIn[k]) || i; } }
+        for (const g of ['up', 'inst', 'down']) { let i = 0; for (const k of sourceKeys) if (window.SOURCES[k] && window.SOURCES[k].snake === g) { i++; localIdx[k] = micSlot(state, k, i) || i; } }
         for (const k of sourceKeys) {
           const sk = window.SOURCES[k] && window.SOURCES[k].snake;
           if (!groups[sk]) continue;
@@ -6543,11 +6617,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
               ? window._cableCurve(c.from, portEnd)
               : (isMicDrag
                   ? window._cableCurve(c.from, micEnd)       // mic in hand: source card → cursor
-                  : (c.drumPts
+                  : (c.looseMic
+                      ? window._cableCurve(c.from, c.to)         // XLR out of the sub-snake: a short dangle off the card
+                      : (c.drumPts
                       ? window._polyRound(c.drumPts, 6)          // down into the lane, along it, straight down into the jack
                       : (nativeInput
                           ? window._polyRound([c.from, { x: c.from.x, y: laneY }, { x: fanX, y: laneY }, { x: fanX, y: c.to.y }, c.to], 8)
-                          : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY))));
+                          : window._routedCable(c.from, c.to, c.xlr ? c.midY : railY)))));
             const opacity = someOtherDragged ? 0.18 : (flowDim ? 0.2 : (hovered ? 1 : 0.95));
             // No "unplugged" badge: the loose cable dangling from the source
             // is enough to read that it needs patching.
@@ -7540,6 +7616,18 @@ if (Array.isArray(window.SYSTEM_LEVEL)) {
   window.SYSTEM_LEVEL.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isSystemLevel: true }));
 }
 
+// 16-Channel Mode (members): how to work the big board — the STAGE / MIXER
+// toggle, the Input List on sixteen strips, and the four wedges.
+if (Array.isArray(window.BIG_BOARD)) {
+  window.BIG_BOARD.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isBigBoard: true }));
+}
+
+// Soundcheck (members): line check, gains, main mix, monitors — Kyle's
+// Soundcheck Checklist run end to end on the 16-channel band.
+if (Array.isArray(window.SOUNDCHECK)) {
+  window.SOUNDCHECK.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isSoundcheck: true }));
+}
+
 // The Gig (members): the capstone challenge. isLesson keeps it member-gated
 // and puts it in the picker; isChallenge on the entry itself hides the answer
 // key and puts the hint behind a button, the way Practice does.
@@ -7643,6 +7731,8 @@ const POWER_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isPo
 // Input Setup course lesson indices, for the "INPUT SETUP · 01 / 05" label.
 const INPUT_SETUP_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isInputSetup);
 const SYSTEM_LEVEL_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isSystemLevel);
+const BIG_BOARD_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isBigBoard);
+const SOUNDCHECK_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isSoundcheck);
 const THE_GIG_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isTheGig);
 const SH_FINALE_ID = 105;
 // Where a visitor lands with no resume target: members go to lesson 1 of Run
@@ -7671,6 +7761,8 @@ function bandOf(l) {
   if (l.isMonitor) return 'MONITOR';   // Monitor World course (members)
   if (l.isPatching) return 'PATCHING'; // Patching course (members)
   if (l.isSystemLevel) return 'SYSTEM';  // System Level course (members)
+  if (l.isBigBoard) return 'BIG16';      // 16-Channel Mode orientation (members)
+  if (l.isSoundcheck) return 'CHECK';    // Soundcheck course (members)
   if (l.isTheGig) return 'GIG';          // The Gig capstone (members)
   if (l.isPower) return 'POWER';       // Power Up / Power Down course (members)
   if (l.isInputSetup) return 'INPUT';  // Input Setup course (members)
@@ -9279,6 +9371,7 @@ function App() {
   // 16-channel STAGE view toggle (full-panel, mutually exclusive with the mixer).
   // Only meaningful on the big desk; the mixer is the default.
   const [stage16Open, setStage16Open] = uS(false);
+  uE(() => { if (stage16Open) stageOpenedRef.current = true; }, [stage16Open]);
   const [consoleSize, setConsoleSize] = uS(() => (CONSOLE_SIZES.indexOf(profileRef.current.consoleSize) !== -1 ? profileRef.current.consoleSize : 0));
   const consoleSizeRef = uR(consoleSize);
   uE(() => { consoleSizeRef.current = consoleSize; }, [consoleSize]);
@@ -9574,6 +9667,11 @@ function App() {
   // mid-lesson can't un-check step 1 and snap the guide backward. Reset per
   // level; the live ioListOpen still drives the panel itself.
   const ioListOpenedRef = uR(false);
+  // Same one-way latch for the 16-channel STAGE view: has the student switched
+  // to the stage at least once this level? The orientation course's "open the
+  // stage" step reads this, so switching back to the mixer (which the next step
+  // asks for) can't un-check the step that sent them there.
+  const stageOpenedRef = uR(false);
 
   // Per-destination "checked" latch for verifyEach levels (Test the System).
   // Once playback reaches a speaker, that speaker stays checked for the rest
@@ -10885,6 +10983,7 @@ function App() {
     // Each level scores its own "did they open the list" latch; the live
     // ioListOpen still reflects whether the panel is open right now.
     ioListOpenedRef.current = false;
+    stageOpenedRef.current = false;
     // The popped latch survives a same-level Reset (the pop forces one) and
     // clears only when the player moves to a different level.
     if (i !== levelIdx) hasPoppedRef.current = false;
@@ -11422,7 +11521,10 @@ function App() {
   // A 16-channel LESSON opens on the STAGE view: that's where its work starts
   // (sub-snakes, mic lines, speakers), and the student toggles to MIXER when
   // the board is the next stop. Everything else keeps the console-first default.
-  React.useEffect(() => { setStage16Open(!!(state.big16 && level.isLesson)); }, [levelIdx, state.big16]);
+  // `opensOn: 'mixer'` overrides that for a lesson whose work STARTS at the
+  // console — the soundcheck lessons, and any lesson whose first step is
+  // "press STAGE" (auto-opening it would tick that step before they touched it).
+  React.useEffect(() => { setStage16Open(!!(state.big16 && level.isLesson && level.opensOn !== 'mixer')); }, [levelIdx, state.big16]);
   React.useEffect(() => {
     if (!zoom) return;
     const onKey = (e) => { if (e.key === 'Escape') setZoom(null); };
@@ -11653,6 +11755,10 @@ function App() {
     zeroStatus, patchStatus, feedback, audioOn, adjustBase: adjustBaseRef.current, adjustLatched: adjustLatchRef.current,
     pflChannels: pflChannelsRef.current, pflChecked: pflCheckedRef.current,
     ioListOpen: ioListOpen || ioListOpenedRef.current, hasPopped: hasPoppedRef.current,
+    // 16-channel view: which page is showing right now, and whether the stage
+    // has been opened at all this level (the latch, so a step that sends them
+    // to the stage stays checked once they come back to the mixer).
+    stageOpen: !!(state.big16 && stage16Open), stageOpened: stageOpenedRef.current,
   };
   const hintDefs = level.hints || (level.hint ? [{ text: level.hint, done: () => false }] : []);
   const pendingHints = hintDefs
@@ -11861,7 +11967,7 @@ function App() {
                           // Solving the LAST lesson of a member course is a course
                           // pass, and the debrief says so instead of quietly
                           // rolling into the next course's first lesson.
-                          const names = { PATCHING: 'Patching', POWER: 'Power', INPUT: 'Input Setup', MONITOR: 'Mixing Monitors' };
+                          const names = { PATCHING: 'Patching', POWER: 'Power', INPUT: 'Input Setup', MONITOR: 'Mixing Monitors', SYSTEM: 'System Level', BIG16: '16-Channel Mode', CHECK: 'Soundcheck' };
                           const b = bandOf(level);
                           if (!names[b]) return null;
                           const nxt = SCENARIOS[levelIdx + 1];
@@ -11982,6 +12088,7 @@ function App() {
                   return (
                     <button key={s.id}
                       disabled={disabled}
+                      data-walk={'listen-' + s.id}
                       onClick={() => {
                         if (s.id === 'pfl') return;
                         setState(prev => ({ ...prev, inspect: s.id }));
@@ -12085,7 +12192,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // Free visitors land with Mixer Tutorial expanded (their starting course);
   // members get a clean list unless they're mid-course.
   const initialOpenCourse = level
-    ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : level.isPatching ? 'patching' : (bandOf(level) === 'LEARN' ? 'show' : (TIER !== 'member' ? 'mixer' : null)))
+    ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : level.isPatching ? 'patching' : level.isBigBoard ? 'bigboard' : level.isSoundcheck ? 'soundcheck' : (bandOf(level) === 'LEARN' ? 'show' : (TIER !== 'member' ? 'mixer' : null)))
     : (TIER !== 'member' ? 'mixer' : null);
   const [openCourse, setOpenCourse] = uS(initialOpenCourse);
   // When the picker is open on load, the resume effect may swap the level in
@@ -12095,11 +12202,11 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // never fights a manual mode switch.
   uE(() => { setMode(curMode); }, [levelIdx]);
   const isMember = TIER === 'member';
-  const lessons = []; const libraries = []; const monitors = []; const patching = []; const power = []; const inputSetup = []; const startHere = []; const systemLevel = []; const theGig = [];
+  const lessons = []; const libraries = []; const monitors = []; const patching = []; const power = []; const inputSetup = []; const startHere = []; const systemLevel = []; const theGig = []; const bigBoard = []; const soundcheck = [];
   SCENARIOS.forEach((s, i) => {
     if (s.isStartHere) { startHere.push({ s, i }); return; }
     const b = bandOf(s);
-    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i }); else if (b === 'INPUT') inputSetup.push({ s, i }); else if (b === 'SYSTEM') systemLevel.push({ s, i }); else if (b === 'GIG') theGig.push({ s, i });
+    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i }); else if (b === 'INPUT') inputSetup.push({ s, i }); else if (b === 'SYSTEM') systemLevel.push({ s, i }); else if (b === 'BIG16') bigBoard.push({ s, i }); else if (b === 'CHECK') soundcheck.push({ s, i }); else if (b === 'GIG') theGig.push({ s, i });
   });
   const practiceIdx = SCENARIOS.findIndex((s) => s.isPractice);
   const feedbackIdx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
@@ -12140,7 +12247,9 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   if (patching.length > 0) COURSES.push({ key: 'patching', label: 'PATCHING', color: 'var(--cool)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Read the input list, patch the system, and find the fault when a cable is wrong.', rows: patching });
   if (power.length > 0) COURSES.push({ key: 'power', label: 'POWER', color: 'var(--amber)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Power the system up and down in the right order, and find the box that is off when part of the system stays silent.', rows: power });
   if (inputSetup.length > 0) COURSES.push({ key: 'inputsetup', label: 'INPUT SETUP', color: '#4dd0c4', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Bring any input up the right way: PFL first, gain by the meter, power what needs it, and fix the channels that were set by ear.', rows: inputSetup });
-  if (systemLevel.length > 0) COURSES.push({ key: 'systemlevel', label: 'SYSTEM LEVEL', color: '#e8944a', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set how loud the system should be: reference track in, console at unity, and the room level set at the speakers.', rows: systemLevel });
+  if (systemLevel.length > 0) COURSES.push({ key: 'systemlevel', label: 'SYSTEM LEVEL', color: '#e8944a', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set how loud the system should be: reference track in, console at unity, and the audience level set at the speakers.', rows: systemLevel });
+  if (bigBoard.length > 0) COURSES.push({ key: 'bigboard', label: '16-CHANNEL MODE', color: '#8ab4ff', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Work the big board: the mixer page, the stage page, sixteen channels on the Input List, and four wedges.', rows: bigBoard });
+  if (soundcheck.length > 0) COURSES.push({ key: 'soundcheck', label: 'SOUNDCHECK', color: '#d98cff', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Run a full soundcheck on a 16-channel band: line check, gain on every input, the main mix, then a monitor mix for each musician.', rows: soundcheck });
   if (theGig.length > 0) COURSES.push({ key: 'thegig', label: 'THE GIG', color: 'var(--hot)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'The capstone. A 16-channel system, nothing connected and nothing switched on. Get the show running.', rows: theGig });
   COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a system from nothing and run a full show. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MIXING MONITORS', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build each performer\'s monitor mix, keep it clean, and handle "more me" without making the wedge ring.', rows: monitors });
@@ -12411,7 +12520,7 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
           <button data-walk="iolist" onClick={onOpenIoList} className="mono ui-no-select" title="The input list: what's plugged into each channel, and where the outputs go" style={{ ...navBtn, padding: '6px 12px' }}>INPUT LIST</button>
         )}
         {onToggleStage && (
-          <button onClick={onToggleStage} className="mono ui-no-select" title={big16 ? (stage16Open ? 'Back to the mixer' : 'Open the stage: sub-snakes, inputs, and the signal path') : (stageHidden ? 'Show the stage: sources, cables, and speakers' : 'Hide the stage to give the console the whole screen')} style={{ ...navBtn, padding: '6px 12px' }}>{big16 ? (stage16Open ? 'MIXER' : 'STAGE') : (stageHidden ? 'SHOW STAGE' : 'HIDE STAGE')}</button>
+          <button onClick={onToggleStage} data-walk="stage-toggle" className="mono ui-no-select" title={big16 ? (stage16Open ? 'Back to the mixer' : 'Open the stage: sub-snakes, inputs, and the signal path') : (stageHidden ? 'Show the stage: sources, cables, and speakers' : 'Hide the stage to give the console the whole screen')} style={{ ...navBtn, padding: '6px 12px' }}>{big16 ? (stage16Open ? 'MIXER' : 'STAGE') : (stageHidden ? 'SHOW STAGE' : 'HIDE STAGE')}</button>
         )}
         {sizeSelectable && onSetConsoleSize && (
           <div className="mono ui-no-select" title="Mixer size: 8 or 16 channels. 16 opens every input from the same performance." style={{ ...navBtn, padding: 0, display: 'inline-flex', alignItems: 'stretch', overflow: 'hidden' }}>

@@ -136,7 +136,7 @@ window.GLOSSARY_ANCHORS = {
   'snake input':      '[data-walk^="conn-stage-in-"]',
   'snake output':     '[data-walk^="conn-stage-out-"]',
   'stage box':        '[data-walk="stage-box"]',
-  'sub-snake':        '[data-walk="sub-snake-head"]',
+  'sub-snake':        '[data-walk^="sub-snake-"]',
   // The snake is the WHOLE RUN, so it boxes both ends (the stage box and
   // the snake block at the console) and the engine strokes the trunk along
   // its real path between them. The run is the concept: one cable carries
@@ -1131,7 +1131,9 @@ window.big16PatchOk = function (s) {
     if (!sn) continue;
     cnt[sn] = (cnt[sn] || 0) + 1;
     const naturalSlot = cnt[sn];
-    if (((s.micIn && s.micIn[k]) || naturalSlot) !== naturalSlot) return false;
+    // micSlot, not `micIn[k] || naturalSlot`: an UNPLUGGED mic is slot 0, and
+    // the falsy-zero fallback would read that as correctly patched.
+    if ((window.micSlot ? window.micSlot(s, k, naturalSlot) : ((s.micIn && s.micIn[k]) || naturalSlot)) !== naturalSlot) return false;
   }
   // FOH fan-out must be 1:1 too: snake channel i lands on console channel i. A
   // crosspatch at the console fan-out (fanOut non-identity) keeps every source
@@ -2790,6 +2792,333 @@ window.SYSTEM_LEVEL = [
 
 
 /* ============================================================
+   16-CHANNEL MODE (members) — how to work the big board.
+
+   Kyle 2026-07-20: "make a course for how to use the 16-channel
+   mode, because it may not be immediately apparent that you need to
+   switch between the mixer and the stage pages."
+
+   The MX-16 shows ONE page at a time (the mixer or the stage), so a
+   student who never finds the STAGE button never sees the three
+   sub-snakes, the stage box, or a single cable. Every lesson here is
+   a real task that CANNOT be finished from one page — the toggle is
+   learned because the work requires it, not because a tour says so.
+   ============================================================ */
+window.BIG_BOARD = [
+  {
+    id: 'bg1', task: true, opensOn: 'mixer',
+    title: 'Two Pages, One System',
+    involves: [10],
+    defs: ['sub-snake', 'input'],
+    // The keys XLR is out of the backline sub-snake. From the mixer, channel
+    // 10 looks perfect: gain healthy, fader up, not muted. The only way to
+    // see why it is silent is to open the stage.
+    conditions: [
+      { source: 'keys', dest: 'pa', min: 0.25 },
+    ],
+    hint: 'The mixer shows you settings. The stage shows you cables. When a channel looks right and sounds like nothing, the answer is on the other page. Mute the channel before you touch its cable, or connecting it pops the speakers.',
+    hints: [
+      { title: 'Mute channel 10 first', target: 'ch10-mute', text: 'Switch MUTE on for channel 10.', done: (ctx) => !!(ctx.state.channels[9] && ctx.state.channels[9].mute) },
+      { title: 'Open the stage', target: 'stage-toggle', text: 'Press STAGE in the top bar.', done: (ctx) => !!ctx.stageOpened },
+      { title: 'Plug the keys back in', target: 'sub-snake-inst', text: 'Drag the loose XLR under the Keys card into input 4 on the backline sub-snake.', done: (ctx) => !!(ctx.state.micIn && ctx.state.micIn.keys) },
+      { title: 'Back to the mixer', target: 'stage-toggle', text: 'Press MIXER, then switch MUTE off on channel 10.', done: (ctx) => !!ctx.stageOpened && !ctx.stageOpen && hintReaches(ctx, 'keys', 'pa', 0.25) },
+    ],
+    sabotage: (s) => {
+      const b = bandUp16(window.bandState());
+      b.micIn = { ...b.micIn, keys: 0 };
+      return b;
+    },
+    solution: 'Channel 10 was set correctly the whole time. The signal never reached it, and the mixer page had no way to show you that.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'bg2', task: true, opensOn: 'mixer',
+    title: 'Find the Channel You Need',
+    involves: [12],
+    defs: ['input channel', 'mute'],
+    conditions: [
+      { source: 'vx2', dest: 'pa', min: 0.25 },
+    ],
+    hint: 'Sixteen strips look alike. The Input List is the paperwork that says which input is on which channel, so you read it instead of hunting.',
+    hints: [
+      { title: 'Find Vocal 2 on the Input List', target: ['iolist', 'iolist-ch12'], text: 'Press INPUT LIST and read down to the row for Vocal 2.', done: (ctx) => !!ctx.ioListOpen },
+      { title: 'Bring channel 12 up', target: ['ch12-mute', 'ch12-fader'], text: 'Switch MUTE off on channel 12 and raise its fader until Vocal 2 is in the main mix.', done: (ctx) => hintReaches(ctx, 'vx2', 'pa', 0.25) },
+    ],
+    sabotage: (s) => {
+      const b = bandUp16(window.bandState());
+      b.channels[11].mute = true; b.channels[11].fader = 0;
+      return b;
+    },
+    solution: 'Vocal 2 is back in the main mix. On a big board the Input List is faster than your memory, every time.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'bg3', task: true, opensOn: 'mixer',
+    title: 'Follow One Input All the Way',
+    involves: [1],
+    defs: ['stage box', 'snake', 'input channel'],
+    conditions: [
+      { source: 'kick', dest: 'pa', min: 0.25 },
+    ],
+    // The kick's sub-snake tail is off the stage box, so the path breaks in
+    // the middle: mic in, channel set, nothing between them.
+    hint: 'One input crosses four connection points on the way to the audience: mic into the sub-snake, sub-snake into the stage box, snake into the console, channel into the main mix. Work them in that order.',
+    hints: [
+      { title: 'Open the stage', target: 'stage-toggle', text: 'Press STAGE in the top bar.', done: (ctx) => !!ctx.stageOpened },
+      { title: 'Patch the kick to the stage box', target: 'conn-stage-in-1', text: 'Drag the loose drum sub-snake tail into input 1 on the stage box.', done: (ctx) => (ctx.state.cables || {}).kick === 1 },
+      { title: 'Bring the kick up', target: ['ch1-mute', 'ch1-fader'], text: 'Press MIXER, switch MUTE off on channel 1, and raise its fader.', done: (ctx) => hintReaches(ctx, 'kick', 'pa', 0.25) },
+    ],
+    sabotage: (s) => {
+      const b = bandUp16(window.bandState());
+      b.cables = { ...b.cables, kick: 0 };
+      b.channels[0].mute = true; b.channels[0].fader = 0;
+      return b;
+    },
+    solution: 'You walked one input from the mic to the audience and worked both pages to do it. Every fault you will ever chase lives somewhere on that path.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'bg4', task: true, opensOn: 'mixer',
+    title: 'Four Wedges, Four Musicians',
+    involves: [10],
+    defs: ['wedge', 'aux send', 'monitor mix'],
+    // AUX 3 feeds Wedge 3, which belongs to the keys player. Getting the
+    // keys player their own instrument is the whole task.
+    conditions: [
+      { source: 'keys', dest: 'wedge3', min: 0.25 },
+    ],
+    hint: 'The small board has two wedges. This one has four, and AUX 1 through AUX 4 feed them in order. Wedge 3 belongs to the keys player.',
+    hints: [
+      { title: 'Check who owns Wedge 3', target: 'iolist-out-aux3', text: 'Press INPUT LIST and read the output rows at the bottom.', done: (ctx) => !!ctx.ioListOpen },
+      { title: 'Send the keys to Wedge 3', target: 'ch10-aux', text: 'Turn AUX 3 up on channel 10.', done: (ctx) => (ctx.state.channels[9] || {}).aux3 > 0.2 },
+      { title: 'Listen to Wedge 3', target: 'listen-wedge3', text: 'Press WEDGE 3 in the listen bar and raise AUX 3 until the keys are clearly there.', done: (ctx) => hintReaches(ctx, 'keys', 'wedge3', 0.25) },
+    ],
+    sabotage: (s) => {
+      const b = bandUp16(window.bandState());
+      return b;
+    },
+    solution: 'The keys player has themself in their own wedge. Four wedges means four separate mixes, and each one is built the same way.',
+    defaultInspect: 'wedge3',
+  },
+];
+
+
+/* ============================================================
+   SOUNDCHECK (members) — the 16-channel band, start to finish.
+
+   Built from Kyle's own Soundcheck Checklist (Drive: Production /
+   Lead Magnets / Soundcheck Checklist). Section by section:
+     sc1  = §1 Line Check
+     sc2, sc3 = §2 "Set Preamp Gain with PFL", by sub-snake group
+     sc4  = §2 "Send Input Channel to Main Speakers"
+     sc5, sc6 = §2 "Mixing Monitors from FOH"
+
+   THE RAISE YOUR HAND METHOD, WITHOUT HANDS. The checklist's monitor
+   section is built on it: "Raise your hand until you have enough of
+   THIS channel in your monitor. When you have enough, put your hand
+   down." The sim has no hands, so the method is carried by two things
+   that ARE checkable:
+     - STEP ORDER. Each performer's own signal goes into their own
+       wedge first (sc5), and only then does anyone else's (sc6).
+       "Always send the musician their own signal first."
+     - A MAX on everybody else. sc6 wins only while each player's own
+       signal stays ABOVE what got added around it, so "the most of
+       their own sound" is the win condition, not a suggestion.
+   The overheads rule from the checklist ("do not send drum overheads
+   to the monitors") is a max of near-zero on ohl/ohr in every wedge.
+   ============================================================ */
+window.SOUNDCHECK = [
+  {
+    id: 'sc1', task: true, opensOn: 'mixer',
+    title: 'Line Check the Band',
+    involves: [1],
+    defs: ['line check', 'PFL', 'cross-patch'],
+    requirePatch: true,
+    requireNoPfl: true,
+    requirePflEach: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+    // Both toms have to end up back in the main mix, so muting them for the
+    // repatch and forgetting to unmute cannot pass.
+    conditions: [
+      { source: 'rack',  dest: 'pa', min: 0.2 },
+      { source: 'floor', dest: 'pa', min: 0.2 },
+    ],
+    hint: 'Two mics on the drum sub-snake are in each other\'s inputs, so two channels carry the wrong drum. The sub-snake head prints where each input lands, and the Input List prints where it belongs. Mute a channel before you move its cable, or the reconnect pops the speakers.',
+    hints: [
+      { title: 'Check the drums', target: ['ch1-pfl', 'ch2-pfl', 'ch3-pfl', 'ch4-pfl', 'ch5-pfl', 'ch6-pfl'], text: 'Press PFL on channels 1 to 6, one at a time, and compare each one against the Input List.', done: (ctx) => [1, 2, 3, 4, 5, 6].every((c) => ctx.pflChannels && ctx.pflChannels[c]) },
+      { title: 'Mute the two toms', target: ['ch3-mute', 'ch4-mute'], text: 'Switch MUTE on for channels 3 and 4.', done: (ctx) => [2, 3].every((i) => ctx.state.channels[i] && ctx.state.channels[i].mute) },
+      { title: 'Fix the two that are wrong', target: 'sub-snake-up', text: 'Press STAGE and drag the rack tom mic and the floor tom mic back into their own inputs on the drum sub-snake.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus.every && ctx.patchStatus.every((p) => p.pass)) },
+      { title: 'Bring the toms back', target: ['ch3-mute', 'ch4-mute'], text: 'Press MIXER and switch MUTE off on channels 3 and 4.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus.every && ctx.patchStatus.every((p) => p.pass)) && hintReaches(ctx, 'rack', 'pa', 0.2) && hintReaches(ctx, 'floor', 'pa', 0.2) },
+      { title: 'Check the backline and vocals', target: ['ch7-pfl', 'ch8-pfl', 'ch9-pfl', 'ch10-pfl', 'ch11-pfl', 'ch12-pfl', 'ch13-pfl', 'ch14-pfl'], text: 'Press PFL on channels 7 to 14, one at a time.', done: (ctx) => [7, 8, 9, 10, 11, 12, 13, 14].every((c) => ctx.pflChannels && ctx.pflChannels[c]) },
+      { title: 'Disengage every PFL', target: 'master-section', text: 'Disengage PFL on every channel so your headphones follow the main mix again.', done: (ctx) => [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].every((c) => ctx.pflChannels && ctx.pflChannels[c]) && ctx.state.channels.every((c) => !c.solo) },
+    ],
+    sabotage: (s) => {
+      const b = bandUp16(window.bandState());
+      // The rack tom and floor tom mics are in each other's sub-snake inputs.
+      // The mic follows its conductor, so both the input slot and the box
+      // channel trade: channel 3 carries the floor tom and channel 4 the rack.
+      b.micIn = { ...b.micIn, rack: 4, floor: 3 };
+      b.cables = { ...b.cables, rack: 4, floor: 3 };
+      return b;
+    },
+    solution: 'Every input reaches the console on the channel the Input List says it should. Nothing after this point can fix a patch you never checked.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'sc2', task: true, opensOn: 'mixer',
+    title: 'Set the Drum Gains',
+    involves: [1],
+    defs: ['gain', 'meter', 'headroom'],
+    requirePflCheck: true,
+    gainStructure: { inputBandAll: [0.645, 4.566], inputChannels: [1, 2, 3, 4, 5, 6], gainOnly: true },
+    conditions: [],
+    hint: 'Set the level at the top of the chain, in your headphones, one channel at a time. Aim for peaks near the top of the green with the red left alone.',
+    hints: [
+      { title: 'Kick', target: ['ch1-pfl', 'ch1-gain', 'ch1-inputmeter'], text: 'Press PFL on channel 1 and turn GAIN up until the input meter peaks near the top of the green.', done: (ctx) => { var l = (ctx.audio.chanInBaseline || [])[0] || 0; return l >= 0.645 && l <= 4.566; } },
+      { title: 'Snare', target: ['ch2-pfl', 'ch2-gain', 'ch2-inputmeter'], text: 'Do the same on channel 2.', done: (ctx) => { var l = (ctx.audio.chanInBaseline || [])[1] || 0; return l >= 0.645 && l <= 4.566; } },
+      { title: 'Toms', target: ['ch3-gain', 'ch4-gain'], text: 'Do the same on channels 3 and 4.', done: (ctx) => [2, 3].every((i) => { var l = (ctx.audio.chanInBaseline || [])[i] || 0; return l >= 0.645 && l <= 4.566; }) },
+      { title: 'Overheads', target: ['ch5-phantom', 'ch5-gain', 'ch6-gain'], text: 'Switch +48V on for channels 5 and 6, then set their gains the same way.', done: (ctx) => [4, 5].every((i) => { var l = (ctx.audio.chanInBaseline || [])[i] || 0; return l >= 0.645 && l <= 4.566; }) },
+    ],
+    sabotage: (s) => {
+      const b = bandUp16(window.bandState());
+      [0, 1, 2, 3, 4, 5].forEach((i) => { b.channels[i].gain = 0.05; });
+      b.channels[4].phantom = false; b.channels[5].phantom = false;
+      return b;
+    },
+    solution: 'Six drum channels arrive at a healthy level. The overheads needed +48V before they could arrive at all.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'sc3', task: true, opensOn: 'mixer',
+    title: 'Set the Backline and Vocal Gains',
+    involves: [7],
+    defs: ['gain structure', 'phantom power', 'active DI'],
+    requirePflCheck: true,
+    gainStructure: { inputBandAll: [0.645, 4.566], inputChannels: [7, 8, 9, 10, 11, 12, 13, 14], gainOnly: true },
+    conditions: [],
+    hint: 'The bass is on an active DI, so it needs +48V before it passes anything. The acoustic guitar and the keys are on passive DIs and need none.',
+    hints: [
+      { title: 'Bass', target: ['ch7-phantom', 'ch7-pfl', 'ch7-gain'], text: 'Switch +48V on for channel 7, press PFL, and set GAIN by the input meter.', done: (ctx) => { var l = (ctx.audio.chanInBaseline || [])[6] || 0; return l >= 0.645 && l <= 4.566; } },
+      { title: 'Guitars', target: ['ch8-gain', 'ch9-gain'], text: 'Set GAIN on channels 8 and 9 the same way.', done: (ctx) => [7, 8].every((i) => { var l = (ctx.audio.chanInBaseline || [])[i] || 0; return l >= 0.645 && l <= 4.566; }) },
+      { title: 'Keys', target: ['ch10-gain'], text: 'Set GAIN on channel 10.', done: (ctx) => { var l = (ctx.audio.chanInBaseline || [])[9] || 0; return l >= 0.645 && l <= 4.566; } },
+      { title: 'Vocals', target: ['ch11-gain', 'ch12-gain', 'ch13-gain', 'ch14-gain'], text: 'Set GAIN on channels 11 to 14, one at a time.', done: (ctx) => [10, 11, 12, 13].every((i) => { var l = (ctx.audio.chanInBaseline || [])[i] || 0; return l >= 0.645 && l <= 4.566; }) },
+    ],
+    sabotage: (s) => {
+      const b = bandUp16(window.bandState());
+      [6, 7, 8, 9, 10, 11, 12, 13].forEach((i) => { b.channels[i].gain = 0.05; });
+      b.channels[6].phantom = false;
+      return b;
+    },
+    solution: 'All fourteen inputs are now set at the top of the chain. Everything from here is a mix decision, not a level repair.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'sc4', task: true, opensOn: 'mixer',
+    title: 'Build the Main Mix',
+    involves: [11],
+    defs: ['main mix', 'fader'],
+    requireNoPfl: true,
+    conditions: [
+      { source: 'kick', dest: 'pa', min: 0.2 },
+      { source: 'bass', dest: 'pa', min: 0.2 },
+      { source: 'egtr', dest: 'pa', min: 0.2 },
+      { source: 'keys', dest: 'pa', min: 0.2 },
+      { source: 'vx1', dest: 'pa', min: 0.3 },
+    ],
+    hint: 'Bring the band up under the lead vocal, not over it. If you have to push the vocal to hear it, pull something else down instead.',
+    hints: [
+      { title: 'Disengage every PFL', target: 'master-section', text: 'Disengage PFL on every channel so you are listening to the main mix.', done: (ctx) => ctx.state.channels.every((c) => !c.solo) },
+      { title: 'Open the lead vocal', target: ['ch11-mute', 'ch11-fader'], text: 'Switch MUTE off on channel 11 and raise its fader to show level.', done: (ctx) => hintReaches(ctx, 'vx1', 'pa', 0.3) },
+      { title: 'Bring the band in', target: ['ch1-fader', 'ch7-fader', 'ch8-fader', 'ch10-fader'], text: 'Switch MUTE off on the rest of the channels and raise their faders until the whole band is in, with the lead vocal still on top of it.', done: (ctx) => ['kick', 'bass', 'egtr', 'keys'].every((k) => hintReaches(ctx, k, 'pa', 0.2)) },
+    ],
+    sabotage: (s) => {
+      const b = bandUp16(window.bandState());
+      b.channels.forEach((c, i) => { if (i < 14) { c.mute = true; c.fader = 0; } });
+      return b;
+    },
+    solution: 'The band is in the main mix with the lead vocal on top of it. That balance is the one the audience came for.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'sc5', task: true, opensOn: 'mixer',
+    title: 'Start Every Wedge With Their Own Voice',
+    involves: [11],
+    defs: ['monitor mix', 'aux send', 'pre-fader'],
+    // Each performer sings, so each wedge starts with that performer's own
+    // vocal: AUX 1 -> Wedge 1 (lead), AUX 2 -> Wedge 2 (bass), AUX 3 ->
+    // Wedge 3 (keys), AUX 4 -> Wedge 4 (drummer).
+    conditions: [
+      { source: 'vx1', dest: 'wedge',  min: 0.25 },
+      { source: 'vx2', dest: 'wedge2', min: 0.25 },
+      { source: 'vx3', dest: 'wedge3', min: 0.25 },
+      { source: 'vx4', dest: 'wedge4', min: 0.25 },
+    ],
+    hint: 'A performer wants the most of their own sound. Give them that first, and most of the requests you would have got never come.',
+    hints: [
+      { title: 'The lead singer', target: ['ch11-aux', 'listen-wedge'], text: 'Turn AUX 1 up on channel 11 until Vocal 1 is clearly in Wedge 1.', done: (ctx) => hintReaches(ctx, 'vx1', 'wedge', 0.25) },
+      { title: 'The bass player', target: ['ch12-aux', 'listen-wedge2'], text: 'Turn AUX 2 up on channel 12 until Vocal 2 is clearly in Wedge 2.', done: (ctx) => hintReaches(ctx, 'vx2', 'wedge2', 0.25) },
+      { title: 'The keys player', target: ['ch13-aux', 'listen-wedge3'], text: 'Turn AUX 3 up on channel 13 until Vocal 3 is clearly in Wedge 3.', done: (ctx) => hintReaches(ctx, 'vx3', 'wedge3', 0.25) },
+      { title: 'The drummer', target: ['ch14-aux', 'listen-wedge4'], text: 'Turn AUX 4 up on channel 14 until Vocal 4 is clearly in Wedge 4.', done: (ctx) => hintReaches(ctx, 'vx4', 'wedge4', 0.25) },
+    ],
+    sabotage: (s) => {
+      const b = bandUp16(window.bandState());
+      b.channels.forEach((c) => { c.aux1 = 0; c.aux2 = 0; c.aux3 = 0; c.aux4 = 0; });
+      return b;
+    },
+    solution: 'Every performer hears themself. Each wedge is its own mix, fed from its own aux send, and none of them changed the main mix.',
+    defaultInspect: 'wedge',
+  },
+  {
+    id: 'sc6', task: true, opensOn: 'mixer',
+    title: 'Add What Each Player Needs',
+    involves: [7],
+    defs: ['monitor mix', 'wedge'],
+    // Own instrument next, and the checklist's overheads rule enforced as a
+    // near-zero max: overheads carry the whole kit and the stage with it, so
+    // they belong in the main mix and nowhere else.
+    // Each own-instrument send has a MIN and a MAX. The min is "they can hear
+    // it"; the max sits below where their own voice already sits (0.65 with the
+    // vocal sends the lesson starts with), so pushing an instrument past the
+    // performer's own voice fails the lesson. That is the Raise Your Hand rule
+    // made checkable without hands: the most of their own sound, always.
+    conditions: [
+      { source: 'bass', dest: 'wedge2', min: 0.25, max: 0.55 },
+      { source: 'keys', dest: 'wedge3', min: 0.25, max: 0.55 },
+      { source: 'agtr', dest: 'wedge',  min: 0.2,  max: 0.55 },
+      { source: 'vx1',  dest: 'wedge',  min: 0.5 },
+      { source: 'vx2',  dest: 'wedge2', min: 0.5 },
+      { source: 'vx3',  dest: 'wedge3', min: 0.5 },
+      { source: 'ohl',  dest: 'wedge',  max: 0.05 },
+      { source: 'ohr',  dest: 'wedge2', max: 0.05 },
+      { source: 'ohl',  dest: 'wedge3', max: 0.05 },
+      { source: 'ohr',  dest: 'wedge4', max: 0.05 },
+    ],
+    hint: 'Keep each player louder in their own wedge than anything you add around them. Push an instrument past their own voice and you have made their monitor worse. Overheads pick up the whole stage, so they stay out of the wedges.',
+    hints: [
+      { title: 'The bass player needs the bass', target: ['ch7-aux', 'listen-wedge2'], text: 'Turn AUX 2 up on channel 7 until the bass is in Wedge 2, under Vocal 2.', done: (ctx) => hintReaches(ctx, 'bass', 'wedge2', 0.25) && !hintReaches(ctx, 'bass', 'wedge2', 0.55) },
+      { title: 'The keys player needs the keys', target: ['ch10-aux', 'listen-wedge3'], text: 'Turn AUX 3 up on channel 10 until the keys are in Wedge 3, under Vocal 3.', done: (ctx) => hintReaches(ctx, 'keys', 'wedge3', 0.25) && !hintReaches(ctx, 'keys', 'wedge3', 0.55) },
+      { title: 'The lead singer needs the acoustic', target: ['ch9-aux', 'listen-wedge'], text: 'Turn AUX 1 up on channel 9 until the acoustic guitar is in Wedge 1, under Vocal 1.', done: (ctx) => hintReaches(ctx, 'agtr', 'wedge', 0.2) && !hintReaches(ctx, 'agtr', 'wedge', 0.55) },
+      { title: 'Keep the overheads out', target: ['ch5-aux', 'ch6-aux'], text: 'Leave AUX 1 to AUX 4 at zero on channels 5 and 6.', done: (ctx) => [4, 5].every((i) => { var c = ctx.state.channels[i] || {}; return (c.aux1 || 0) < 0.05 && (c.aux2 || 0) < 0.05 && (c.aux3 || 0) < 0.05 && (c.aux4 || 0) < 0.05; }) },
+    ],
+    sabotage: (s) => {
+      const b = bandUp16(window.bandState());
+      b.channels.forEach((c) => { c.aux1 = 0; c.aux2 = 0; c.aux3 = 0; c.aux4 = 0; });
+      // Each performer's own vocal is already in their own wedge — sc5 did
+      // that, and this lesson carries on from there. 0.75 puts each voice at
+      // ~0.65 in its own wedge, which is the ceiling the instrument sends
+      // below have to stay under.
+      b.channels[10].aux1 = 0.75;
+      b.channels[11].aux2 = 0.75;
+      b.channels[12].aux3 = 0.75;
+      b.channels[13].aux4 = 0.75;
+      return b;
+    },
+    solution: 'Four monitor mixes, each built the same way: their own voice first, their own instrument next, everyone else only if it is still needed. That is the whole method.',
+    defaultInspect: 'wedge2',
+  },
+];
+
+
+/* ============================================================
    THE GIG (members) — the capstone. Not a lesson: a challenge.
    Kyle 2026-07-20: "it just doesn't really tell the person what to
    do exactly. It's just more of a challenge. They go in, the system
@@ -2817,14 +3146,31 @@ window.THE_GIG = [
     hints: [
       { title: 'Patch the system', target: null, text: 'Connect the stage, the snake and the speakers.', done: (ctx) => !!(ctx.patchStatus && ctx.patchStatus.every && ctx.patchStatus.every((p) => p.pass)) },
       { title: 'Power it up', target: null, text: 'Bring the system up in the right order.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console && ctx.powerStatus.paStage && ctx.powerStatus.wedges) },
-      { title: 'Get the band into the main mix', target: null, text: 'Every input set and audible to the audience.', done: (ctx) => ['vocal', 'vocal2', 'guitar', 'laptop'].every((k) => hintReaches(ctx, k, 'pa', 0.25)) },
-      { title: 'Feed the monitors', target: null, text: 'Every wedge carrying a mix.', done: (ctx) => { var a = ctx.audio && ctx.audio.contributions; if (!a) return false; return ['wedge', 'wedge2'].every((w) => Object.keys(a).some((k) => (a[k] || {})[w] > 0.15)); } },
+      { title: 'Get the band into the main mix', target: null, text: 'Every input set and audible to the audience.', done: (ctx) => (window.BAND_KEYS || []).every((k) => hintReaches(ctx, k, 'pa', 0.2)) },
+      { title: 'Feed the monitors', target: null, text: 'Every wedge carrying a mix.', done: (ctx) => { var a = ctx.audio && ctx.audio.contributions; if (!a) return false; return ['wedge', 'wedge2', 'wedge3', 'wedge4'].every((w) => Object.keys(a).some((k) => (a[k] || {})[w] > 0.15)); } },
     ],
+    // The BAND's inputs, not the MX-8's. This lesson runs on the 16-channel
+    // board, where 'vocal' / 'guitar' / 'laptop' are catalog sources that are
+    // never patched — their contribution is pinned at 0, so naming them here
+    // made the capstone unwinnable (shipped in v207, caught in v209).
+    // Written out rather than mapped off window.BAND_KEYS: this file loads
+    // BEFORE the engine defines it, so the map would evaluate to an empty
+    // list and the challenge would win on load.
     conditions: [
-      { source: 'vocal',  dest: 'pa', min: 0.25 },
-      { source: 'vocal2', dest: 'pa', min: 0.25 },
-      { source: 'guitar', dest: 'pa', min: 0.25 },
-      { source: 'laptop', dest: 'pa', min: 0.25 },
+      { source: 'kick',  dest: 'pa', min: 0.2 },
+      { source: 'snare', dest: 'pa', min: 0.2 },
+      { source: 'rack',  dest: 'pa', min: 0.2 },
+      { source: 'floor', dest: 'pa', min: 0.2 },
+      { source: 'ohl',   dest: 'pa', min: 0.2 },
+      { source: 'ohr',   dest: 'pa', min: 0.2 },
+      { source: 'bass',  dest: 'pa', min: 0.2 },
+      { source: 'egtr',  dest: 'pa', min: 0.2 },
+      { source: 'agtr',  dest: 'pa', min: 0.2 },
+      { source: 'keys',  dest: 'pa', min: 0.2 },
+      { source: 'vx1',   dest: 'pa', min: 0.2 },
+      { source: 'vx2',   dest: 'pa', min: 0.2 },
+      { source: 'vx3',   dest: 'pa', min: 0.2 },
+      { source: 'vx4',   dest: 'pa', min: 0.2 },
     ],
     sabotage: (s) => {
       // Load-in on the big system: the full 16-channel band, nothing
@@ -2833,7 +3179,12 @@ window.THE_GIG = [
       // walk through one at a time.
       const b = window.bandState();
       b.cables = {};
-      (window.BAND_KEYS || []).forEach((k) => { b.cables[k] = 0; });
+      b.micIn = {};
+      // Every connection point is open, in signal order: the mic XLRs are out
+      // of the sub-snakes (micIn 0), the sub-snake tails are off the stage box
+      // (cables 0), the snake is off the console (fanOut 0), and the outputs
+      // are unpatched at both ends. The Input List is the only plan there is.
+      (window.BAND_KEYS || []).forEach((k) => { b.cables[k] = 0; b.micIn[k] = 0; });
       b.fanOut = (b.fanOut || []).map(() => 0);
       b.outFan = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null };
       b.outPatch = { pa_l: null, pa_r: null, wedge: null, wedge2: null, wedge3: null, wedge4: null };
