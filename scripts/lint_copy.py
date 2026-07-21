@@ -48,10 +48,12 @@ GLOSSARY = set(re.findall(r"^\s*'([^']+)':", gm.group(1), re.M))
 # strings in most courses and bare numbers in Run the Show.
 LESSON_RE = re.compile(r"^\s*id: (?:'([^']+)'|(\d+)),", re.M)
 starts = [(m.start(), m.group(1) or m.group(2)) for m in LESSON_RE.finditer(src)]
-# A block also ends at the next top-level `window.X =`. Without this, the last
-# lesson of a course swallows the id-less Practice goals that follow it, and
-# their (legitimate) `symptom` gets blamed on the lesson.
-bounds = [m.start() for m in re.finditer(r"^window\.\w+ =", src, re.M)]
+# A block also ends at the next top-level `window.X =` OR the `];` that closes a
+# top-level array (both at column 0). Without the array close, the LAST lesson of
+# a course swallows every helper function defined after the array until the next
+# `window.X =` — which is how the board sniff in check 5b read `bandUp16` out of
+# the code following START_HERE and mislabeled a plain MX-8 lesson as MX-16.
+bounds = [m.start() for m in re.finditer(r"^(?:window\.\w+ =|\];)", src, re.M)]
 lessons = []
 for i, (pos, lid) in enumerate(starts):
     end = starts[i + 1][0] if i + 1 < len(starts) else len(src)
@@ -92,6 +94,16 @@ IMPERATIVE = re.compile(
     # positives. A too-noisy lint gets skimmed, which is how a real one hides.
     r'Read|Do|Look|Plug|Reconnect|Slide|Power|Test|Add|Listen|Drop|Aim|'
     r'Compare|Repeat|Play|Tap|Note|Hold|Keep|Give|Sweep|Wait)\b')
+
+# Win-condition source whitelists, per board. A `source:` in a win condition or
+# verifyEach must be one the engine can actually route on that board; naming any
+# other makes the lesson unwinnable (see check 5b). Keep in lockstep with the
+# SOURCES catalog in staging.html: MX-8 patches four inputs plus the FOH
+# playback line; the MX-16 band patches its fourteen inputs plus playback.
+MX8_SOURCES = {'vocal', 'vocal2', 'guitar', 'laptop', 'playback'}
+MX16_SOURCES = {'kick', 'snare', 'hat', 'rack', 'floor', 'ohl', 'ohr', 'bass',
+                'egtr', 'agtr', 'keys', 'keysl', 'keysr',
+                'vx1', 'vx2', 'vx3', 'vx4', 'playback'}
 
 baseline = {}
 bpath = os.path.join(HERE, 'copy-baseline.json')
@@ -147,6 +159,24 @@ for lid, blk in lessons:
     for pat, label in BANNED:
         if re.search(pat, prose, re.I):
             err(lid, f"banned: {label}")
+
+    # 5b. every win-condition source must exist on the board the lesson runs on.
+    #     This is the one that bit us: The Gig (a 16-channel capstone) shipped
+    #     with conditions naming the MX-8's sources (vocal / guitar / laptop),
+    #     which are catalog entries that never get patched on the big board, so
+    #     their contribution is pinned at 0 and the lesson was UNWINNABLE. Nothing
+    #     surfaced it — no console error, the board just never satisfied the win.
+    #     The board is read from the sabotage: a lesson that builds its start off
+    #     the 16-channel band (bandState / bandUp16 / big16) is an MX-16 lesson;
+    #     everything else is the MX-8.
+    is_big = bool(re.search(r'\bbandState\b|\bbandUp16\b|\bbig16\b', blk))
+    valid_sources = MX16_SOURCES if is_big else MX8_SOURCES
+    board = 'MX-16' if is_big else 'MX-8'
+    for src in re.findall(r"source: '([^']+)'", blk):
+        if src not in valid_sources:
+            err(lid, f"win condition names source '{src}', which is not on the "
+                     f"{board} board this lesson runs on (it can never satisfy the "
+                     f"win -> the lesson is unwinnable)")
 
     # 6. facts must survive the copy pass
     if lid in baseline:
