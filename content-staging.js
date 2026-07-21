@@ -2363,28 +2363,72 @@ window.PATCHING = [
 // board). Wins ride requirePowerOn / requirePowerOff, which are board-aware.
 // Step checks read ctx.powerStatus, the same board-aware map the objective
 // checklist renders from, so the steps and the win can never disagree.
+// The whole course is one principle: switching a console or a speaker on or off
+// makes an electrical pop, so the order matters. Lesson 1 lets the student CAUSE
+// the pop (popIsTheGoal — the warning modal delivers the why). Lessons 2 and 3
+// are the correct power-up and power-down sequences. That is the entire idea;
+// there is nothing to drill past it, so the course ends there. No 16-channel
+// board, no phantom power — this course is only about power order (Kyle,
+// 2026-07-21: "here's what can go wrong when powering things on or off, and
+// here's the correct power-on sequence and the correct power-off sequence").
 window.POWER = [
   {
-    id: 'pw1',
-    title: 'Power Up in Order',
+    id: 'pwPop',
+    title: 'Hear the Pop',
+    task: true,
+    // popIsTheGoal INVERTS the pop rule: causing the pop IS the objective, not a
+    // failure. The moment the console comes on with a speaker live, the warning
+    // modal explains exactly what happened and the correct order, and the lesson
+    // is complete. This is the only lesson in the app where popping is the win.
+    popIsTheGoal: true,
+    involves: [1, 2, 3, 4],
+    conditions: [],
+    topology: { paRig: 'powered' },
+    defs: ['mains'],
+    hint: 'The main speakers are already on. A console makes an electrical pop the instant it powers up, and a live speaker plays that pop at full level. Turn the console on and hear it for yourself. The next lesson is the order that prevents it.',
+    hints: [
+      { title: 'Turn the console on', target: 'mixer-power', text: 'Turn the console on with the main speakers already live, and listen for the pop.', done: (ctx) => !!ctx.hasPopped },
+    ],
+    sabotage: (s) => {
+      // A system left mid-setup the wrong way: the main speakers are already on
+      // and live, the console is off. Flipping the console on from here sends
+      // its power-up pop straight through the mains. That pop, and the modal
+      // that explains it, is the whole lesson.
+      s.mixer = { on: false };
+      s.master = { ...s.master, mute: false, fader: 0.6 };
+      s.outputs.pa_l = { ...s.outputs.pa_l, on: true, mute: false, volume: 0.6 };
+      s.outputs.pa_r = { ...s.outputs.pa_r, on: true, mute: false, volume: 0.6 };
+      s.outputs.wedge = { ...s.outputs.wedge, on: false };
+      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false };
+      s.outputs.wedge3 = { ...s.outputs.wedge3, on: false };
+      s.outputs.wedge4 = { ...s.outputs.wedge4, on: false };
+      return s;
+    },
+    solution: 'A console pops when it powers up, and a live speaker plays that pop at full level. That is what the power-on order exists to prevent. The next two lessons are the correct way up and the correct way down.',
+    defaultInspect: 'pa',
+  },
+  {
+    id: 'pwUp',
+    title: 'The Power-Up Sequence',
     task: true,
     requirePowerOn: true,
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
     defs: ['wedge', 'mains'],
-    hint: 'The console goes on before anything that makes sound. Leave the MAIN fader down the whole time. The MAIN fader is the slider that controls how much sound goes to the main speakers.',
+    hint: 'Console first, speakers last. The console is on before anything can make sound, so its power-up pop has nothing to play through. Leave the MAIN fader down the whole time; setting levels is soundcheck, not power-up.',
     hints: [
-      { title: 'Desk first', target: 'mixer-power', text: 'Turn the console on first. Every device goes on after whatever feeds it.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console) },
-      { title: 'Stage speakers second', target: ['out-wedge1', 'out-wedge2'], text: 'Turn on Wedge 1 and Wedge 2.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedges) },
-      { title: 'Audience speakers last', target: ['out-pa-l', 'out-pa-r'], text: 'Turn on both main speakers.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage) },
+      { title: 'Console first', target: 'mixer-power', text: 'Turn the console on first, before any speaker.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console) },
+      { title: 'Wedges next', target: ['out-wedge1', 'out-wedge2'], text: 'Turn on both wedges.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedges) },
+      { title: 'Main speakers last', target: ['out-pa-l', 'out-pa-r'], text: 'Turn on both main speakers last.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage) },
     ],
     sabotage: (s) => {
-      // Load-in, fully patched, everything dark. The MAIN fader rests down and
-      // muted: that is the correct resting state, and this lesson ends with it
-      // still down. Levels are soundcheck's job, not power-up's.
+      // Load-in, fully patched, everything dark. The MAIN fader rests down; this
+      // lesson ends with it still down. If the student turns a speaker on before
+      // the console, the console's later power-up pop plays through it, and the
+      // engine says so.
       s.mixer = { on: false };
-      s.master = { ...s.master, mute: true, fader: 0 };
+      s.master = { ...s.master, mute: false, fader: 0 };
       s.outputs.pa_l = { ...s.outputs.pa_l, on: false };
       s.outputs.pa_r = { ...s.outputs.pa_r, on: false };
       s.outputs.wedge = { ...s.outputs.wedge, on: false };
@@ -2393,26 +2437,28 @@ window.POWER = [
       s.outputs.wedge4 = { ...s.outputs.wedge4, on: false };
       return s;
     },
-    solution: 'The console goes on before anything that makes sound, and the speakers go on last.',
+    solution: 'Console first, speakers last. With the console already running, nothing switched on after it has a pop to send anywhere.',
     defaultInspect: 'pa',
   },
   {
-    id: 'pw2',
-    title: 'Power Down in Order',
+    id: 'pwDown',
+    title: 'The Power-Down Sequence',
     task: true,
     requirePowerOff: true,
     involves: [1, 2, 3, 4],
     conditions: [],
     topology: { paRig: 'powered' },
     defs: ['fader'],
-    hint: 'Pull the MAIN fader all the way down. Then switch off both main speakers and both wedges. The console switch is the last thing you touch.',
+    hint: 'The power-up order run backwards: master down, speakers off, console last. If you switch the console off while a speaker is still on, its power-down pop plays through that speaker.',
     hints: [
-      { title: 'Quiet the main speakers', target: 'master-fader', text: 'Pull the MAIN fader all the way down before you switch anything off.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.masterDown) },
-      { title: 'Speakers off', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], text: 'Switch off both main speakers and both wedges before the console, because the console feeds them.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedgesOff && ctx.powerStatus.paOff) },
-      { title: 'Console off last', target: 'mixer-power', text: 'Switch the console off.', done: (ctx) => !!(ctx.powerStatus && !ctx.powerStatus.console) },
+      { title: 'Master down first', target: 'master-fader', text: 'Pull the MAIN fader all the way down before you switch anything off.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.masterDown) },
+      { title: 'Speakers off', target: ['out-pa-l', 'out-pa-r', 'out-wedge1', 'out-wedge2'], text: 'Switch off both main speakers and both wedges before the console.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedgesOff && ctx.powerStatus.paOff) },
+      { title: 'Console off last', target: 'mixer-power', text: 'Switch the console off last.', done: (ctx) => !!(ctx.powerStatus && !ctx.powerStatus.console) },
     ],
     sabotage: (s) => {
-      // End of the night: system up and healthy, ready to be taken down.
+      // End of the night: the system is up and running with the master at show
+      // level, ready to be taken down. Master down first makes the last device
+      // to switch off silent before its pop can reach anyone.
       s.mixer = { on: true };
       s.master = { ...s.master, mute: false, fader: 0.75 };
       s.outputs.pa_l = { ...s.outputs.pa_l, on: true, volume: 0.6 };
@@ -2423,86 +2469,7 @@ window.POWER = [
       s.outputs.wedge4 = { ...s.outputs.wedge4, on: false, volume: 0 };
       return s;
     },
-    solution: 'You brought the MAIN fader down, switched off all four speakers, then switched the console off. That is the power-up order run backwards.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 'pw3',
-    title: 'The Wrong Order',
-    task: true,
-    requirePowerOn: true,
-    involves: [1, 2, 3, 4],
-    conditions: [],
-    topology: { paRig: 'powered' },
-    defs: [],
-    hint: 'The thump a console makes on power-up only becomes a pop if a speaker is switched on to play it. So the speakers come off first, the console goes on with nothing to play through, and the speakers go back on once the console is already running.',
-    hints: [
-      { title: 'Make it safe', target: ['out-pa-l', 'out-pa-r'], text: 'Switch both main speakers off. Switching a device on or off can send a pop through anything already powered.', done: (ctx) => !!(ctx.powerStatus && (ctx.powerStatus.paOff || ctx.powerStatus.console)) },
-      { title: 'Console on', target: 'mixer-power', text: 'Turn the console on.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.console) },
-      { title: 'Speakers back', target: ['out-wedge1', 'out-wedge2', 'out-pa-l', 'out-pa-r'], text: 'Turn on the wedges and both main speakers.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.wedges && ctx.powerStatus.paStage) },
-    ],
-    sabotage: (s) => {
-      // Someone else's half-done power-up, in the wrong order: PA live,
-      // console dark. Flipping the console on from here pops the mains,
-      // and the engine will say so. That warning is the lesson.
-      s.mixer = { on: false };
-      s.outputs.pa_l = { ...s.outputs.pa_l, on: true, volume: 0.6 };
-      s.outputs.pa_r = { ...s.outputs.pa_r, on: true, volume: 0.6 };
-      s.outputs.wedge = { ...s.outputs.wedge, on: false };
-      s.outputs.wedge2 = { ...s.outputs.wedge2, on: false };
-      s.outputs.wedge3 = { ...s.outputs.wedge3, on: false };
-      s.outputs.wedge4 = { ...s.outputs.wedge4, on: false };
-      return s;
-    },
-    solution: 'You switched the speakers off, turned the console on, then brought the speakers back on. Console first, speakers last.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 'pw4',
-    title: 'Meters Move, No Sound',
-    task: true,
-    requirePowerOn: true,
-    involves: [1, 2, 3, 4],
-    conditions: [],
-    topology: { paRig: 'powered' },
-    defs: ['meter'],
-    hint: 'The main speakers are the ones that play sound to the audience. Each of the two has its own power switch, so check both.',
-    hints: [
-      { title: 'Power on the main speakers', target: ['out-pa-l', 'out-pa-r'], text: 'Switch both main speakers on.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage) },
-    ],
-    sabotage: (s) => {
-      // The band is up and playing; both main speakers were never switched on.
-      // Everything upstream is healthy, so the meters tell the whole story.
-      bandUp(s);
-      s.outputs.pa_l = { ...s.outputs.pa_l, on: false };
-      s.outputs.pa_r = { ...s.outputs.pa_r, on: false };
-      return s;
-    },
-    solution: 'Both main speakers were switched off. When the console meters look normal and the audience hears nothing, check power at the speakers first.',
-    defaultInspect: 'pa',
-  },
-  {
-    id: 'pw5',
-    title: 'Silent Speakers',
-    task: true,
-    requirePowerOn: true,
-    involves: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-    conditions: [],
-    defs: [],
-    hint: 'The power switch is on the speaker itself, not at the console. Check the pair of main speakers facing the audience first, then check each wedge on the stage floor.',
-    hints: [
-      { title: 'Speaker power switches', target: null, text: 'Two speakers are switched off. Switch them back on: one main, one wedge.', done: (ctx) => !!(ctx.powerStatus && ctx.powerStatus.paStage && ctx.powerStatus.wedges) },
-    ],
-    sabotage: (s) => {
-      // The 16-channel board, band playing, two independent power faults:
-      // the right main speaker and the drummer's wedge (Wedge 4).
-      const b = window.bandState();
-      bandUp(b);
-      b.outputs.pa_r = { ...b.outputs.pa_r, on: false };
-      b.outputs.wedge4 = { ...b.outputs.wedge4, on: false };
-      return b;
-    },
-    solution: 'A working console with a silent speaker means the problem is at that speaker\'s own power switch. Check every speaker, because more than one can be off.',
+    solution: 'Master down, speakers off, console last. It is the power-up order run backwards, and for the same reason: nothing switches off with a live pop still able to reach a speaker.',
     defaultInspect: 'pa',
   },
 ];

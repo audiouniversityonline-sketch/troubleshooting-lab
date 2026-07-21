@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=209"></script>
+<script src="content-staging.js?v=213"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -611,6 +611,56 @@ function naturalSlotOf(keys, k) {
   return 0;
 }
 window.naturalSlotOf = naturalSlotOf;
+
+// Runtime cable audit — the durable guard against a cable crossing a device.
+// Samples actual points ALONG every cable path in the stage SVG and flags any
+// path that passes through a card's interior. Uses getScreenCTM so it is
+// correct at any zoom/viewBox. Card elements are published by the stage
+// compute() effect (window.__stageCardEls). Returns { cards, crossings:[...] };
+// an empty crossings array means every cable is clear of every card. Run it
+// after any change to the 16-channel stage layout:  window.__cableAudit()
+window.__cableAudit = function (opts) {
+  opts = opts || {};
+  const margin = opts.margin != null ? opts.margin : 5;   // ignore edge grazes
+  const els = window.__stageCardEls || [];
+  const cards = els.map((el) => {
+    const r = el.getBoundingClientRect();
+    const label = ((el.textContent || '').trim().split('\n')[0] || '?').slice(0, 14);
+    return { label, x: r.left + margin, y: r.top + margin, r: r.right - margin, b: r.bottom - margin };
+  }).filter((c) => c.r > c.x && c.b > c.y);
+  const svgs = Array.prototype.slice.call(document.querySelectorAll('svg'));
+  if (!svgs.length) return { error: 'no svg' };
+  const stageSvg = svgs.map((s) => ({ s, n: s.querySelectorAll('path').length })).sort((a, b) => b.n - a.n)[0].s;
+  const paths = Array.prototype.slice.call(stageSvg.querySelectorAll('path'));
+  const hits = [];
+  paths.forEach((p, i) => {
+    let len;
+    try { len = p.getTotalLength(); } catch (e) { return; }
+    if (!len || len < 20) return;
+    const ctm = p.getScreenCTM();
+    if (!ctm) return;
+    const step = Math.max(2, len / 400);
+    // Record the path-length fractions where the line is inside each card.
+    const inside = {};
+    for (let d = 0; d <= len; d += step) {
+      let pt;
+      try { pt = p.getPointAtLength(d); } catch (e) { break; }
+      const sx = ctm.a * pt.x + ctm.c * pt.y + ctm.e;
+      const sy = ctm.b * pt.x + ctm.d * pt.y + ctm.f;
+      for (const cd of cards) {
+        if (sx > cd.x && sx < cd.r && sy > cd.y && sy < cd.b) (inside[cd.label] = inside[cd.label] || []).push(d / len);
+      }
+    }
+    // A cable that TERMINATES at a card (its own connection: a snake tail into
+    // its head, a return up into its speaker) has all its inside-points bunched
+    // at one END. A real CROSSING passes through the MIDDLE. Flag a card only
+    // when the line sits inside it away from both ends — that is the thing that
+    // obscures a card, and the thing these lanes exist to prevent.
+    const ks = Object.keys(inside).filter((label) => inside[label].some((f) => f > 0.18 && f < 0.82));
+    if (ks.length) hits.push({ path: i, cards: ks });
+  });
+  return { cards: cards.length, sampledPaths: paths.length, crossings: hits };
+};
 
 function sourceFor(s, chIdxZero) {
   for (const k of Object.keys(SOURCES)) {
@@ -6217,7 +6267,64 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         });
       });
 
-      setPaths({ stageCables, snake, subSnakes, breakoutRails, patchTails, fanOutCables, outCables, outFanCables, backRailY, frontRailY, snakeMidX, zoomRegions });
+      // ── RESERVED CABLE LANES (16-channel stage) ────────────────────────
+      // Every long horizontal cable run rides one of these lanes. The lane
+      // positions are MEASURED from the actual device rects, so a lane always
+      // sits in the clear gap between card clusters and can never strand on top
+      // of a card when the layout changes. This replaces the hard-coded lane
+      // numbers (500 / 656 / 1311 / 86) that were tuned for one layout and cut
+      // across the vocal row once the cards moved (Kyle, 2026-07-21: "hard rules
+      // that keep cables from crossing over objects... reliable as we make other
+      // changes"). The two rules the lanes enforce:
+      //   1. No card crossing — a run on frontFloor/backEdge is, by construction,
+      //      below/above every card, and vertical drops ride the box's own
+      //      clear right-side margin.
+      //   2. No stacking — each cable gets its own offset within a lane.
+      let cableLanes = null;
+      if (state.big16) {
+        const rectOf = (el) => {
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { x: (r.left - cb.left) / S, y: (r.top - cb.top) / S, r: (r.right - cb.left) / S, b: (r.bottom - cb.top) / S, cx: (r.left + r.width / 2 - cb.left) / S, cy: (r.top + r.height / 2 - cb.top) / S };
+        };
+        // Downstage row = the mains, wedges 1-3, and the three vocal cards. The
+        // front-row returns must clear the LOWEST of these. (W4 is upstage by the
+        // kit and routes over the back edge instead.)
+        // The vocal sub-snake head sits at the very bottom of the stage, lower
+        // than the wedges, so the floor lane has to clear it too.
+        const subSnakeEls = [...cont.querySelectorAll('[data-walk^="sub-snake-"]')];
+        const downstageEls = [paLRef.current, paRRef.current, wedgeOnStageRef.current, wedge2OnStageRef.current, wedge3OnStageRef.current,
+          ...['vx1', 'vx2', 'vx3'].map((k) => sourceRefs.current[k]), ...subSnakeEls];
+        const downRects = downstageEls.map(rectOf).filter(Boolean);
+        // Every card on the stage, for the upstage (back-edge) lane and the audit.
+        const allEls = [...downstageEls, wedge4OnStageRef.current, ...sourceKeys.map((k) => sourceRefs.current[k])];
+        const allRects = allEls.map(rectOf).filter(Boolean);
+        const maxBottom = downRects.length ? Math.max(...downRects.map((r) => r.b)) : 0;
+        const minTop = allRects.length ? Math.min(...allRects.map((r) => r.y)) : 0;
+        const boxLeftX = sbRect ? (sbRect.left - cb.left) / S : 0;
+        cableLanes = {
+          // Front-row returns run their floor segment here, each port a few px
+          // apart, all BELOW every downstage card.
+          frontFloorY: maxBottom + 26,
+          frontPitch: 7,
+          // W4's perimeter run rides above every card.
+          backEdgeY: minTop - 20,
+          // Returns drop straight down in the box's own clear right-side margin
+          // (right of the rightmost card), each port in its own vertical lane.
+          descendX: boxLeftX - 16,
+          descendPitch: 8,
+          // Keep-out rects, exposed so window.__cableAudit() can verify no path
+          // enters a card. Screen-space, matching getBBox() in the audit.
+          cards: allRects,
+        };
+        // The live card ELEMENTS, for the runtime audit (window.__cableAudit),
+        // which samples every cable path and flags any that enters a card. This
+        // is the durable guard: run it after any stage change to catch a cable
+        // crossing a card before it ships, instead of eyeballing a screenshot.
+        window.__stageCardEls = allEls.filter(Boolean);
+      }
+
+      setPaths({ stageCables, snake, subSnakes, breakoutRails, patchTails, fanOutCables, outCables, outFanCables, backRailY, frontRailY, snakeMidX, zoomRegions, cableLanes });
     }
     compute();
     const t = setTimeout(compute, 60);
@@ -6850,15 +6957,33 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           // straight UP into the speaker from below (so the wedge cable reads as
           // "straight down, then over"). The one upstage wedge (W4, by the kit)
           // instead leads out and bends across to it.
+          const L = paths.cableLanes;
           const d = isDragged
             ? window._cableCurve(portEnd, c.to)
+            // 16-CHANNEL STAGE: every return drops down the stage box's own
+            // clear right-side edge, then rides a RESERVED LANE that is measured
+            // from the device rects so it can never land on a card. Downstage
+            // speakers ride the FRONT FLOOR lane (below every card); the one
+            // upstage wedge (W4, by the kit) rides the BACK EDGE lane (above
+            // every card). Each port gets its own offset so parallel runs never
+            // stack. See cableLanes in the compute() effect.
+            : (c.big16 && L
+                ? (c.to.y > 480
+                    ? window._polyRound([
+                        c.from,
+                        { x: c.from.x, y: L.frontFloorY + c.portId * L.frontPitch },  // down the box edge to this port's floor lane (offset DOWN so it is always below every card)
+                        { x: c.to.x,   y: L.frontFloorY + c.portId * L.frontPitch },  // along the floor, below every card
+                        c.to,                                                          // up into the speaker bottom
+                      ], 8)
+                    : window._polyRound([
+                        c.from,
+                        { x: c.from.x, y: L.backEdgeY },   // up the box edge to the back-edge lane
+                        { x: c.to.x,   y: L.backEdgeY },   // along the back edge, above every card
+                        c.to,                              // down into the wedge (top-connected)
+                      ], 8))
             : (c.to.y > 480
-                // Mains ride the SAME port-ordered lane scheme as the wedges
-                // below (one formula for the whole front row): own vertical
-                // lane out of the box, own floor lane 8px from its neighbours,
-                // then straight up into the speaker bottom. Two formulas here
-                // used to land Main L's floor run 2px from Wedge 1's — a long
-                // stacked pair you could not tell apart (Kyle 2026-07-13).
+                // MX-8 front row: own vertical lane out of the box, own floor
+                // lane 8px from its neighbours, then up into the speaker bottom.
                 ? window._polyRound([
                     c.from,
                     { x: 656 + c.portId * 33, y: c.from.y },
@@ -6866,34 +6991,14 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                     { x: c.to.x, y: 500 + c.portId * 8 },
                     c.to,
                   ], 8)
-                // upstage wedge, up by the drummer. In the 16-ch band stage (big16)
-                // don't cross the field — run the perimeter: out of the box, LEFT
-                // along the OUT lane to a clear vertical corridor (the OH R /
-                // Acoustic gap), UP that corridor to the upstage (back) edge, then
-                // along the back edge and down into the wedge top. The small MX-8
-                // stage has its own compact geometry, so it keeps the original
-                // out-and-across route.
-                : (c.big16
-                    ? window._polyRound([
-                        c.from,
-                        { x: 1311, y: c.from.y },   // left to the OH R / Acoustic corridor
-                        { x: 1311, y: 86 },          // up the corridor to the upstage edge
-                        { x: c.to.x, y: 86 },        // along the back edge to the drummer's wedge
-                        c.to,                         // down into the wedge (top-connected)
-                      ], 8)
-                    // 8-ch returns (all bottom-connected): each leaves its OUT jack
-                    // and drops in its OWN parallel lane in the gap between PA R and
-                    // the box (ordered top-jack -> leftmost lane so the short
-                    // step-ins nest and never cross a neighbour's descent), then runs
-                    // the floor rail BELOW every speaker and comes UP into its bottom.
-                    // The lanes stay parallel and only meet at the downstage floor.
-                    : window._polyRound([
-                        c.from,
-                        { x: 656 + c.portId * 33, y: c.from.y },             // step left to this return's own widely-spaced lane
-                        { x: 656 + c.portId * 33, y: 500 + c.portId * 8 },   // straight down, well clear of its neighbours
-                        { x: c.to.x, y: 500 + c.portId * 8 },                // along the floor to the speaker
-                        c.to,                                                 // up into the speaker bottom
-                      ], 8)));
+                // MX-8 upstage wedge (no cableLanes on the small board).
+                : window._polyRound([
+                    c.from,
+                    { x: 656 + c.portId * 33, y: c.from.y },
+                    { x: 656 + c.portId * 33, y: 500 + c.portId * 8 },
+                    { x: c.to.x, y: 500 + c.portId * 8 },
+                    c.to,
+                  ], 8)));
           const live = !c.unplugged && !isDragged && retLive(c.portId);
           const hovered = hoverCable === 'out:' + c.spk;
           const color = hovered ? '#eae7e0' : '#7d7a72';
@@ -9133,7 +9238,7 @@ const hotBtn = {
 // can act. Feedback keeps its own flow (the Monitor EQ auto-opens to the
 // ring-out), so it isn't routed through here. The brief card's status pill
 // still shows the live state after this is dismissed.
-function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset, onClose, passivePA }) {
+function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset, onClose, passivePA, popGoal }) {
   if (!open) return null;
   const clipping = clips && clips.length > 0;
   const audienceLive = ((audio?.outputs?.pa_l || 0) + (audio?.outputs?.pa_r || 0)) > 0.05;
@@ -9198,7 +9303,12 @@ function WarningModal({ open, phantomPop, clips, paBalanceIssue, audio, onReset,
       <>The correct order: <b>mute the channel</b> (or pull its fader down) → turn on +48V → wait a moment → bring the channel back up.</>
     );
     body = (<><div style={{ color: 'var(--ink)' }}>{desc}</div><div>{fix}</div></>);
-    action = onReset ? (
+    // On a "hear the pop" lesson the pop was the goal, so the modal is a lesson,
+    // not a failure: offer "Got it" (which drops to the debrief) instead of
+    // "Reset and try again."
+    action = popGoal ? (
+      <button onClick={onClose} className="mono ui-no-select" style={hotBtn}>✓ Got it</button>
+    ) : onReset ? (
       <button onClick={onReset} className="mono ui-no-select" style={hotBtn}>↻ Reset and try again</button>
     ) : null;
   } else if (clipping) {
@@ -9996,10 +10106,18 @@ function App() {
     // Output-check lesson: the test ends with every listed speaker switched
     // back on. Stops a "solved" board whose mains never came back.
     const outputsOnOk = !level.requireOutputsOn || level.requireOutputsOn.every((k) => { const o = state.outputs[k]; return !!(o && o.on); });
-    const won = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk && outputsOnOk;
+    const normalWon = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk && outputsOnOk;
+    // A "hear the pop" lesson (popIsTheGoal) inverts the whole thing: causing
+    // the pop IS the objective. The win is simply that the student has popped
+    // the system this attempt (hasPoppedRef, set above when `blocked` went
+    // true), and the pop does NOT block it — the warning modal that fires with
+    // it is the teaching, and dismissing it drops to the debrief. Without this
+    // override the lesson would auto-win at load (empty conditions -> normalWon
+    // true) AND never win once popped (blocked), i.e. exactly backwards.
+    const won = level.popIsTheGoal ? hasPoppedRef.current : normalWon;
     // Mirror the live, truly-winnable state so the sign-off button can tell a
     // correct "system is healthy" call from a premature one.
-    wonRef.current = won && !blocked;
+    wonRef.current = won && (!blocked || !!level.popIsTheGoal);
     // A zero-fault practice rep is healthy from the start, so auto-win is
     // suppressed: the engineer has to recognize it and sign off. Every other
     // rep still auto-wins the moment the fix lands.
@@ -10007,7 +10125,7 @@ function App() {
     // Sandbox / Free Play never "wins" — there is nothing to solve. Warnings and
     // statuses above still compute, so clipping a fader still flags in free play.
     const effWon = won && (!isZeroFault || signedOff) && !level.isSandbox && !level.isWalkthrough;
-    if (effWon && !blocked) {
+    if (effWon && (!blocked || level.popIsTheGoal)) {
       if (!stableRef.current) {
         stableRef.current = setTimeout(() => {
           setSolved(true);
@@ -11872,6 +11990,7 @@ function App() {
         open={warnOpen}
         phantomPop={state.phantomPop} clips={clipsStable} paBalanceIssue={paBalanceIssue} audio={audio}
         passivePA={(state.topology && state.topology.paRig) === 'amp+passive'}
+        popGoal={!!level.popIsTheGoal}
         onReset={restart}
         onClose={() => { warnDismissedSigRef.current = faultSig; setWarnOpen(false); }}
       />
@@ -12245,7 +12364,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   const COURSES = [];
   if (startHere.length) COURSES.push({ key: 'starthere', label: 'START HERE', color: 'var(--green)', tag: 'FREE', free: true, blurb: 'Start here to learn the essential skills, one step at a time.', rows: startHere });
   if (patching.length > 0) COURSES.push({ key: 'patching', label: 'PATCHING', color: 'var(--cool)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Read the input list, patch the system, and find the fault when a cable is wrong.', rows: patching });
-  if (power.length > 0) COURSES.push({ key: 'power', label: 'POWER', color: 'var(--amber)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Power the system up and down in the right order, and find the box that is off when part of the system stays silent.', rows: power });
+  if (power.length > 0) COURSES.push({ key: 'power', label: 'POWER', color: 'var(--amber)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Hear the pop that bad power order causes, then learn the correct order up and down.', rows: power });
   if (inputSetup.length > 0) COURSES.push({ key: 'inputsetup', label: 'INPUT SETUP', color: '#4dd0c4', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Bring any input up the right way: PFL first, gain by the meter, power what needs it, and fix the channels that were set by ear.', rows: inputSetup });
   if (systemLevel.length > 0) COURSES.push({ key: 'systemlevel', label: 'SYSTEM LEVEL', color: '#e8944a', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set how loud the system should be: reference track in, console at unity, and the audience level set at the speakers.', rows: systemLevel });
   if (bigBoard.length > 0) COURSES.push({ key: 'bigboard', label: '16-CHANNEL MODE', color: '#8ab4ff', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Work the big board: the mixer page, the stage page, sixteen channels on the Input List, and four wedges.', rows: bigBoard });
