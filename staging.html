@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=215"></script>
+<script src="content-staging.js?v=217"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -7733,6 +7733,13 @@ if (Array.isArray(window.SOUNDCHECK)) {
   window.SOUNDCHECK.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isSoundcheck: true }));
 }
 
+// Managing Feedback (members): the causes and cures of the squeal — gain before
+// feedback, mic placement, fewer open mics, ring-out and HPF. Its own FBK picker
+// band, member-gated via isLesson.
+if (Array.isArray(window.MANAGE_FEEDBACK)) {
+  window.MANAGE_FEEDBACK.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isFeedbackCourse: true }));
+}
+
 // The Gig (members): the capstone challenge. isLesson keeps it member-gated
 // and puts it in the picker; isChallenge on the entry itself hides the answer
 // key and puts the hint behind a button, the way Practice does.
@@ -7838,6 +7845,7 @@ const INPUT_SETUP_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i
 const SYSTEM_LEVEL_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isSystemLevel);
 const BIG_BOARD_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isBigBoard);
 const SOUNDCHECK_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isSoundcheck);
+const FEEDBACK_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isFeedbackCourse);
 const THE_GIG_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isTheGig);
 const SH_FINALE_ID = 105;
 // Where a visitor lands with no resume target: members go to lesson 1 of Run
@@ -7868,6 +7876,7 @@ function bandOf(l) {
   if (l.isSystemLevel) return 'SYSTEM';  // System Level course (members)
   if (l.isBigBoard) return 'BIG16';      // 16-Channel Mode orientation (members)
   if (l.isSoundcheck) return 'CHECK';    // Soundcheck course (members)
+  if (l.isFeedbackCourse) return 'FBK';  // Managing Feedback course (members)
   if (l.isTheGig) return 'GIG';          // The Gig capstone (members)
   if (l.isPower) return 'POWER';       // Power Up / Power Down course (members)
   if (l.isInputSetup) return 'INPUT';  // Input Setup course (members)
@@ -10120,7 +10129,22 @@ function App() {
       if (r.max != null && v > r.max) return false;
       return true;
     });
-    const normalWon = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk && outputsOnOk && sendOk;
+    // Managing Feedback: a lesson can require a wedge to keep at least N dB of
+    // gain-before-feedback HEADROOM (requireMargin: { wedge: 6 }). Reads the same
+    // feedbackMargins model the on-wedge "+N dB to F/B" readout shows, so the
+    // "run it loud but leave about 6 dB" discipline is graded, not just eyeballed.
+    // feedbackMargins returns the hottest loop in dB (higher = closer to ringing);
+    // the usable margin is its negative. No mic loop on a wedge = huge margin.
+    const marginOk = !level.requireMargin || (() => {
+      const fm = window.feedbackMargins ? window.feedbackMargins(state, window.computeAudio(state)) : null;
+      if (!fm) return false;
+      return Object.keys(level.requireMargin).every((k) => (fm[k] != null ? -fm[k] : 999) >= level.requireMargin[k]);
+    })();
+    // Managing Feedback: a lesson can require a channel to be MUTED — an unused
+    // open mic has to be CLOSED, not just turned down in one send (it is still
+    // live in every other mix). requireMute: [2].
+    const muteOk = !level.requireMute || level.requireMute.every((ch) => { const c = state.channels[ch - 1]; return !!(c && c.mute); });
+    const normalWon = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk && outputsOnOk && sendOk && marginOk && muteOk;
     // A "hear the pop" lesson (popIsTheGoal) inverts the whole thing: causing
     // the pop IS the objective. The win is simply that the student has popped
     // the system this attempt (hasPoppedRef, set above when `blocked` went
@@ -12100,7 +12124,7 @@ function App() {
                           // Solving the LAST lesson of a member course is a course
                           // pass, and the debrief says so instead of quietly
                           // rolling into the next course's first lesson.
-                          const names = { PATCHING: 'Patching', POWER: 'Power', INPUT: 'Input Setup', MONITOR: 'Mixing Monitors', SYSTEM: 'System Level', BIG16: '16-Channel Mode', CHECK: 'Soundcheck' };
+                          const names = { PATCHING: 'Patching', POWER: 'Power', INPUT: 'Input Setup', MONITOR: 'Mixing Monitors', SYSTEM: 'System Level', BIG16: '16-Channel Mode', CHECK: 'Soundcheck', FBK: 'Managing Feedback' };
                           const b = bandOf(level);
                           if (!names[b]) return null;
                           const nxt = SCENARIOS[levelIdx + 1];
@@ -12325,7 +12349,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // Free visitors land with Mixer Tutorial expanded (their starting course);
   // members get a clean list unless they're mid-course.
   const initialOpenCourse = level
-    ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : level.isPatching ? 'patching' : level.isBigBoard ? 'bigboard' : level.isSoundcheck ? 'soundcheck' : (bandOf(level) === 'LEARN' ? 'show' : (TIER !== 'member' ? 'mixer' : null)))
+    ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : level.isFeedbackCourse ? 'feedback-course' : level.isPatching ? 'patching' : level.isBigBoard ? 'bigboard' : level.isSoundcheck ? 'soundcheck' : (bandOf(level) === 'LEARN' ? 'show' : (TIER !== 'member' ? 'mixer' : null)))
     : (TIER !== 'member' ? 'mixer' : null);
   const [openCourse, setOpenCourse] = uS(initialOpenCourse);
   // When the picker is open on load, the resume effect may swap the level in
@@ -12335,11 +12359,11 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // never fights a manual mode switch.
   uE(() => { setMode(curMode); }, [levelIdx]);
   const isMember = TIER === 'member';
-  const lessons = []; const libraries = []; const monitors = []; const patching = []; const power = []; const inputSetup = []; const startHere = []; const systemLevel = []; const theGig = []; const bigBoard = []; const soundcheck = [];
+  const lessons = []; const libraries = []; const monitors = []; const patching = []; const power = []; const inputSetup = []; const startHere = []; const systemLevel = []; const theGig = []; const bigBoard = []; const soundcheck = []; const feedbackCourse = [];
   SCENARIOS.forEach((s, i) => {
     if (s.isStartHere) { startHere.push({ s, i }); return; }
     const b = bandOf(s);
-    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i }); else if (b === 'INPUT') inputSetup.push({ s, i }); else if (b === 'SYSTEM') systemLevel.push({ s, i }); else if (b === 'BIG16') bigBoard.push({ s, i }); else if (b === 'CHECK') soundcheck.push({ s, i }); else if (b === 'GIG') theGig.push({ s, i });
+    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i }); else if (b === 'INPUT') inputSetup.push({ s, i }); else if (b === 'SYSTEM') systemLevel.push({ s, i }); else if (b === 'BIG16') bigBoard.push({ s, i }); else if (b === 'CHECK') soundcheck.push({ s, i }); else if (b === 'FBK') feedbackCourse.push({ s, i }); else if (b === 'GIG') theGig.push({ s, i });
   });
   const practiceIdx = SCENARIOS.findIndex((s) => s.isPractice);
   const feedbackIdx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
@@ -12386,6 +12410,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   if (theGig.length > 0) COURSES.push({ key: 'thegig', label: 'THE GIG', color: 'var(--hot)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'The capstone. A 16-channel system, nothing connected and nothing switched on. Get the show running.', rows: theGig });
   COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a system from nothing and run a full show. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MIXING MONITORS', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build each performer\'s monitor mix, keep it clean, and handle "more me" without making the wedge ring.', rows: monitors });
+  if (feedbackCourse.length > 0) COURSES.push({ key: 'feedback-course', label: 'MANAGING FEEDBACK', color: '#ff8f6b', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Stop the squeal: run the monitors loud but with headroom, aim the mic so the wedge does not ring, close the mics you are not using, and ring out the rest.', rows: feedbackCourse });
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 680, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>
@@ -12588,6 +12613,8 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
               ? 'FREE PLAY · NO GOAL'
               : level.isMonitor
               ? 'MIXING MONITORS · MEMBERS'
+              : level.isFeedbackCourse
+              ? `MANAGING FEEDBACK · ${String(FEEDBACK_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(FEEDBACK_INDEXES.length).padStart(2, '0')}`
               : level.isPatching
               ? `PATCHING · ${String(PATCHING_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(PATCHING_INDEXES.length).padStart(2, '0')}`
               : level.isPower
@@ -12834,7 +12861,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   })();
   const workChip = (
     <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : level.isPatching ? 'PATCHING' : level.isPower ? 'POWER' : level.isInputSetup ? 'INPUT SETUP' : level.isMonitor ? 'MIXING MONITORS' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
+      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : level.isPatching ? 'PATCHING' : level.isPower ? 'POWER' : level.isInputSetup ? 'INPUT SETUP' : level.isMonitor ? 'MIXING MONITORS' : level.isFeedbackCourse ? 'MANAGING FEEDBACK' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
     </div>
   );
 

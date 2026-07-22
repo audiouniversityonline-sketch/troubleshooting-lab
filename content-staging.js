@@ -3149,3 +3149,131 @@ window.THE_GIG = [
     defaultInspect: 'pa',
   },
 ];
+
+// ============================================================
+// MANAGING FEEDBACK (members' course) — Kyle 2026-07-22
+// The causes and cures of the squeal, on the MX-8. STAGE 1: the fixes built on
+// mechanics the engine already models — gain before feedback (graded on the
+// on-wedge "+N dB to F/B" headroom readout via requireMargin), fewer open mics
+// (requireMute), ring-out (requireSend + toneGate), and the low ring (HPF).
+// STAGE 2 (later) inserts the mic-placement lessons (pattern, aim the null, mic
+// vs the mains) between fb3 and fb4. Every lesson starts from mwBoard, a healthy
+// fully-patched MX-8, and injects ONE feedback fault. Only the two vocal mics
+// (Vocal 1 dynamic, Vocal 2 condenser) ring on this board (canFeedback); the DIs
+// and close mics can't. Numbers are engine-verified: at 0.6 the send leaves ~6.6
+// dB margin, ring onset is ~0.7-0.8, a single-band spike rings and one cut clears
+// it. Kept intentionally close to Mixing Monitors' ring-out/HPF (Kyle: light
+// overlap), framed here as the feedback toolkit.
+// ============================================================
+window.MANAGE_FEEDBACK = [
+  {
+    id: 'fb1',
+    title: 'What Feedback Is',
+    task: true,
+    defs: ['feedback'],
+    hint: 'The squeal is a loop: the mic hears Wedge 1, the wedge plays it back into the mic, and it builds on itself. Break the loop and it stops. The fastest way is to take the wedge send down.',
+    hints: [
+      { title: 'Stop the squeal', target: 'ch1-aux', text: 'Wedge 1 is squealing. Pull AUX 1 on the Vocal 1 input channel down until it stops.', done: (ctx) => !ctx.feedback },
+    ],
+    involves: [1, 2, 3, 4],
+    conditions: [],
+    sabotage: (s) => { mwBoard(s); s.channels[0].aux1 = 0.85; return s; },
+    solution: 'Feedback is the monitor loop building on itself. Taking the send down broke the loop, but the singer lost their wedge. The rest of this course is how to keep the level and still stop the ring.',
+    defaultInspect: 'wedge',
+  },
+  {
+    id: 'fb2',
+    title: 'Gain Before Feedback',
+    task: true,
+    defs: ['feedback'],
+    requireMargin: { wedge: 6 },
+    hint: 'Watch the "+ dB to F/B" number on Wedge 1. It counts down as you raise the send. Bring it up until the wedge is loud, then stop while that number is still green, around +6 dB. That headroom is what keeps a warm body or a "more me" from tipping it into a squeal mid-show.',
+    hints: [
+      { title: 'Loud, with headroom', target: 'ch1-aux', text: 'Bring AUX 1 on the Vocal 1 input channel up until Wedge 1 is loud, then stop while the meter still reads green, about +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const m = fm ? -fm.wedge : 999; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; const l = c ? (c.wedge || 0) : 0; return m >= 6 && l >= 0.25; } },
+    ],
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'wedge', min: 0.25 },
+    ],
+    sabotage: (s) => { mwBoard(s); s.channels[0].aux1 = 0.3; return s; },
+    solution: 'The monitor is loud but sits about 6 dB under the ring point. Pros leave that margin on purpose, because the stage only gets louder once the show starts.',
+    defaultInspect: 'wedge',
+  },
+  {
+    id: 'fb3',
+    title: 'Fewer Open Mics',
+    task: true,
+    defs: ['feedback'],
+    requireMute: [2],
+    hint: 'Two mics are open into Wedge 1. Nobody is on the second one, but it is live and squealing on its own. Every open mic is another way into the loop, so close the one you are not using. Muting it takes it out of every mix, not just this wedge.',
+    hints: [
+      { title: 'Close the unused mic', target: 'ch2-mute', text: 'Mute channel 2 to close the second mic and stop the squeal, since no one is on it.', done: (ctx) => !ctx.feedback && !!(ctx.state.channels[1] && ctx.state.channels[1].mute) },
+    ],
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'wedge', min: 0.2 },
+    ],
+    sabotage: (s) => { mwBoard(s); s.channels[0].aux1 = 0.55; s.channels[1].aux1 = 0.8; return s; },
+    solution: 'An open mic no one is using still feeds the loop. Closing it bought back headroom on Wedge 1 and left the lead vocal untouched.',
+    defaultInspect: 'wedge',
+  },
+  {
+    id: 'fb4',
+    title: 'Ring It Out',
+    task: true,
+    defs: ['ring out', 'graphic EQ'],
+    requireSend: [{ ch: 1, aux: 1, min: 0.6 }],
+    toneGate: 0.8,
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'wedge', min: 0.25 },
+    ],
+    hint: 'Turning the send down would stop the ring but lose the singer. Leave it up and cut the one frequency that is ringing on the Monitor EQ instead. Cut only that band, and only as far as it takes to stop the ring.',
+    hints: [
+      { title: 'Cut the ringing frequency', target: 'out-wedge1', text: 'Wedge 1 is ringing. Open its Monitor EQ and cut the glowing band by 3 to 6 dB until the ring stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
+    ],
+    sabotage: (s) => {
+      // One 1.6 kHz resonance (band 14), spiked so Wedge 1 loads ringing on
+      // exactly one glowing band. requireSend keeps the send up so the fix is the
+      // graphic-EQ cut, not pulling the singer down; toneGate 0.8 blocks shotgun
+      // cutting. Same proven single-band recipe as Mixing Monitors' mw6.
+      mwBoard(s);
+      const prof = new Array(25).fill(0.5); prof[14] = 2.8;
+      s.outputs.wedge.fbProfile = prof;
+      s.outputs.wedge.volume = 0.6;
+      s.channels[0].aux1 = 0.62;
+      s.channels[0].highpass = false;
+      return s;
+    },
+    solution: 'A narrow cut on the one frequency that was ringing stopped it and left the wedge as loud as the singer needs. Cutting more than the ring needs just hollows out the sound.',
+    defaultInspect: 'wedge',
+  },
+  {
+    id: 'fb5',
+    title: 'The Low Ring',
+    task: true,
+    defs: ['feedback', 'high-pass filter'],
+    requireHpfOn: [1],
+    toneGate: 0.85,
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'wedge', min: 0.3 },
+    ],
+    hint: 'This ring is low and boomy, down where stage rumble and the wedge cabinet live. The high-pass filter clears out that low end without touching the voice. Leave it off on a bass or kick channel, where those lows are the instrument.',
+    hints: [
+      { title: 'High-pass the low ring', target: 'ch1-hpf', text: 'Wedge 1 is ringing low and boomy. Engage HPF on channel 1 to clear it, and leave the send where it is.', done: (ctx) => !!(ctx.state.channels[0] && ctx.state.channels[0].highpass && !ctx.feedback) },
+    ],
+    sabotage: (s) => {
+      // One 100 Hz resonance (band 2), in HPF territory: the high-pass clears it
+      // where a graphic cut is overkill. Same recipe as Mixing Monitors' mwHpf.
+      mwBoard(s);
+      const prof = new Array(25).fill(0.5); prof[2] = 2.8;
+      s.outputs.wedge.fbProfile = prof;
+      s.channels[0].aux1 = 0.62;
+      s.channels[0].highpass = false;
+      return s;
+    },
+    solution: 'A high-pass filter clears a low, boomy ring without thinning the voice. It is housekeeping that helps, not a cure for every ring, since most feedback lives higher up.',
+    defaultInspect: 'wedge',
+  },
+];
