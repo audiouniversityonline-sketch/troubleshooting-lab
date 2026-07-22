@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=213"></script>
+<script src="content-staging.js?v=214"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -10106,7 +10106,21 @@ function App() {
     // Output-check lesson: the test ends with every listed speaker switched
     // back on. Stops a "solved" board whose mains never came back.
     const outputsOnOk = !level.requireOutputsOn || level.requireOutputsOn.every((k) => { const o = state.outputs[k]; return !!(o && o.on); });
-    const normalWon = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk && outputsOnOk;
+    // Mixing Monitors ring-out: a lesson can require a raw aux send to sit at or
+    // above (or between) a level, read STRAIGHT OFF THE KNOB (requireSend:
+    // [{ ch:1, aux:1, min:0.6 }]). This is immune to the wedge EQ — the ring-out
+    // lesson needs the send kept UP so the fix is the graphic-EQ cut, not pulling
+    // the singer down, and the post-EQ contribution can't gate that because the
+    // cut itself lowers it. State-checked like mute/HPF.
+    const sendOk = !level.requireSend || level.requireSend.every((r) => {
+      const c = state.channels[r.ch - 1];
+      if (!c) return false;
+      const v = c['aux' + r.aux] || 0;
+      if (r.min != null && v < r.min) return false;
+      if (r.max != null && v > r.max) return false;
+      return true;
+    });
+    const normalWon = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk && outputsOnOk && sendOk;
     // A "hear the pop" lesson (popIsTheGoal) inverts the whole thing: causing
     // the pop IS the objective. The win is simply that the student has popped
     // the system this attempt (hasPoppedRef, set above when `blocked` went

@@ -1975,15 +1975,18 @@ window.MONITOR_WORLD = [
     hints: [
       { title: 'Lower Vocal 1', target: 'ch1-aux', text: 'Turn AUX 1 on the Vocal 1 input channel down from full to about halfway.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.2 && l <= 0.38; } },
       { title: 'Bring up Vocal 2', target: 'ch2-aux', text: 'Turn AUX 1 on the Vocal 2 input channel up to match Vocal 1, not past it.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal2; var l = c ? (c.wedge || 0) : 0; return l >= 0.2 && l <= 0.38; } },
-      { title: 'Keep the band out', target: ['ch3-aux', 'ch4-aux'], text: 'Turn AUX 1 off on keys, then turn AUX 1 down to a low level on bass.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; if (!a) return false; var g = (a.guitar && a.guitar.wedge) || 0; var l = (a.laptop && a.laptop.wedge) || 0; return g <= 0.1 && l <= 0.1; } },
+      { title: 'Keep the band out', target: ['ch3-aux', 'ch4-aux'], text: 'Turn AUX 1 down on both the bass and the keys input channels until they sit well below the two vocals.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; if (!a) return false; var g = (a.guitar && a.guitar.wedge) || 0; var l = (a.laptop && a.laptop.wedge) || 0; return g <= 0.1 && l <= 0.1; } },
     ],
     sabotage: (s) => {
+      // Both instruments load ABOVE the wedge floor so step 3 is real work on
+      // each: bass AND keys are intruding and both have to come down. (Keys
+      // used to start at 0, which made "turn the keys down" a no-op.)
       mwBoard(s);
       s.outputs.wedge2.on = false; s.outputs.wedge2.volume = 0;
       s.channels[0].aux1 = 0.75;
       s.channels[1].aux1 = 0;
       s.channels[2].aux1 = 0.5;
-      s.channels[3].aux1 = 0;
+      s.channels[3].aux1 = 0.5;
       return s;
     },
     solution: 'Two voices fit in one wedge when the first one comes down, the second comes up to match, and the band stays out.',
@@ -1994,28 +1997,41 @@ window.MONITOR_WORLD = [
     title: 'Ring it out',
     task: true,
     defs: ['ring out', 'graphic EQ'],
-    hint: 'Open the Monitor EQ for Wedge 1 while it is still ringing. Cut the glowing band in small steps and listen after each one. Stop as soon as the ring stops, since a deeper cut takes away level you do not need to lose.',
-    hints: [
-      { title: 'Send Vocal 1 to Wedge 1', target: 'ch1-aux', text: 'Turn AUX 1 up on the Vocal 1 input channel until Wedge 1 is loud and rings.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.5) },
-      { title: 'Cut one frequency', target: 'out-wedge1', text: 'Open Wedge 1\'s Monitor EQ and cut the glowing band by 3 to 6 dB until the ring stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
-    ],
+    // The send stays UP (read off the raw knob, immune to the EQ cut): the fix
+    // is the graphic-EQ cut, not pulling the singer down. Without this the win
+    // read the POST-EQ wedge level, so the ring-out cut could drop it under the
+    // line, and the lesson could be "passed" at a level too low to even ring.
+    requireSend: [{ ch: 1, aux: 1, min: 0.6 }],
+    // Guards against shotgun-cutting: eqGain.wedge must stay >= 0.8, so a real
+    // ring-out (a few small cuts) passes but nuking the whole EQ does not.
+    toneGate: 0.8,
     involves: [1, 2, 3, 4],
     conditions: [
-      { source: 'vocal', dest: 'wedge', min: 0.5 },
+      // Path-present floor only. The "loud enough to ring" requirement lives in
+      // requireSend above, where the EQ cut can't defeat it.
+      { source: 'vocal', dest: 'wedge', min: 0.25 },
+    ],
+    hint: 'Turning the aux send down stops the ring, but it also takes the singer out of the wedge. Leave the send where it is and cut the ring out in the Monitor EQ instead.',
+    hints: [
+      { title: 'Cut the ringing frequency', target: 'out-wedge1', text: 'Wedge 1 is ringing. Open its Monitor EQ and cut the glowing band by 3 to 6 dB until the ring stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     sabotage: (s) => {
+      // One 2.5 kHz resonance (band 16), spiked so Wedge 1 loads ringing at the
+      // level the singer needs. Only a graphic-EQ cut of THAT band clears it: an
+      // HPF is far too low to touch it, and pulling the send down loses the
+      // singer (requireSend forbids dropping below 0.6). One band spikes, so
+      // exactly one band glows to find and cut. A -3.6 dB cut clears the ring
+      // and barely moves eqGain (one band of 25), so the level holds.
       mwBoard(s);
-      s.outputs.wedge.volume = 0.7;
-      s.channels[0].aux1 = 0.2;
+      const prof = new Array(25).fill(0.5); prof[16] = 2.8;
+      s.outputs.wedge.fbProfile = prof;
+      s.outputs.wedge.volume = 0.6;
+      s.channels[0].aux1 = 0.62;
       s.channels[0].highpass = false;
       return s;
     },
-    solution: 'Cutting only the frequency that was ringing stopped the ring and left Wedge 1 at the level you set.',
+    solution: 'Cutting only the frequency that was ringing stopped the ring and left Wedge 1 as loud as the singer needs it.',
     defaultInspect: 'wedge',
-    // Tighter than the old 0.6 (which let a player cut 40% of the wedge and
-    // still "pass" tone — exactly the shotgun-cutting the ring-out teaches
-    // against). 0.8 still leaves an intro lesson room for a few real cuts.
-    toneGate: 0.8,
   },
 ];
 

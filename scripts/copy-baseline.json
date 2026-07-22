@@ -275,19 +275,17 @@
   "ctrls": [
    "AUX 1",
    "Vocal 1",
-   "Vocal 2",
-   "Wedge 1",
-   "Wedge 2"
+   "Vocal 2"
   ]
  },
  "mw6": {
   "nums": [
-   "1"
+   "1",
+   "3",
+   "6"
   ],
   "ctrls": [
-   "AUX 1",
    "Monitor EQ",
-   "Vocal 1",
    "Wedge 1"
   ]
  },
