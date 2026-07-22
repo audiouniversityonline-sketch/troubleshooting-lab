@@ -1960,39 +1960,6 @@ window.MONITOR_WORLD = [
     defaultInspect: 'wedge',
   },
   {
-    id: 'mwShare',
-    title: 'One wedge, two singers',
-    task: true,
-    involves: [1, 2, 3, 4],
-    conditions: [
-      { source: 'vocal', dest: 'wedge', min: 0.2, max: 0.38 },
-      { source: 'vocal2', dest: 'wedge', min: 0.2, max: 0.38 },
-      { source: 'guitar', dest: 'wedge', min: 0, max: 0.1 },
-      { source: 'laptop', dest: 'wedge', min: 0, max: 0.1 },
-    ],
-    defs: [],
-    hint: 'Turn Vocal 1 down before you turn Vocal 2 up. After the two voices are set, the bass and keys channels still need to come down.',
-    hints: [
-      { title: 'Lower Vocal 1', target: 'ch1-aux', text: 'Turn AUX 1 on the Vocal 1 input channel down from full to about halfway.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal; var l = c ? (c.wedge || 0) : 0; return l >= 0.2 && l <= 0.38; } },
-      { title: 'Bring up Vocal 2', target: 'ch2-aux', text: 'Turn AUX 1 on the Vocal 2 input channel up to match Vocal 1, not past it.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; var c = a && a.vocal2; var l = c ? (c.wedge || 0) : 0; return l >= 0.2 && l <= 0.38; } },
-      { title: 'Keep the band out', target: ['ch3-aux', 'ch4-aux'], text: 'Turn AUX 1 down on both the bass and the keys input channels until they sit well below the two vocals.', done: (ctx) => { var a = ctx && ctx.audio && ctx.audio.contributions; if (!a) return false; var g = (a.guitar && a.guitar.wedge) || 0; var l = (a.laptop && a.laptop.wedge) || 0; return g <= 0.1 && l <= 0.1; } },
-    ],
-    sabotage: (s) => {
-      // Both instruments load ABOVE the wedge floor so step 3 is real work on
-      // each: bass AND keys are intruding and both have to come down. (Keys
-      // used to start at 0, which made "turn the keys down" a no-op.)
-      mwBoard(s);
-      s.outputs.wedge2.on = false; s.outputs.wedge2.volume = 0;
-      s.channels[0].aux1 = 0.75;
-      s.channels[1].aux1 = 0;
-      s.channels[2].aux1 = 0.5;
-      s.channels[3].aux1 = 0.5;
-      return s;
-    },
-    solution: 'Two voices fit in one wedge when the first one comes down, the second comes up to match, and the band stays out.',
-    defaultInspect: 'wedge',
-  },
-  {
     id: 'mw6',
     title: 'Ring it out',
     task: true,
