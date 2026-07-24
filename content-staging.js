@@ -3216,25 +3216,26 @@ window.MANAGE_FEEDBACK = [
     task: true,
     defs: ['polar pattern', 'null', 'feedback'],
     requireMargin: { wedge: 6 },
-    hint: 'Nothing on the console is wrong here. The mic is the problem: a hypercardioid keeps a live lobe pointing straight out its back, and that is exactly where Wedge 1 is. Open PLACEMENT on the Vocal 1 mic and read the WEDGE PATH number as you change the pattern.',
+    hint: 'Nothing on the console is wrong here. The mic is the problem: a hypercardioid keeps a live lobe pointing out its back, down toward the wedge on the floor. Open PLACEMENT on the Vocal 1 mic and watch the WEDGE PATH number as you change the pattern, or as you tilt the mic up and swing its null down onto the wedge.',
     hints: [
-      { title: 'Point the null at the wedge', target: 'placement-vocal', text: 'Open PLACEMENT on the Vocal 1 mic and fit a pattern whose null lands on the wedge, until Wedge 1 reads at least +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; return !ctx.feedback && !!fm && -fm.wedge >= 6 && !!c && (c.wedge || 0) >= 0.25; } },
+      { title: 'Point the null at the wedge', target: 'placement-vocal', text: 'Open PLACEMENT on the Vocal 1 mic and put a null on the wedge, with the pattern or the tilt, until Wedge 1 reads at least +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; return !ctx.feedback && !!fm && -fm.wedge >= 6 && !!c && (c.wedge || 0) >= 0.25; } },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
-      { source: 'vocal', dest: 'wedge', min: 0.25 },
+      { source: 'vocal', dest: 'wedge', min: 0.3 },
     ],
     sabotage: (s) => {
       // The console is set correctly. The fault is the microphone on the stand:
-      // a hypercardioid, held level, with one wedge directly in front of the
-      // singer. Its rear lobe points at the wedge, which costs about 13 dB of
-      // gain before feedback and rings at a send the cardioid handles fine.
+      // a hypercardioid, held level, over a wedge that sits 50 deg below the
+      // capsule. Its rear lobe points down at that wedge. A supercardioid's null
+      // lands almost on it, and a cardioid tilted up gets there too, so the
+      // lesson has two honest answers and one wrong microphone.
       mwBoard(s);
-      s.channels[0].aux1 = 0.55;
+      s.channels[0].aux1 = 0.66;
       s.micSetup = { vocal: { pattern: 'hyper', az: 180, tilt: 5, paX: 2.4 } };
       return s;
     },
-    solution: 'A cardioid rejects most from straight behind, which is where a wedge in front of the singer sits. Supercardioid and hypercardioid reject to the rear sides instead and keep a live lobe behind, so they suit a pair of wedges angled off to the sides, not one wedge straight in front.',
+    solution: 'A wedge in front of a singer is not straight behind the mic, it is well below it, and a supercardioid rejects most at about that angle. That is why a supercardioid is the standard stage vocal mic. A cardioid gets there too if you tilt the mic up and swing its null down onto the wedge. A hypercardioid keeps a live lobe pointing back and down, right where the wedge is.',
     defaultInspect: 'wedge',
   },
   {
@@ -3243,7 +3244,7 @@ window.MANAGE_FEEDBACK = [
     task: true,
     defs: ['mains', 'feedback'],
     requireMargin: { mains: 6 },
-    hint: 'This ring is not coming from a wedge. Wedge 1 is not even in the mix. It is the main speakers getting back into the vocal mic, because someone set the mains upstage. Open PLACEMENT on the Vocal 1 mic and drag the main speaker along the floor.',
+    hint: 'This ring is not coming from a wedge. Wedge 1 is not even in the mix. It is the main speakers getting back into the vocal mic, because someone set the mains upstage of the mic line and left the singer standing out in front of them. Open PLACEMENT on the Vocal 1 mic and drag the main speaker along the floor. The pattern on the mic will not help you here.',
     hints: [
       { title: 'Get the mic behind the mains', target: 'placement-vocal', text: 'Open PLACEMENT on the Vocal 1 mic and drag the main speaker downstage until the mic sits well behind it and Main L reads at least +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; return !ctx.feedback && !!fm && -fm.mains >= 6 && !!c && ((c.pa_l || 0) + (c.pa_r || 0)) >= 0.3; } },
     ],
@@ -3253,15 +3254,17 @@ window.MANAGE_FEEDBACK = [
     ],
     sabotage: (s) => {
       // No wedge send at all: this loop is the main speakers into the vocal mic.
-      // The mains are set almost level with the mic line, so the mic sits in
-      // their coverage with the full main mix pointed at it. Nothing on the
-      // console fixes it. Moving the speakers does.
+      // The mains are set a metre UPSTAGE of the mic, so the singer is standing
+      // out in front of the boxes with the full main mix pointed at them. The
+      // mic's pattern is no help, because the mains are off to the side where a
+      // directional mic already rejects them horizontally. Nothing on the console
+      // fixes it either. Moving the speakers does.
       mwBoard(s);
-      s.channels[0].fader = 0.78;
-      s.micSetup = { vocal: { pattern: 'cardioid', az: 180, tilt: 5, paX: 0.2 } };
+      s.channels[0].fader = 0.76;
+      s.micSetup = { vocal: { pattern: 'cardioid', az: 180, tilt: 5, paX: -1.0 } };
       return s;
     },
-    solution: 'Every open microphone belongs behind the front face of the main speakers. Stand above the stage and look down: if a mic is out past the boxes, no amount of EQ or gain trimming will save it.',
+    solution: 'Every open microphone belongs behind the front face of the main speakers. Stand above the stage and look down: if a mic is out past the boxes, no pattern, no EQ and no gain trimming will save it. Once the mic is level with the speakers or behind them, the spacing and the cabinet do the work for you.',
     defaultInspect: 'pa',
   },
   {
