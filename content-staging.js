@@ -3216,26 +3216,29 @@ window.MANAGE_FEEDBACK = [
     task: true,
     defs: ['polar pattern', 'null', 'feedback'],
     requireMargin: { wedge: 6 },
-    hint: 'Nothing on the console is wrong here. The mic is the problem: a hypercardioid keeps a live lobe pointing out its back, down toward the wedge on the floor. Open PLACEMENT on the Vocal 1 mic and watch the WEDGE PATH number as you change the pattern, or as you tilt the mic up and swing its null down onto the wedge.',
+    hint: 'Nothing on the console is wrong here. The mic is the problem. A wedge in front of a singer sits about 43 degrees below the capsule, and with the mic angled up at the mouth that puts it near the back of the pattern. A cardioid rejects hardest straight out the back, so that is where it belongs. A hypercardioid keeps a live lobe back there instead. Open PLACEMENT on the Vocal 1 mic and watch the WEDGE PATH number as you change the pattern.',
     hints: [
       { title: 'Point the null at the wedge', target: 'placement-vocal', text: 'Open PLACEMENT on the Vocal 1 mic and put a null on the wedge, with the pattern or the tilt, until Wedge 1 reads at least +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; return !ctx.feedback && !!fm && -fm.wedge >= 6 && !!c && (c.wedge || 0) >= 0.25; } },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
-      { source: 'vocal', dest: 'wedge', min: 0.3 },
+      { source: 'vocal', dest: 'wedge', min: 0.25 },
     ],
     sabotage: (s) => {
-      // The console is set correctly. The fault is the microphone on the stand:
-      // a hypercardioid, held level, over a wedge that sits 50 deg below the
-      // capsule. Its rear lobe points down at that wedge. A supercardioid's null
-      // lands almost on it, and a cardioid tilted up gets there too, so the
-      // lesson has two honest answers and one wrong microphone.
+      // The console is set correctly. The fault is the microphone on the stand.
+      // The wedge sits 43 deg below the capsule (researched geometry: a 50 deg
+      // cabinet aimed at the ear, 5 ft out) and the mic is angled up at the
+      // mouth, which puts the wedge about 147 deg off axis. Measured at aux 0.55:
+      // hypercardioid -4.5 dB and ringing, supercardioid +3.2 which stops the
+      // ring but misses the 6 dB gate, cardioid +8.6 which passes. Tilting a
+      // cardioid up, or tilting a supercardioid DOWN so the wedge lands in its
+      // 127 deg null, both reach +13.7. Wrong mic, two right answers.
       mwBoard(s);
-      s.channels[0].aux1 = 0.66;
-      s.micSetup = { vocal: { pattern: 'hyper', az: 180, tilt: 5, paX: 2.4 } };
+      s.channels[0].aux1 = 0.55;
+      s.micSetup = { vocal: { pattern: 'hyper', az: 180, tilt: 10, paX: 2.4 } };
       return s;
     },
-    solution: 'A wedge in front of a singer is not straight behind the mic, it is well below it, and a supercardioid rejects most at about that angle. That is why a supercardioid is the standard stage vocal mic. A cardioid gets there too if you tilt the mic up and swing its null down onto the wedge. A hypercardioid keeps a live lobe pointing back and down, right where the wedge is.',
+    solution: 'With one wedge in front of a singer, put the back of a cardioid on it. That is where a cardioid rejects hardest, and tilting the mic up swings the null further onto the wedge. Supercardioid and hypercardioid reject furthest at about 120 degrees off the front instead, so they want the wedge offset to one side, or a pair of wedges spread wide. They are not worse microphones, they just want a different stage.',
     defaultInspect: 'wedge',
   },
   {

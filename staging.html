@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=225"></script>
+<script src="content-staging.js?v=226"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1721,14 +1721,28 @@ window.speakerLiveForPatch = speakerLiveForPatch;
 // never truly -inf (mfrs spec -15..-25 dB rear, best case a little past that).
 const MIC_A3 = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
 const POLAR_FLOOR = 0.045;
-// Degrees the floor wedge sits below the mic, derived from the scene the panel
-// draws rather than picked: a wedge aimed ON AXIS at the singer's ear (Kyle
-// 2026-07-24) sits 1.42 m in front of them with a 47.5 deg baffle, and the
-// capsule 0.42 m in front of the ear at 1.50 m looks down at the baffle centre
-// at 50 deg. That steeper angle is why a supercardioid, whose null sits 126 deg
-// off the front, lands closer to a floor wedge than a cardioid does — the actual
-// reason a supercardioid is the standard stage vocal mic.
-const FLOOR_DROP = 50;
+// Degrees the floor wedge sits below the mic. Derived from a researched scene,
+// not picked, and every number in it is sourced:
+//   - a wedge's angle is quoted FLOOR to BAFFLE PLANE. 40 and 50 deg are the
+//     common pair, 55 for a performer further back, 30 for one almost on top of
+//     it. JBL publish 50 deg for the SRX812, so 50 is the scene's cabinet.
+//   - a wedge is aimed so its high-frequency axis lands on the performer's EARS
+//     (Kyle, and the standard placement guidance).
+//   - a performer stands 3 to 6 ft back from it.
+// Those cross-check: a 50 deg cabinet whose axis hits an ear at 1.60 m sits
+// 5.1 ft in front of the performer, in the middle of the quoted range. With the
+// capsule 0.15 m in front of the mouth at 1.52 m, the drop from capsule to wedge
+// is 43 deg.
+//
+// This replaces 50, which was wrong and had a real consequence. At 50 the wedge
+// landed on a supercardioid's null and the Lab taught that a supercardioid is
+// the mic for a wedge straight ahead. At the researched 43, with the mic angled
+// up at the mouth, the wedge sits ~147 deg off axis, where a CARDIOID rejects
+// best, which is the actual guidance: put the back of a cardioid at the monitor,
+// and offset the wedge to the side for a super or hyper. Reaching a super's null
+// takes wedges spread surprisingly wide or a severe mic angle, not one wedge in
+// front of the singer.
+const FLOOR_DROP = 43;
 // A mic's sensitivity at an angle whose cosine is cosT, for pattern `pat`.
 // One shared polar law for both loops (wedge and mains) so a pattern change
 // can never move one and not the other.
@@ -1759,7 +1773,7 @@ window.micRejectionRaw = micRejectionRaw;
 // a lot here. No setup returns 1.0 (identical to the default), so every existing
 // lesson's feedback calibration is untouched; only when a student aims the mic
 // does the loop move.
-const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 180, tilt: 5, paX: 2.4 };
+const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 180, tilt: 10, paX: 2.4 };
 const REF_REJ = micRejectionRaw(DEFAULT_MIC_SETUP);
 function micRejection3D(setup) {
   if (!setup) return 1.0;
@@ -4064,14 +4078,14 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   const A = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
   const NAME = { cardioid: 'cardioid', super: 'supercardioid', hyper: 'hypercardioid' };
   const capFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 5, paX: 2.4 };
+  const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 10, paX: 2.4 };
   const pat = (setup && setup.pattern) || DEF.pattern;
   const tilt = (setup && setup.tilt != null) ? setup.tilt : DEF.tilt;
   const paX = (setup && setup.paX != null) ? setup.paX : (DEF.paX != null ? DEF.paX : 2.4);
   const a = A[pat];
   const d2r = (d) => d * Math.PI / 180;
   const rOf = (aa, deg) => Math.abs(aa + (1 - aa) * Math.cos(d2r(deg)));
-  const FLOOR_DROP = 50;
+  const FLOOR_DROP = 43;
   const eff = { pattern: pat, az: 180, tilt, paX };
 
   // Both readings straight off the engine, converted to gain before feedback:
@@ -4086,30 +4100,33 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   // ---- scene, in metres, uniformly scaled so every drawn angle is true ----
   // The whole scene is pinned by one constraint (Kyle 2026-07-24): the wedge is
   // aimed ON AXIS at the singer's ear, so a line drawn perpendicular to its
-  // angled baffle lands on the ear. Everything else follows from that. A 47.5 deg
-  // baffle 1.42 m in front of the singer puts its axis on an ear at 1.60 m, and
-  // the capsule sits 0.42 m forward of the ear, which is what makes the drop from
-  // the capsule down to the wedge FLOOR_DROP (50 deg) rather than something
-  // shallower. The engine reads the same 50, so the picture and the loop agree.
+  // angled baffle lands on the ear. Every dimension below is researched, and they
+  // agree with each other: a 50 deg cabinet (JBL's published figure for the
+  // SRX812) whose axis hits an ear at 1.60 m lands 5.1 ft in front of the
+  // performer, which is the middle of the 3-to-6 ft the placement guidance gives.
+  // Capsule 0.15 m in front of the mouth, angled up at it, puts the wedge 43 deg
+  // below the capsule. The engine reads the same 43, so the picture and the loop
+  // cannot disagree.
   const VW = 700, VH = 380, X0 = -1.70, Z1 = 2.86, S = VW / 5.35;
   const px = (x) => (x - X0) * S;
   const pz = (z) => (Z1 - z) * S;
   const PA_MIN = -1.2, PA_MAX = 3.4;
-  const EAR = [-0.42, 1.60];
-  const MIC = [px(0), pz(1.50)];
-  // Wedge cabinet in side elevation: bottom edge on the floor, short vertical
-  // back downstage, and the baffle running from the front-bottom corner up to the
-  // back-top corner. That baffle is the face pointed at the performer.
-  const WA = [0.72, 0], WB = [1.27, 0], WC = [1.27, 0.60];
+  const EAR = [-0.25, 1.60], MOUTH = [-0.15, 1.55], HEAD = [-0.22, 1.67];
+  const MIC = [px(0), pz(1.52)];
+  // Wedge cabinet in side elevation: bottom edge on the floor, vertical back
+  // downstage, and the baffle running from the front-bottom corner up to the
+  // back-top corner. 0.50 m deep by 0.60 m tall makes that baffle 50 deg off the
+  // floor, the published angle, and puts its acoustic centre at (1.30, 0.30).
+  const WA = [1.05, 0], WB = [1.55, 0], WC = [1.55, 0.60];
   const WBC = [(WA[0] + WC[0]) / 2, (WA[1] + WC[1]) / 2]; // baffle centre
   const WEDGE = [px(WBC[0]), pz(WBC[1])];
-  const SPK = [px(paX), pz(2.10)];
+  const SPK = [px(paX), pz(2.12)];
   const sa = d2r(10); // the box is aimed down into the audience, matching PA_TILT
 
   // Mic polar pattern in the plane of the view. faAng is the screen angle of the
   // mic axis: it points upstage at the performer, tilted up by `tilt`.
   const faAng = Math.atan2(-Math.sin(d2r(tilt)), -Math.cos(d2r(tilt)));
-  const PR = 0.38 * S;
+  const PR = 0.30 * S;
   let polarD = '';
   for (let t = 0; t <= 360; t += 4) {
     const rr = PR * rOf(a, t), ang = faAng + d2r(t);
@@ -4198,11 +4215,11 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
             {/* the performer, facing the audience. The ear is marked because it is
                 what the wedge is aimed at, and the reason the scene is laid out
                 the way it is. */}
-            <circle cx={px(EAR[0])} cy={pz(1.70)} r={0.115 * S} fill="none" stroke="var(--ink-2)" strokeWidth="1.3"/>
-            <path d={'M' + px(EAR[0]) + ' ' + pz(1.57) + ' L' + px(EAR[0]) + ' ' + pz(0)} stroke="var(--ink-2)" strokeWidth="1.3" fill="none" opacity="0.7"/>
+            <circle cx={px(HEAD[0])} cy={pz(HEAD[1])} r={0.115 * S} fill="none" stroke="var(--ink-2)" strokeWidth="1.3"/>
+            <path d={'M' + px(HEAD[0]) + ' ' + pz(1.55) + ' L' + px(HEAD[0]) + ' ' + pz(0)} stroke="var(--ink-2)" strokeWidth="1.3" fill="none" opacity="0.7"/>
             <circle cx={px(EAR[0])} cy={pz(EAR[1])} r="2.6" fill="var(--green)"/>
             <text x={px(EAR[0]) - 0.16 * S} y={pz(EAR[1]) + 3} textAnchor="end" style={{ fontSize: 8.5, fill: 'var(--green)' }}>ear</text>
-            <text x={px(EAR[0])} y={pz(0) - 8} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-3)' }}>singer</text>
+            <text x={px(HEAD[0])} y={pz(0) - 8} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-3)' }}>singer</text>
 
             {/* The wedge, drawn as a real cabinet: bottom on the floor, short
                 vertical back downstage, and the baffle running from the front
@@ -4221,7 +4238,7 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
             {/* the mains stand off to the SIDE of the stage. A side elevation
                 cannot show that, and without saying so the drawing reads as if
                 the mic's rear lobe were pointed at the boxes, which it is not. */}
-            <text x={SPK[0]} y={pz(2.10) - 0.42 * S} textAnchor="middle" style={{ fontSize: 8.5, fill: 'var(--ink-3)' }}>off to the side of the stage</text>
+            <text x={SPK[0]} y={pz(2.12) - 0.42 * S} textAnchor="middle" style={{ fontSize: 8.5, fill: 'var(--ink-3)' }}>off to the side of the stage</text>
             <line x1={mouth[0].toFixed(1)} y1={mouth[1].toFixed(1)} x2={MIC[0]} y2={MIC[1]} stroke={mTone} strokeWidth="1.8" strokeDasharray="4 4"/>
 
             {/* mic pattern, nulls, and the mic itself */}
@@ -12251,7 +12268,7 @@ function App() {
         open={!!placementFor} srcKey={placementFor}
         label={placementFor && window.SOURCES[placementFor] ? window.SOURCES[placementFor].label : ''}
         setup={state.micSetup && placementFor ? state.micSetup[placementFor] : null}
-        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 5, paX: 2.4 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
+        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 10, paX: 2.4 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
         onClose={() => setPlacementFor(null)}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
