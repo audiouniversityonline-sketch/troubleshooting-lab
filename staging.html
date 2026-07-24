@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=228"></script>
+<script src="content-staging.js?v=229"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4973,7 +4973,14 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // lesson's stage moves. Dragged fully upstage the boxes end up ABOVE the vocal
   // mic row, so "the mics are out past the PA" is something you SEE rather than
   // something you have to open a panel to discover (Kyle 2026-07-24).
-  const PA_PX_PER_M = big16 ? 60 : 54;
+  // Pixels per metre of mains travel. With the singers moved onto the downstage
+  // line the boxes only have to move a little to end up behind them, so this is
+  // much smaller than it was: the old range walked the mains to the middle of the
+  // stage, which is not a thing that happens at a show (Kyle 2026-07-24).
+  const PA_PX_PER_M = big16 ? 49 : 35;
+  // Half a main speaker's height, so the mains line lands on the plane of the
+  // boxes rather than 16 px downstage of it.
+  const PA_HALF = 63;
   const paLine = window.paLineOf ? window.paLineOf(state) : 2.4;
   const paBase = big16 ? 48 : 40;
   const paBottom = paBase + (2.4 - paLine) * PA_PX_PER_M;
@@ -4982,7 +4989,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     if (!box) return;
     const r = box.getBoundingClientRect();
     // invert the mapping: pointer y -> bottom offset -> metres
-    const bottom = r.bottom - clientY - 47;
+    const bottom = r.bottom - clientY - PA_HALF;
     const v = 2.4 - (bottom - paBase) / PA_PX_PER_M;
     const lo = window.PA_LINE_MIN != null ? window.PA_LINE_MIN : -1.2;
     const hi = window.PA_LINE_MAX != null ? window.PA_LINE_MAX : 2.6;
@@ -5013,11 +5020,14 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     egtr:  { top: 150, left: '24%' },              // electric gtr, left of the kit
     agtr:  { top: 150, left: '76%' },              // acoustic gtr, right of the kit
     keys:  { top: 150, left: '88%' },              // keys rig, far stage-right
-    // The three singers across the downstage line, numbered 1-2-3 left to right
-    // so each lines up over its own wedge below.
-    vx1:   { top: 476, left: '26%' },              // Vocal 1 — stage-left
-    vx2:   { top: 476, left: '46%' },              // Vocal 2 — centre
-    vx3:   { top: 476, left: '66%' },              // Vocal 3 — stage-right
+    // The three singers hard on the DOWNSTAGE line, each directly over its own
+    // wedge, numbered 1-2-3 left to right. They used to sit at 476, the middle of
+    // the stage, with 122 px of empty floor between them and their wedges, which
+    // is not where a singer stands and it forced the mains to travel halfway up
+    // the stage to get behind them (Kyle 2026-07-24).
+    vx1:   { top: 548, left: '26%' },              // Vocal 1 — stage-left
+    vx2:   { top: 548, left: '46%' },              // Vocal 2 — centre
+    vx3:   { top: 548, left: '66%' },              // Vocal 3 — stage-right
   } : {
     // MX-8 stage plot (audience at the bottom, screen = FOH view). Two mirrored
     // columns so the vocal channels read left-to-right from FOH: Vocal 1 on the
@@ -5026,8 +5036,8 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     // stage box on the right edge.
     guitar: { top: 44,  left: '24%', marginLeft: -(SRC_W / 2) },            // bass DI — upstage left, behind Vocal 1
     laptop: { top: 44,  left: '58%', marginLeft: -(SRC_W / 2) },            // keys DI — upstage right, behind Vocal 2
-    vocal:  { top: 206, left: '28%', marginLeft: -(SRC_W / 2) },            // vocal 1 — downstage left, over Wedge 1
-    vocal2: { top: 206, left: '54%', marginLeft: -(SRC_W / 2) },            // vocal 2 — downstage right, over Wedge 2
+    vocal:  { top: 226, left: '28%', marginLeft: -(SRC_W / 2) },            // vocal 1 — downstage left, over Wedge 1
+    vocal2: { top: 226, left: '54%', marginLeft: -(SRC_W / 2) },            // vocal 2 — downstage right, over Wedge 2
   };
 
   return (
@@ -5064,7 +5074,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
           const micsBehind = paLine >= 0.15;
           const col = micsBehind ? 'rgba(122,122,132,0.55)' : 'var(--hot)';
           return (
-            <div style={{ position: 'absolute', left: 0, right: 0, bottom: paBottom + 47, pointerEvents: 'none', zIndex: 1 }}>
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: paBottom + PA_HALF, pointerEvents: 'none', zIndex: 1 }}>
               <div style={{ borderTop: '1px dashed ' + col, opacity: micsBehind ? 0.8 : 1 }}/>
               <div className="mono" style={{ position: 'absolute', right: 4, top: 2, fontSize: 7,
                 letterSpacing: 1.2, fontWeight: 700, color: col, whiteSpace: 'nowrap' }}>
@@ -5094,7 +5104,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         </div>
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '26%' : '28%', transform: 'translateX(-50%)' }}>
+          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 96 : 76, left: big16 ? '26%' : '28%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 1" on={state.outputs.wedge.on} mute={state.outputs.wedge.mute} volume={state.outputs.wedge.volume} level={audio.outputs.wedge}
               onTogglePower={() => setOut('wedge', { on: !state.outputs.wedge.on })}
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
@@ -5107,7 +5117,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '46%' : '54%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 96 : 76, left: big16 ? '46%' : '54%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 2" accent="var(--cool)" on={state.outputs.wedge2.on} mute={state.outputs.wedge2.mute} volume={state.outputs.wedge2.volume} level={audio.outputs.wedge2}
               onTogglePower={() => setOut('wedge2', { on: !state.outputs.wedge2.on })}
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
@@ -5123,7 +5133,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             wedge etc). The MX-8 runs two vocal wedges only — Vocal 1 → Wedge 1,
             Vocal 2 → Wedge 2 — so W3/W4 are not on the small stage. */}
         {topo.wedgeLocation === 'stage' && big16 && (
-          <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', ...(big16 ? { bottom: 96, left: '66%' } : { bottom: 96, left: '54%' }), transform: 'translateX(-50%)' }}>
+          <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', ...(big16 ? { bottom: 96, left: '66%' } : { bottom: 76, left: '54%' }), transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 3" accent="var(--green)" on={state.outputs.wedge3.on} mute={state.outputs.wedge3.mute} volume={state.outputs.wedge3.volume} level={audio.outputs.wedge3}
               onTogglePower={() => setOut('wedge3', { on: !state.outputs.wedge3.on })}
               onToggleMute={() => setOut('wedge3', { mute: !state.outputs.wedge3.mute })}
@@ -5260,7 +5270,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 vocal mics drop down through that gap into it; its multicore runs
                 up and over to the main box on the LEFT of the stage, clear of
                 Wedge 4's return on the right. */}
-            <div data-zoomable data-zoom-key="vocal" style={{ position: 'absolute', top: 760, left: '36%', transform: 'translateX(-50%)' }}>
+            <div data-zoomable data-zoom-key="vocal" style={{ position: 'absolute', top: 806, left: '36%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="VOCAL SUB-SNAKE" group="down" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
