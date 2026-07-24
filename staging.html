@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=220"></script>
+<script src="content-staging.js?v=221"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -2613,12 +2613,6 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
           : 'Pan. Places this channel between the left and right main speakers. Double-click to center.'} />)}
 
       <div style={{ display: 'flex', gap: 3 }}>
-        {/* LR = the main mix assign. Lit is the normal state: the channel is
-            routed to the main mix. Switched off, the channel still feeds the
-            aux sends, so the performer hears it and the room does not. */}
-        {walk('lr', <BP active={ch.toMain !== false} onClick={() => set({ toMain: ch.toMain === false })} label="LR" width={20} height={14} fontSize={7}
-          color="var(--green)"
-          tip="Assigns this channel to the main mix, what the audience hears. Switched off, the channel still reaches the monitors but never the room."/>)}
         {walk('mute', <BP active={ch.mute} onClick={() => set({ mute: !ch.mute })} label="MUTE" color="var(--hot)" width={28} height={14} fontSize={7}
           tip="Silences this channel everywhere after the preamp: PA and wedges."/>)}
         {/* PFL = Pre-Fader Listen. Monitor-only — routes this channel to
@@ -2631,9 +2625,21 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       {/* The walkthrough spotlight anchors on the whole fader+meter row (not
           just the fader), so the ring frames the full assembly and sits
           centered, including the meter the lesson is talking about. */}
-      <div data-walk={'ch' + (idx + 1) + '-fader'} style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
-        <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>
-        <M level={channelLevel} height={172} segments={22} mkey={'chlvl:' + idx}/>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
+        {/* BUS ASSIGN. On a real desk the routing buttons live down in the fader
+            block, beside the fader travel, not up with mute and solo (Mackie
+            ProFX, A&H ZED, Soundcraft Signature all put them here). Kept as its
+            own bottom-aligned column so more bus buttons can stack above it. */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+          <div className="mono" style={{ fontSize: 5.5, letterSpacing: 0.3, color: 'var(--ink-3)', lineHeight: 1 }}>BUS</div>
+          {walk('lr', <BP active={ch.toMain !== false} onClick={() => set({ toMain: ch.toMain === false })} label="LR" width={22} height={16} fontSize={7}
+            color="var(--green)"
+            tip="Assigns this channel to the main mix, what the audience hears. Switched off, the channel still reaches the monitors but never the room."/>)}
+        </div>
+        <div data-walk={'ch' + (idx + 1) + '-fader'} style={{ display: 'flex', alignItems: 'flex-end', gap: 4 }}>
+          <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>
+          <M level={channelLevel} height={172} segments={22} mkey={'chlvl:' + idx}/>
+        </div>
       </div>
 
       <div style={{
