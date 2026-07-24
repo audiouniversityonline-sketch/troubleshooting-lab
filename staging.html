@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=219"></script>
+<script src="content-staging.js?v=220"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -839,6 +839,23 @@ function computeAudio(s, envelope) {
     return chanIn[i].level * faderGain(ch.fader) * dcaGainFor(s, i);
   });
 
+  // MAIN MIX ASSIGN (the LR / MAIN routing button). A channel only reaches the
+  // audience when it is assigned to the main mix. Aux sends are deliberately NOT
+  // gated by this: an unassigned channel can still be loud in a monitor mix,
+  // which is exactly what makes the fault confusing on a real desk — the
+  // performer hears themselves fine and insists the channel works, but the room
+  // gets nothing. `post` itself is left alone so the channel's own meter keeps
+  // reading; the fader IS working, the signal just isn't routed anywhere.
+  // Defaults to assigned, so every existing lesson and scenario is unchanged.
+  const toMain = s.channels.map((ch) => (ch.toMain === false ? 0 : 1));
+  // PRE-FADER vs POST-FADER aux sends. Pre-fader is the default and the standard
+  // for monitor mixes: the send is taken BEFORE the channel fader, so riding the
+  // fader for the room never changes what the performer hears. Post-fader follows
+  // the channel fader, which is what a recording or stream feed wants. Stored per
+  // aux bus on the master section (state.master.auxPost[n]); absent = pre-fader.
+  const auxIsPost = (n) => !!(s.master && s.master.auxPost && s.master.auxPost[n]);
+  const auxFeed = (n, i) => (auxIsPost(n) ? post[i] : chanIn[i].level);
+
   // POWER SUMMING. Different sources (a voice, a bass, a keyboard) are
   // uncorrelated signals, and uncorrelated signals don't stack amplitude-to-
   // amplitude — their POWERS add, so the combined level grows as the square
@@ -855,8 +872,8 @@ function computeAudio(s, envelope) {
   let mixL2 = 0, mixR2 = 0;
   for (let i = 0; i < s.channels.length; i++) {
     const g = panGains(s.channels[i].pan);
-    const vL = post[i] * g.L;
-    const vR = post[i] * g.R;
+    const vL = post[i] * g.L * toMain[i];
+    const vR = post[i] * g.R * toMain[i];
     mixL2 += vL * vL;
     mixR2 += vR * vR;
   }
@@ -901,7 +918,7 @@ function computeAudio(s, envelope) {
     // regardless of what the engineer is listening to in their cans. (A DCA
     // does NOT scale the aux send: monitor sends are pre-fader, so the DCA's
     // fader only rides the main-mix path.)
-    return chanIn[i].level * knobGain(ch.aux1);
+    return auxFeed(1, i) * knobGain(ch.aux1);
   });
   // AUX 1 / AUX 2 SEND BUSES — sum of all channels' aux send levels through
   // the per-bus master send. These represent what's leaving the desk on each
@@ -915,7 +932,7 @@ function computeAudio(s, envelope) {
   const aux2 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
     // PFL does NOT gate aux 2 either.
-    return chanIn[i].level * knobGain(ch.aux2);
+    return auxFeed(2, i) * knobGain(ch.aux2);
   });
   const wedge2Mix = Math.sqrt(aux2.reduce((a, b) => a + b * b, 0)) * aux2MasterGain * (mixerOn ? 1 : 0);
   const w2 = o.wedge2 || { on: true, mute: false, volume: 0 };
@@ -925,14 +942,14 @@ function computeAudio(s, envelope) {
   // mixer-gated math as aux 1/2.
   const aux3 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
-    return chanIn[i].level * knobGain(ch.aux3 || 0);
+    return auxFeed(3, i) * knobGain(ch.aux3 || 0);
   });
   const wedge3Mix = Math.sqrt(aux3.reduce((a, b) => a + b * b, 0)) * aux3MasterGain * (mixerOn ? 1 : 0);
   const w3 = o.wedge3 || { on: true, mute: false, volume: 0 };
 
   const aux4 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
-    return chanIn[i].level * knobGain(ch.aux4 || 0);
+    return auxFeed(4, i) * knobGain(ch.aux4 || 0);
   });
   const wedge4Mix = Math.sqrt(aux4.reduce((a, b) => a + b * b, 0)) * aux4MasterGain * (mixerOn ? 1 : 0);
   const w4 = o.wedge4 || { on: true, mute: false, volume: 0 };
@@ -992,8 +1009,8 @@ function computeAudio(s, envelope) {
       if (chanIn[i].srcKey !== srcKey) continue;
       const ch = s.channels[i];
       const g = panGains(ch.pan);
-      cL += post[i] * g.L;
-      cR += post[i] * g.R;
+      cL += post[i] * g.L * toMain[i];
+      cR += post[i] * g.R * toMain[i];
       cA1 += aux1[i];
       cA2 += aux2[i];
       cA3 += aux3[i];
@@ -2596,6 +2613,12 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
           : 'Pan. Places this channel between the left and right main speakers. Double-click to center.'} />)}
 
       <div style={{ display: 'flex', gap: 3 }}>
+        {/* LR = the main mix assign. Lit is the normal state: the channel is
+            routed to the main mix. Switched off, the channel still feeds the
+            aux sends, so the performer hears it and the room does not. */}
+        {walk('lr', <BP active={ch.toMain !== false} onClick={() => set({ toMain: ch.toMain === false })} label="LR" width={20} height={14} fontSize={7}
+          color="var(--green)"
+          tip="Assigns this channel to the main mix, what the audience hears. Switched off, the channel still reaches the monitors but never the room."/>)}
         {walk('mute', <BP active={ch.mute} onClick={() => set({ mute: !ch.mute })} label="MUTE" color="var(--hot)" width={28} height={14} fontSize={7}
           tip="Silences this channel everywhere after the preamp: PA and wedges."/>)}
         {/* PFL = Pre-Fader Listen. Monitor-only — routes this channel to
@@ -2658,18 +2681,26 @@ function MasterSection({ master, onChange, paLevel, paRLevel, powered = true, on
           the overall level of its aux bus (one per wedge) before it leaves the
           desk. Four wedges, four masters, wrapped 2x2. */}
       <div data-walk="master-aux" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
-        <K value={master.aux1 != null ? master.aux1 : 0.75}
-           onChange={(v) => onChange({ ...master, aux1: v })}
-           label="AUX 1" size={28} color="var(--aux)" />
-        <K value={master.aux2 != null ? master.aux2 : 0.75}
-           onChange={(v) => onChange({ ...master, aux2: v })}
-           label="AUX 2" size={28} color="var(--cool)" />
-        <K value={master.aux3 != null ? master.aux3 : 0.75}
-           onChange={(v) => onChange({ ...master, aux3: v })}
-           label="AUX 3" size={28} color="var(--green)" />
-        <K value={master.aux4 != null ? master.aux4 : 0.75}
-           onChange={(v) => onChange({ ...master, aux4: v })}
-           label="AUX 4" size={28} color="var(--amber)" />
+        {[1, 2, 3, 4].map((n) => {
+          const isPost = !!(master.auxPost && master.auxPost[n]);
+          const col = n === 1 ? 'var(--aux)' : n === 2 ? 'var(--cool)' : n === 3 ? 'var(--green)' : 'var(--amber)';
+          return (
+            <div key={n} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <K value={master['aux' + n] != null ? master['aux' + n] : 0.75}
+                 onChange={(v) => onChange({ ...master, ['aux' + n]: v })}
+                 label={'AUX ' + n} size={28} color={col} />
+              <div data-walk={'aux' + n + '-prepost'}
+                onClick={() => onChange({ ...master, auxPost: { ...(master.auxPost || {}), [n]: !isPost } })}
+                className="mono ui-no-select"
+                title="Pre-fader takes the send before the channel fader, so riding a fader for the room never changes what the performer hears. That is the standard for monitors. Post-fader follows the channel fader, which is what a recording or stream feed wants."
+                style={{ fontSize: 6.5, fontWeight: 800, letterSpacing: 0.3, cursor: 'pointer', padding: '1px 3px', borderRadius: 3, lineHeight: 1.3,
+                  color: isPost ? '#0a0a0c' : 'var(--ink-3)', background: isPost ? col : '#0a0a0c',
+                  border: '1px solid ' + (isPost ? col : '#38383e') }}>
+                {isPost ? 'POST' : 'PRE'}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div style={{ width: '100%', height: 1, background: '#0a0a0c', boxShadow: '0 1px 0 #3a3a40' }}/>
@@ -9895,7 +9926,17 @@ function App() {
   // howl (gain too hot, no glowing band) is deliberately excluded — it points at
   // the gain, not the monitor EQ, so opening the panel there only misleads.
   const wedgeRinging = !!(feedback && feedback.wedgeRing);
-  uE(() => { if (wedgeRinging) setEqPanelOpen(true); }, [wedgeRinging]);
+  // ...but ONLY where the graphic EQ is actually the answer. A guided lesson whose
+  // fix is the HPF, a mute, or mic placement was having the EQ thrown open over
+  // the top of it, which both suggests the wrong tool and hides the guide's
+  // spotlight (an open panel suppresses the walkthrough target). Ring-out lessons
+  // opt in with `eqRingOut`; Practice and Ear Training always ring out, so they
+  // keep the old behavior. (Kyle 2026-07-22.)
+  const eqIsTheFix = !!(level && (level.eqRingOut || level.isFeedbackMode || level.isPractice));
+  // eqIsTheFix is in the deps so moving from one ringing lesson straight to another
+  // (where only the flag changed, not the ring) still re-evaluates. Closing the panel
+  // by hand mid-ring still sticks, because neither dependency changes when you do.
+  uE(() => { if (wedgeRinging && eqIsTheFix) setEqPanelOpen(true); }, [wedgeRinging, eqIsTheFix]);
 
   // Fault warning modal. Pops and distortion announce themselves in a centered
   // dismissible modal instead of stacking text into the brief card. Feedback is

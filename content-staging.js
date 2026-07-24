@@ -1961,6 +1961,7 @@ window.MONITOR_WORLD = [
   },
   {
     id: 'mw6',
+    eqRingOut: true,
     title: 'Ring it out',
     task: true,
     defs: ['ring out', 'graphic EQ'],
@@ -3219,6 +3220,7 @@ window.MANAGE_FEEDBACK = [
   },
   {
     id: 'fb4',
+    eqRingOut: true,
     title: 'Ring It Out',
     task: true,
     defs: ['ring out', 'graphic EQ'],
