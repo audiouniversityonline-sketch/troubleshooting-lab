@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=222"></script>
+<script src="content-staging.js?v=224"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1717,30 +1717,42 @@ window.speakerLiveForPatch = speakerLiveForPatch;
 // WORSE — the bug this replaces.) a: cardioid .5 / super .375 / hyper .25 sets
 // where the null falls (cardioid straight back at 180°, super ~125°, hyper ~110°,
 // with super/hyper keeping a live rear lobe behind — a hyper pointed rear-at-wedge
-// is worse than a super). Floor 0.1 (~ -20 dB): a real null is deep but never
-// truly -inf (mfrs spec -15..-25 dB rear).
+// is worse than a super). POLAR_FLOOR 0.045 (~ -27 dB): a real null is deep but
+// never truly -inf (mfrs spec -15..-25 dB rear, best case a little past that).
 const MIC_A3 = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
+const POLAR_FLOOR = 0.045;
 const FLOOR_DROP = 35; // degrees a floor wedge sits below the mic
+// A mic's sensitivity at an angle whose cosine is cosT, for pattern `pat`.
+// One shared polar law for both loops (wedge and mains) so a pattern change
+// can never move one and not the other.
+function micPolar(pat, cosT) {
+  const a = MIC_A3[pat] != null ? MIC_A3[pat] : 0.5;
+  return Math.max(POLAR_FLOOR, Math.abs(a + (1 - a) * cosT));
+}
 function micRejectionRaw(setup) {
-  const a = MIC_A3[setup.pattern] != null ? MIC_A3[setup.pattern] : 0.5;
-  const az = (setup.az != null ? setup.az : 0) * Math.PI / 180;
+  const az = (setup.az != null ? setup.az : 180) * Math.PI / 180;
   const tilt = (setup.tilt != null ? setup.tilt : 0) * Math.PI / 180;
   const phi = FLOOR_DROP * Math.PI / 180;
   const cosT = Math.cos(tilt) * Math.cos(phi) * Math.cos(az) - Math.sin(tilt) * Math.sin(phi);
-  return Math.max(0.1, Math.abs(a + (1 - a) * cosT));
+  return micPolar(setup.pattern, cosT);
 }
 window.micRejectionRaw = micRejectionRaw;
-// Placement is applied RELATIVE to a realistic DEFAULT (a decently-aimed cardioid,
-// wedge behind and below). That default is the reference the whole feedback
-// calibration is anchored to, so placement works BOTH ways: aim the wedge into
-// the null and you EARN gain before feedback; drop it right in front of the mic
-// (on-axis) and you LOSE it and ring sooner — the actual point of the feature.
-// The old model used on-axis as the baseline, so a bad placement was the neutral
-// case and could never hurt. No setup returns 1.0 (identical to the default), so
-// every existing lesson's feedback calibration is untouched; only when a student
-// aims the mic does the loop move. Verified vs research: front->null spread ~18
-// dB, wedge on-axis ~ +12 dB hotter loop, a real GBF penalty.
-const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 135, tilt: 5 };
+// Placement is applied RELATIVE to a realistic DEFAULT (a cardioid held roughly
+// level, one wedge on the floor in front of the performer aiming up at them).
+// That default is the reference the whole feedback calibration is anchored to,
+// so placement works BOTH ways: tilt the mic up so its null drops onto the wedge
+// and you EARN gain before feedback; tilt it down toward the wedge, or fit a
+// pattern with a live rear lobe, and you LOSE it and ring sooner.
+//
+// az defaults to 180 — the wedge sits DIRECTLY in front of the performer, which
+// is where a floor wedge lives in almost every real setup (Kyle 2026-07-24), and
+// the reason the panel now shows one side elevation instead of two plan views.
+// With the wedge dead behind the mic, a cardioid's null is already close to it
+// and super/hyper aim a live rear lobe straight at it, so pattern choice matters
+// a lot here. No setup returns 1.0 (identical to the default), so every existing
+// lesson's feedback calibration is untouched; only when a student aims the mic
+// does the loop move.
+const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 180, tilt: 5, paX: 2.4 };
 const REF_REJ = micRejectionRaw(DEFAULT_MIC_SETUP);
 function micRejection3D(setup) {
   if (!setup) return 1.0;
@@ -1748,6 +1760,52 @@ function micRejection3D(setup) {
 }
 window.micRejection3D = micRejection3D;
 window.DEFAULT_MIC_SETUP = DEFAULT_MIC_SETUP;
+
+// ── Mic vs the MAIN speakers ───────────────────────────────────────────────
+// The universal rule of system setup: the mains belong DOWNSTAGE of every open
+// mic. Stand above the stage and look down, and every microphone should be
+// behind the front face of the speakers. Break it — a speaker set upstage of the
+// mic line, or a singer who walks out past the boxes — and the mic sits inside
+// the coverage pattern with nothing between it and full system output.
+//
+// Three real terms, all read off one number (`paX`, metres the mic sits UPSTAGE
+// of the mains; negative means the mic is out in front of them):
+//   1. the SPEAKER's directivity toward the mic. A full-range box shadows its
+//      own back: roughly on-axis at the front, PA_REAR_DB down straight behind.
+//   2. the MIC's polar response toward the speaker, same law as the wedge loop,
+//      so pattern and tilt move this loop too (a hypercardioid's live rear lobe
+//      points downstage, straight at the mains).
+//   3. inverse-square distance.
+// Returned as a dB delta against the default placement, so an unset mic is 0 dB
+// and no existing lesson's calibration moves. Clamped at -6 dB because a real
+// room's reverberant field puts a floor under how much backing away can buy.
+const PA_LAT = 2.5;      // metres the mains sit to the side of the mic
+const PA_RISE = 0.6;     // metres the box sits above the capsule (on a stick)
+const PA_TILT = 10;      // degrees the box is aimed down into the audience
+const PA_REAR_DB = 18;   // on-axis vs straight behind, full-range box, vocal band
+function paPathDb(setup) {
+  const x = setup.paX != null ? setup.paX : 2.4;
+  const tilt = (setup.tilt != null ? setup.tilt : 0) * Math.PI / 180;
+  const d = Math.sqrt(x * x + PA_LAT * PA_LAT + PA_RISE * PA_RISE);
+  // Mic axis points UPSTAGE at the performer (-x), tilted up by `tilt`; the
+  // speaker sits downstage, to the side, and above.
+  const cosM = (-x * Math.cos(tilt) + PA_RISE * Math.sin(tilt)) / d;
+  // Speaker axis points downstage (+x) and PA_TILT down; this is the angle from
+  // that axis round to the mic.
+  const st = PA_TILT * Math.PI / 180;
+  const cosS = (-x * Math.cos(st) + PA_RISE * Math.sin(st)) / d;
+  const spkDb = -PA_REAR_DB * Math.pow((1 - Math.min(1, Math.max(-1, cosS))) / 2, 0.7);
+  return 20 * Math.log10(micPolar(setup.pattern, cosM)) + spkDb - 20 * Math.log10(d);
+}
+const REF_PA_DB = paPathDb(DEFAULT_MIC_SETUP);
+// A mic the student has never touched is 0 dB — existing lessons are untouched.
+// Once a placement exists, pattern and tilt move this loop too even if the
+// lesson never set a PA position, because on a real stage they always do.
+function paPlacementDb(setup) {
+  if (!setup) return 0;
+  return Math.max(-6, Math.min(16, paPathDb(setup) - REF_PA_DB));
+}
+window.paPlacementDb = paPlacementDb;
 const _ringActive = {};
 // Barkhausen anchor for the acoustic loop: FEED_0DB is the wedge feed (legacy
 // linear) at which a 0 dB resonance band sits exactly at loop gain = 1. The
@@ -1759,9 +1817,12 @@ const _ringActive = {};
 const FEED_0DB = 0.83;
 const RING_SUSTAIN_DB = -1.7; // a started ring holds on until ~1.7 dB under onset
 window.RING_SUSTAIN_DB = RING_SUSTAIN_DB;
+// Mains face away from the mics, so a normally-placed mic only rings them when
+// the main mix is cranked hard. Module-level because feedbackMargins reports the
+// mains loop too and the two must never drift apart.
+const MAINS_DB = -9.6;
 function detectFeedback(s, audio) {
   if (!s || !s.channels || !audio || !audio.contributions) return null;
-  const MAINS_DB = -9.6;  // mains face away from the mics — ring only when cranked hard
   const o = s.outputs || {};
   const rings = [];
   // Per-band loop check for one wedge. Two wedge models:
@@ -1828,10 +1889,12 @@ function detectFeedback(s, audio) {
       checkWedge('wedge3', o.wedge3, (c.wedge3 || 0) / (eqg.wedge3 || 1) * rej, ch.highpass, i);
       checkWedge('wedge4', o.wedge4, (c.wedge4 || 0) / (eqg.wedge4 || 1) * rej, ch.highpass, i);
     }
-    // Mains loop — no single band; the ring tone falls back to 2 kHz.
+    // Mains loop — no single band; the ring tone falls back to 2 kHz. MAINS_DB
+    // is the baseline for a normally-placed mic (behind the boxes); paPlacementDb
+    // is what the student's own placement adds or takes away from there.
     const paFeed = (c.pa_l || 0) + (c.pa_r || 0);
     const mainsLoopDb = (paFeed > 0.001)
-      ? 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + (ch.highpass ? -4.4 : 0)
+      ? 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + paPlacementDb(s.micSetup && s.micSetup[srcKey]) + (ch.highpass ? -4.4 : 0)
       : -999;
     const mKey = 'mains:' + i;
     const mTh = _ringActive[mKey] ? RING_SUSTAIN_DB : 0;
@@ -1859,7 +1922,7 @@ window.detectFeedback = detectFeedback;
 // Same loop math as detectFeedback, read-only (no hysteresis), reporting the
 // tallest band per wedge so a persistent readout can teach headroom discipline.
 function feedbackMargins(s, audio) {
-  const out = { wedge: -999, wedge2: -999, wedge3: -999, wedge4: -999 };
+  const out = { wedge: -999, wedge2: -999, wedge3: -999, wedge4: -999, mains: -999 };
   if (!s || !s.channels || !audio || !audio.contributions) return out;
   const o = s.outputs || {};
   const eqg = audio.eqGain || { wedge: 1, wedge2: 1, wedge3: 1, wedge4: 1 };
@@ -1894,6 +1957,13 @@ function feedbackMargins(s, audio) {
     for (const wKey of keys) {
       const m = maxLoopFor(wKey, o[wKey], (c[wKey] || 0) / (eqg[wKey] || 1) * rej, ch.highpass);
       if (m > out[wKey]) out[wKey] = m;
+    }
+    // Same mains loop detectFeedback runs, reported as a margin so a lesson can
+    // gate on headroom in front of the speakers, not just at the wedges.
+    const paFeed = (c.pa_l || 0) + (c.pa_r || 0);
+    if (paFeed > 0.001) {
+      const mm = 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + paPlacementDb(s.micSetup && s.micSetup[srcKey]) + (ch.highpass ? -4.4 : 0);
+      if (mm > out.mains) out.mains = mm;
     }
   }
   return out;
@@ -3662,7 +3732,7 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
               and drum overheads. On a close mic like the guitar amp mic it would do
               nothing, so it's hidden. */}
           {!compact && onOpenPlacement && SOURCES[srcKey] && SOURCES[srcKey].canFeedback && (
-            <div onClick={(e) => { e.stopPropagation(); onOpenPlacement(srcKey); }} className="mono ui-no-select"
+            <div data-walk={'placement-' + srcKey} onClick={(e) => { e.stopPropagation(); onOpenPlacement(srcKey); }} className="mono ui-no-select"
               style={{ fontSize: 8, padding: '2px 6px', background: '#0a0a0c', color: 'var(--accent)', border: '1px solid #38383e', borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>PLACEMENT</div>
           )}
           {/* Mute the source's sound only. The mic stays open, so the channel can
@@ -3714,7 +3784,7 @@ function PowerButton({ on, onClick, width = 30, height = 14 }) {
   );
 }
 
-function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, showPower = true }) {
+function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, showPower = true, marginInfo }) {
   const animate = on && !mute && level > 0.05;
   const intensity = Math.min(1, level);
   // signalArriving is what a real powered speaker's "SIG" LED shows: signal
@@ -3743,6 +3813,16 @@ function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePowe
         fontSize: 7, letterSpacing: 1.5, fontWeight: 700,
         color: on ? 'var(--ink-3)' : '#ff8676',
       }}>MAIN · {side}</div>
+      {/* Unlike a wedge, whose level you actively ride toward the limit, the mains
+          loop is set once by where the mics stand. A permanent "+12+" on every
+          lesson is clutter, so this only appears once there is something to say. */}
+      {on && marginInfo && marginInfo.db < 12 && (
+        <div className="mono" title="How much louder the main mix can get before an open mic feeds back into it. Set by where the mics sit relative to the speakers. Pros leave about 6 dB."
+          style={{ fontSize: 7, fontWeight: 800, letterSpacing: 0.3, whiteSpace: 'nowrap', marginTop: -1,
+            color: marginInfo.status === 'ok' ? 'var(--green)' : marginInfo.status === 'low' ? 'var(--accent)' : 'var(--hot)' }}>
+          {marginInfo.db < 0 ? 'FEEDING BACK' : (marginInfo.db >= 12 ? '+12+' : '+' + marginInfo.db.toFixed(0)) + ' dB to F/B'}
+        </div>
+      )}
       <div style={{
         width: 36, height: 36, borderRadius: '50%',
         background: 'radial-gradient(circle at 40% 35%, #4a4a52 0%, #1a1a1d 60%, #0a0a0c 100%)',
@@ -3951,15 +4031,22 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
 }
 window.MonitorEqPanel = MonitorEqPanel;
 
-// ── Mic Placement (both planes) ────────────────────────────────────────────
-// The dedicated visual trainer for the biggest real feedback lever: where the
-// wedge sits relative to the mic's pickup pattern. Two linked plan views — top
-// down (drag the wedge's horizontal angle) and side (the mic's vertical tilt) —
-// driven by state.micSetup[key] = { pattern, az, tilt }. Rejection is read live
-// from the SAME micRejection3D the feedback engine uses, so the picture and the
-// loop can never disagree. cardioid rejects straight back; super/hyper reject to
-// the rear sides and keep a live lobe behind, so cardioid is not always ideal —
-// the best pattern depends on the tilt, which the side view makes visible.
+// ── Mic Placement (side elevation) ─────────────────────────────────────────
+// One view, drawn to scale in metres, of the two paths that set a vocal mic's
+// gain before feedback: the floor wedge in front of the performer, and the main
+// speaker downstage of them. The top-down plan view is gone (Kyle 2026-07-24):
+// a floor wedge sits directly in front of the performer in almost every real
+// setup, so its horizontal angle is not a variable worth half the panel, and one
+// honest side elevation explains both paths better than two half-views explained
+// one. A side elevation projects the lateral axis out, so the mains are drawn at
+// their downstage distance and height; the engine still places them off to the
+// side, which is why the drawn angle to the box is wider than the true one.
+//
+// Every number on screen comes from the SAME engine functions the feedback loop
+// uses — micRejection3D for the wedge, paPlacementDb for the mains — so the
+// picture and the loop can never disagree. Both are reported as gain before
+// feedback against a standard setup: positive means this placement bought
+// headroom, negative means it gave headroom away.
 function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   const svgRef = React.useRef(null);
   const dragRef = React.useRef(false);
@@ -3967,133 +4054,202 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   const A = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
   const NAME = { cardioid: 'cardioid', super: 'supercardioid', hyper: 'hypercardioid' };
   const capFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 135, tilt: 5 };
+  const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 5, paX: 2.4 };
   const pat = (setup && setup.pattern) || DEF.pattern;
-  const az = (setup && setup.az != null) ? setup.az : DEF.az;
   const tilt = (setup && setup.tilt != null) ? setup.tilt : DEF.tilt;
+  const paX = (setup && setup.paX != null) ? setup.paX : (DEF.paX != null ? DEF.paX : 2.4);
   const a = A[pat];
   const d2r = (d) => d * Math.PI / 180;
   const rOf = (aa, deg) => Math.abs(aa + (1 - aa) * Math.cos(d2r(deg)));
   const FLOOR_DROP = 35;
-  // TRUE 3D angle to the floor wedge (spherical law of cosines), the same math
-  // the feedback engine's micRejectionRaw uses, so this panel's number can never
-  // drift from the loop. cosT drives the alt-pattern coaching below; rej3 comes
-  // straight from the shared engine function.
-  const cosT = Math.cos(d2r(tilt)) * Math.cos(d2r(FLOOR_DROP)) * Math.cos(d2r(az)) - Math.sin(d2r(tilt)) * Math.sin(d2r(FLOOR_DROP));
-  const rej3 = window.micRejectionRaw ? window.micRejectionRaw({ pattern: pat, az, tilt }) : Math.max(0.1, Math.abs(a + (1 - a) * cosT));
-  const rejDb = Math.round(20 * Math.log10(rej3));
-  const nullDeg = pat === 'cardioid' ? 180 : Math.acos(-a / (1 - a)) * 180 / Math.PI;
-  let stColor, stWord;
-  if (rej3 < 0.2) { stColor = 'var(--green)'; stWord = 'Strong rejection'; }
-  else if (rej3 < 0.55) { stColor = 'var(--accent)'; stWord = 'Partial rejection'; }
-  else { stColor = 'var(--hot)'; stWord = 'Little rejection'; }
+  const eff = { pattern: pat, az: 180, tilt, paX };
 
-  const TCX = 150, TCY = 168, R = 88, RW = 116;
-  const tdPt = (deg, rad) => [TCX + rad * Math.sin(d2r(deg)), TCY - rad * Math.cos(d2r(deg))];
-  let tdD = '';
-  for (let t = 0; t <= 360; t += 4) { const p = tdPt(t, R * rOf(a, t)); tdD += (t === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ' '; }
-  tdD += 'Z';
-  const tdNulls = pat === 'cardioid' ? [180] : [nullDeg, 360 - nullDeg];
-  const wpt = tdPt(az, RW);
+  // Both readings straight off the engine, converted to gain before feedback:
+  // micRejection3D returns a coupling ratio (>1 = hotter loop = less headroom),
+  // paPlacementDb returns dB added to the mains loop, so both get negated.
+  const wedgeDb = window.micRejection3D ? -20 * Math.log10(window.micRejection3D(eff)) : 0;
+  const mainsDb = window.paPlacementDb ? -window.paPlacementDb(eff) : 0;
+  const tone = (db) => (db >= 1 ? 'var(--green)' : db > -3 ? 'var(--accent)' : 'var(--hot)');
+  const wTone = tone(wedgeDb), mTone = tone(mainsDb);
+  const sign = (db) => (db >= 0 ? '+' : '') + db.toFixed(0);
 
-  const SMX = 96, SMY = 96, dm = 50, SR = 74, FY = 250, SW = [206, 238];
-  const cap = [SMX + dm * Math.cos(d2r(tilt)), SMY + dm * Math.sin(d2r(tilt))];
+  // ---- scene, in metres, uniformly scaled so every drawn angle is true ----
+  const VW = 700, VH = 364, X0 = -1.15, Z1 = 2.42, S = VW / 4.70;
+  const px = (x) => (x - X0) * S;
+  const pz = (z) => (Z1 - z) * S;
+  const PA_MIN = -0.6, PA_MAX = 3.4;
+  const MIC = [px(0), pz(1.50)];
+  // Wedge driver, placed so the line from the capsule to it really is FLOOR_DROP
+  // below horizontal: 1.15 m of drop at 35 deg puts it 1.64 m downstage.
+  const WX = 1.64, WZ = 0.35;
+  const WEDGE = [px(WX), pz(WZ)];
+  const SPK = [px(paX), pz(2.10)];
+  const sa = d2r(10); // the box is aimed down into the audience, matching PA_TILT
+
+  // Mic polar pattern in the plane of the view. faAng is the screen angle of the
+  // mic axis: it points upstage at the performer, tilted up by `tilt`.
   const faAng = Math.atan2(-Math.sin(d2r(tilt)), -Math.cos(d2r(tilt)));
-  let svD = '';
-  for (let t = 0; t <= 360; t += 4) { const rr = SR * rOf(a, t); const ang = faAng + d2r(t); svD += (t === 0 ? 'M' : 'L') + (cap[0] + rr * Math.cos(ang)).toFixed(1) + ' ' + (cap[1] + rr * Math.sin(ang)).toFixed(1) + ' '; }
-  svD += 'Z';
-  const svNulls = pat === 'cardioid' ? [180] : [nullDeg, -nullDeg];
+  const PR = 0.40 * S;
+  let polarD = '';
+  for (let t = 0; t <= 360; t += 4) {
+    const rr = PR * rOf(a, t), ang = faAng + d2r(t);
+    polarD += (t === 0 ? 'M' : 'L') + (MIC[0] + rr * Math.cos(ang)).toFixed(1) + ' ' + (MIC[1] + rr * Math.sin(ang)).toFixed(1) + ' ';
+  }
+  polarD += 'Z';
+  const nullDeg = pat === 'cardioid' ? 180 : Math.acos(-a / (1 - a)) * 180 / Math.PI;
+  const nulls = pat === 'cardioid' ? [180] : [nullDeg, -nullDeg];
+  const capEnd = [MIC[0] + 0.17 * S * Math.cos(faAng + Math.PI), MIC[1] + 0.17 * S * Math.sin(faAng + Math.PI)];
 
-  const couplingP = (p) => Math.abs(A[p] + (1 - A[p]) * cosT);
-  let best = pat, bestc = rej3;
-  ['cardioid', 'super', 'hyper'].forEach((p) => { const cc = couplingP(p); if (cc < bestc - 0.03) { bestc = cc; best = p; } });
-  let coach;
-  if (rej3 < 0.2) coach = 'Good. From here the ' + NAME[pat] + ' strongly rejects sound coming from the wedge, so you have headroom before it rings.';
-  else if (best !== pat && bestc < 0.22) coach = capFirst(NAME[pat]) + ' is not the best fit at this angle. A ' + NAME[best] + ' would put its null closer to the wedge. Try the pattern, or aim the wedge and tilt so a null lands on it.';
-  else coach = 'The wedge is in a sensitive part of the pattern, so the mic passes it back into the loop. Drag it toward a green null, or tilt the mic so a null swings onto the wedge.';
+  // Main speaker mouth and its coverage. Whether the mic falls inside this fan
+  // is the whole point of the view, and it reads correctly no matter how the
+  // lateral axis projects.
+  const mouth = [SPK[0] + 0.17 * S * Math.cos(sa), SPK[1] + 0.17 * S * Math.sin(sa)];
+  const covR = 1.9 * S, covHalf = d2r(35);
+  const c1 = [mouth[0] + covR * Math.cos(sa - covHalf), mouth[1] + covR * Math.sin(sa - covHalf)];
+  const c2 = [mouth[0] + covR * Math.cos(sa + covHalf), mouth[1] + covR * Math.sin(sa + covHalf)];
+  const covD = 'M' + mouth[0].toFixed(1) + ' ' + mouth[1].toFixed(1) +
+    ' L' + c1[0].toFixed(1) + ' ' + c1[1].toFixed(1) +
+    ' A' + covR.toFixed(1) + ' ' + covR.toFixed(1) + ' 0 0 1 ' + c2[0].toFixed(1) + ' ' + c2[1].toFixed(1) + ' Z';
 
-  const setAz = (e) => {
+  // Pattern scoring. Each path gets its own score so a line about the wedge never
+  // recommends a pattern for a reason that belongs to the main speakers. The
+  // headline recommendation is scored on the WORSE of the two, so the panel can
+  // never talk a student into fixing one path and wrecking the other: a
+  // hypercardioid rejects a wedge dead behind badly, but its tight rear null can
+  // be the right answer for the mains.
+  const scoreW = (p) => (window.micRejection3D ? -20 * Math.log10(window.micRejection3D({ pattern: p, az: 180, tilt, paX })) : 0);
+  const scoreM = (p) => (window.paPlacementDb ? -window.paPlacementDb({ pattern: p, az: 180, tilt, paX }) : 0);
+  const pickBest = (fn) => {
+    let b = pat, bs = fn(pat);
+    ['cardioid', 'super', 'hyper'].forEach((p) => { const sc = fn(p); if (sc > bs + 1) { bs = sc; b = p; } });
+    return b;
+  };
+  const bestW = pickBest(scoreW);
+  const best = pickBest((p) => Math.min(scoreW(p), scoreM(p)));
+  const patFixes = best !== pat && Math.min(scoreW(best), scoreM(best)) >= -3;
+
+  let wedgeCoach;
+  if (wedgeDb >= 2) wedgeCoach = 'The ' + NAME[pat] + ' rejects sound coming from the wedge well at this angle, so you have level in hand before it rings.';
+  else if (bestW !== pat) wedgeCoach = capFirst(NAME[pat]) + ' is not the best fit for this wedge angle. A ' + NAME[bestW] + ' would put a null closer to it.';
+  else if (tilt < 15) wedgeCoach = 'The wedge is in a live part of the pattern. Tilt the mic up and its null swings down onto the wedge.';
+  else wedgeCoach = 'The wedge sits in a live part of the pattern and tilt alone will not clear it. Try another pattern.';
+
+  let mainsCoach;
+  if (paX < 0) mainsCoach = 'The mic is out past the main speaker, inside its coverage, with the full main mix pointed at it. Drag the speaker downstage until the mic is well behind it.';
+  else if (paX < 0.8) mainsCoach = 'The mic is right at the front face of the main speaker, still inside its coverage. Drag the speaker downstage until the mic is well behind it.';
+  else if (mainsDb < -3) mainsCoach = 'The mic is close to the front of the speaker. Every microphone belongs behind the front face of the mains, and the further behind, the more level you get.';
+  else if (mainsDb >= 2) mainsCoach = 'The mic sits well behind the speakers and off the back of the box, which is where an open mic belongs.';
+  else mainsCoach = 'Standard placement. The mic is behind the speaker, so the box is shadowing it.';
+
+  const setPa = (e) => {
     const svg = svgRef.current; if (!svg) return;
     const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
     const q = pt.matrixTransform(svg.getScreenCTM().inverse());
-    let deg = Math.atan2(q.x - TCX, -(q.y - TCY)) * 180 / Math.PI; if (deg < 0) deg += 360;
-    onChange({ az: Math.round(deg) });
+    const wx = q.x / S + X0;
+    onChange({ paX: Math.round(Math.max(PA_MIN, Math.min(PA_MAX, wx)) * 20) / 20 });
   };
   const patBtn = (p, txt) => (
-    <div key={p} onClick={() => onChange({ pattern: p })} className="mono ui-no-select"
+    <div key={p} data-walk={'mic-pattern-' + p} onClick={() => onChange({ pattern: p })} className="mono ui-no-select"
       style={{ fontSize: 9, padding: '4px 9px', borderRadius: 4, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.4,
         background: pat === p ? 'var(--accent)' : '#0a0a0c', color: pat === p ? '#0a0a0c' : 'var(--ink-2)',
         border: '1px solid ' + (pat === p ? 'var(--accent)' : '#38383e') }}>{txt}</div>
   );
+  const stat = (db, col, name) => (
+    <div style={{ textAlign: 'center', minWidth: 96 }}>
+      <div className="display" style={{ fontSize: 22, fontWeight: 800, color: col, lineHeight: 1 }}>{sign(db)} dB</div>
+      <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, marginTop: 3 }}>{name}</div>
+    </div>
+  );
 
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 62, background: 'rgba(0,0,0,0.5)' }}>
-      <div onClick={(e) => e.stopPropagation()} className="ui-no-select" style={{ background: 'linear-gradient(180deg,#1c1c20 0%, #141417 100%)', border: '1px solid #38383e', borderRadius: 10, padding: '14px 16px', boxShadow: '0 16px 48px rgba(0,0,0,0.6)', width: 660, maxWidth: '94vw' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      <div onClick={(e) => e.stopPropagation()} data-walk="placement-panel" className="ui-no-select" style={{ background: 'linear-gradient(180deg,#1c1c20 0%, #141417 100%)', border: '1px solid #38383e', borderRadius: 10, padding: '14px 16px', boxShadow: '0 16px 48px rgba(0,0,0,0.6)', width: 700, maxWidth: '94vw' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <div className="display" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Mic placement</div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 0.6 }}>{(label || '').toUpperCase()}</div>
           <div style={{ flex: 1 }}/>
           <div style={{ display: 'flex', gap: 5 }}>{patBtn('cardioid', 'CARDIOID')}{patBtn('super', 'SUPER')}{patBtn('hyper', 'HYPER')}</div>
           <div onClick={onClose} className="mono ui-no-select" style={{ fontSize: 12, color: 'var(--ink-2)', cursor: 'pointer', padding: '2px 6px', marginLeft: 4 }}>✕</div>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ flex: 1, background: '#0d0d10', border: '1px solid #2a2a2e', borderRadius: 6, padding: 6 }}>
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 2 }}>LOOKING DOWN · DRAG THE WEDGE</div>
-            <svg ref={svgRef} viewBox="0 0 300 300" style={{ width: '100%', display: 'block', touchAction: 'none', cursor: 'grab' }}
-              onPointerDown={(e) => { dragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} setAz(e); }}
-              onPointerMove={(e) => { if (dragRef.current) setAz(e); }}
-              onPointerUp={() => { dragRef.current = false; }} onPointerCancel={() => { dragRef.current = false; }}>
-              <text x="150" y="14" textAnchor="middle" style={{ fontSize: 10, fill: 'var(--ink-3)' }}>singer</text>
-              <circle cx="150" cy="42" r="15" fill="none" stroke="var(--ink-2)" strokeWidth="1.3"/>
-              <path d={tdD} fill="var(--accent)" fillOpacity="0.10" stroke="var(--accent)" strokeWidth="1.4"/>
-              {tdNulls.map((g, i) => { const q = tdPt(g, R + 18); const l = tdPt(g, R + 30); return (
+
+        <div style={{ background: '#0d0d10', border: '1px solid #2a2a2e', borderRadius: 6, padding: '5px 6px 2px' }}>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 1 }}>SIDE VIEW · DRAG THE MAIN SPEAKER</div>
+          <svg ref={svgRef} viewBox={'0 0 ' + VW + ' ' + VH} style={{ width: '100%', display: 'block', touchAction: 'none' }}
+            onPointerMove={(e) => { if (dragRef.current) setPa(e); }}
+            onPointerUp={() => { dragRef.current = false; }} onPointerCancel={() => { dragRef.current = false; }}>
+            {/* main speaker coverage, drawn first so everything sits on top */}
+            <path d={covD} fill={mTone} fillOpacity="0.06" stroke={mTone} strokeOpacity="0.22" strokeWidth="1"/>
+
+            {/* floor and the audience direction */}
+            <line x1="0" y1={pz(0)} x2={VW} y2={pz(0)} stroke="#38383e" strokeWidth="1.4"/>
+            <text x="8" y={pz(0) - 6} style={{ fontSize: 9, fill: 'var(--ink-3)' }}>floor</text>
+            <text x={VW - 8} y={pz(0) - 6} textAnchor="end" style={{ fontSize: 9, fill: 'var(--ink-3)' }}>audience ▸</text>
+
+            {/* the performer, facing the audience */}
+            <circle cx={px(-0.80)} cy={pz(1.72)} r={0.115 * S} fill="none" stroke="var(--ink-2)" strokeWidth="1.3"/>
+            <path d={'M' + px(-0.80) + ' ' + pz(1.58) + ' L' + px(-0.80) + ' ' + pz(0)} stroke="var(--ink-2)" strokeWidth="1.3" fill="none" opacity="0.7"/>
+            <text x={px(-0.80)} y={pz(1.72) + 0.45 * S} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-3)' }}>singer</text>
+
+            {/* the wedge, on the floor in front of the performer aiming up at them */}
+            <polygon points={[[px(WX - 0.30), pz(0)], [px(WX + 0.28), pz(0)], [px(WX + 0.28), pz(0.52)], [px(WX - 0.30), pz(0.18)]].map((p) => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}
+              fill="#1c1c20" stroke="var(--ink)" strokeWidth="1.3"/>
+            <text x={px(WX)} y={pz(0.52) - 7} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>wedge</text>
+
+            {/* the two loop paths into the capsule */}
+            <line x1={WEDGE[0]} y1={WEDGE[1]} x2={MIC[0]} y2={MIC[1]} stroke={wTone} strokeWidth="1.8" strokeDasharray="4 4"/>
+            <line x1={mouth[0].toFixed(1)} y1={mouth[1].toFixed(1)} x2={MIC[0]} y2={MIC[1]} stroke={mTone} strokeWidth="1.8" strokeDasharray="4 4"/>
+
+            {/* mic pattern, nulls, and the mic itself */}
+            <path d={polarD} fill="var(--accent)" fillOpacity="0.10" stroke="var(--accent)" strokeWidth="1.4"/>
+            {nulls.map((g, i) => {
+              const gg = faAng + d2r(g);
+              const qx = MIC[0] + (PR + 14) * Math.cos(gg), qy = MIC[1] + (PR + 14) * Math.sin(gg);
+              const lx = MIC[0] + (PR + 27) * Math.cos(gg), ly = MIC[1] + (PR + 27) * Math.sin(gg);
+              return (
                 <g key={i}>
-                  <line x1={TCX} y1={TCY} x2={q[0].toFixed(1)} y2={q[1].toFixed(1)} stroke="var(--green)" strokeWidth="1" strokeDasharray="3 4" opacity="0.7"/>
-                  <text x={l[0].toFixed(1)} y={(l[1] + 3).toFixed(1)} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--green)' }}>null</text>
-                </g>); })}
-              <line x1={wpt[0].toFixed(1)} y1={wpt[1].toFixed(1)} x2={TCX} y2={TCY} stroke={stColor} strokeWidth="1.8" strokeDasharray="4 4"/>
-              <circle cx={TCX} cy={TCY} r="5" fill="var(--ink)"/>
-              <text x={TCX} y={TCY + 18} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>mic</text>
-              <g transform={'translate(' + wpt[0].toFixed(1) + ',' + wpt[1].toFixed(1) + ')'}>
-                <rect x="-16" y="-9" width="32" height="18" rx="3" fill="#1c1c20" stroke={stColor} strokeWidth="1.5"/>
-                <text x="0" y="4" textAnchor="middle" style={{ fontSize: 8.5, fill: 'var(--ink)' }}>wedge</text>
-              </g>
-            </svg>
-          </div>
-          <div style={{ flex: 1, background: '#0d0d10', border: '1px solid #2a2a2e', borderRadius: 6, padding: 6 }}>
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 2 }}>FROM THE SIDE · MIC TILT</div>
-            <svg viewBox="0 0 300 300" style={{ width: '100%', display: 'block' }}>
-              <line x1="20" y1={FY} x2="284" y2={FY} stroke="#38383e" strokeWidth="1.4"/>
-              <text x="34" y={FY + 15} style={{ fontSize: 9, fill: 'var(--ink-3)' }}>floor</text>
-              <circle cx={SMX - 26} cy={SMY - 6} r="20" fill="none" stroke="var(--ink-2)" strokeWidth="1.3"/>
-              <circle cx={SMX} cy={SMY} r="2.5" fill="var(--ink-2)"/>
-              <polygon points="188,250 236,250 230,232 200,238" fill="#1c1c20" stroke="var(--ink)" strokeWidth="1.3"/>
-              <text x="212" y={FY + 15} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>wedge</text>
-              <path d={svD} fill="var(--accent)" fillOpacity="0.10" stroke="var(--accent)" strokeWidth="1.4"/>
-              {svNulls.map((g, i) => { const gg = faAng + d2r(g); const qx = cap[0] + (SR + 16) * Math.cos(gg), qy = cap[1] + (SR + 16) * Math.sin(gg); const lx = cap[0] + (SR + 28) * Math.cos(gg), ly = cap[1] + (SR + 28) * Math.sin(gg); return (
-                <g key={i}>
-                  <line x1={cap[0].toFixed(1)} y1={cap[1].toFixed(1)} x2={qx.toFixed(1)} y2={qy.toFixed(1)} stroke="var(--green)" strokeWidth="1" strokeDasharray="3 4" opacity="0.7"/>
+                  <line x1={MIC[0]} y1={MIC[1]} x2={qx.toFixed(1)} y2={qy.toFixed(1)} stroke="var(--green)" strokeWidth="1" strokeDasharray="3 4" opacity="0.7"/>
                   <text x={lx.toFixed(1)} y={(ly + 3).toFixed(1)} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--green)' }}>null</text>
-                </g>); })}
-              <line x1={SW[0]} y1={SW[1]} x2={cap[0].toFixed(1)} y2={cap[1].toFixed(1)} stroke={stColor} strokeWidth="1.8" strokeDasharray="4 4"/>
-              <line x1={cap[0].toFixed(1)} y1={cap[1].toFixed(1)} x2={(cap[0] + 22 * Math.cos(d2r(tilt))).toFixed(1)} y2={(cap[1] + 22 * Math.sin(d2r(tilt))).toFixed(1)} stroke="var(--ink)" strokeWidth="5" strokeLinecap="round"/>
-              <circle cx={cap[0].toFixed(1)} cy={cap[1].toFixed(1)} r="4" fill="var(--ink)"/>
-            </svg>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, padding: '0 4px' }}>
-              <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)' }}>TILT</span>
-              <input type="range" min="-20" max="50" step="5" value={tilt} onChange={(e) => onChange({ tilt: +e.target.value })} style={{ flex: 1 }}/>
-              <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-2)', minWidth: 64, textAlign: 'right' }}>{tilt > 0 ? 'up ' + tilt + '°' : tilt < 0 ? 'down ' + (-tilt) + '°' : 'level'}</span>
-            </div>
+                </g>);
+            })}
+            <line x1={MIC[0]} y1={MIC[1]} x2={capEnd[0].toFixed(1)} y2={capEnd[1].toFixed(1)} stroke="var(--ink)" strokeWidth="5" strokeLinecap="round"/>
+            <circle cx={MIC[0]} cy={MIC[1]} r="4" fill="var(--ink)"/>
+            <text x={MIC[0]} y={MIC[1] - 0.32 * S} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>mic</text>
+
+            {/* main speaker on a pole. The hit area is the whole column so it is
+                easy to grab at any height. */}
+            <g data-walk="pa-position" style={{ cursor: 'ew-resize' }}
+              onPointerDown={(e) => { dragRef.current = true; try { e.currentTarget.ownerSVGElement.setPointerCapture(e.pointerId); } catch (x) {} setPa(e); }}>
+              <rect x={SPK[0] - 0.45 * S} y="0" width={0.9 * S} height={pz(0)} fill="transparent"/>
+              <line x1={SPK[0]} y1={pz(0)} x2={SPK[0]} y2={SPK[1]} stroke="#4a4a52" strokeWidth="3"/>
+              <g transform={'translate(' + SPK[0].toFixed(1) + ',' + SPK[1].toFixed(1) + ') rotate(10)'}>
+                <rect x={-0.17 * S} y={-0.27 * S} width={0.34 * S} height={0.54 * S} rx="3" fill="#1c1c20" stroke={mTone} strokeWidth="1.6"/>
+                <rect x={0.09 * S} y={-0.19 * S} width={0.07 * S} height={0.38 * S} rx="2" fill="#0a0a0c" stroke="#4a4a52" strokeWidth="1"/>
+              </g>
+              <text x={SPK[0]} y={pz(0) - 30} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>◂ main speaker ▸</text>
+              <text x={SPK[0]} y={pz(0) - 17} textAnchor="middle" className="mono" style={{ fontSize: 8.5, fill: mTone }}>
+                {paX >= 0.05 ? paX.toFixed(1) + ' m in front of the mic' : paX <= -0.05 ? (-paX).toFixed(1) + ' m behind the mic' : 'level with the mic'}
+              </text>
+            </g>
+          </svg>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 4px 4px' }}>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)' }}>MIC TILT</span>
+            <input data-walk="mic-tilt" type="range" min="-20" max="50" step="5" value={tilt} onChange={(e) => onChange({ tilt: +e.target.value })} style={{ flex: 1 }}/>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-2)', minWidth: 64, textAlign: 'right' }}>{tilt > 0 ? 'up ' + tilt + '°' : tilt < 0 ? 'down ' + (-tilt) + '°' : 'level'}</span>
           </div>
         </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
-          <div style={{ textAlign: 'center', minWidth: 92 }}>
-            <div className="display" style={{ fontSize: 22, fontWeight: 800, color: stColor, lineHeight: 1 }}>{rejDb} dB</div>
-            <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, marginTop: 2 }}>REJECTION</div>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div className="mono" style={{ fontSize: 9, fontWeight: 700, color: stColor, letterSpacing: 0.5, marginBottom: 3 }}>{stWord.toUpperCase()}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>{coach}</div>
+          {stat(wedgeDb, wTone, 'WEDGE PATH')}
+          {stat(mainsDb, mTone, 'MAIN SPEAKER PATH')}
+          <div style={{ flex: 1, borderLeft: '1px solid #2a2a2e', paddingLeft: 12 }}>
+            <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, marginBottom: 4 }}>GAIN BEFORE FEEDBACK, AGAINST A STANDARD SETUP</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>{wedgeCoach}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 4 }}>{mainsCoach}</div>
+            {patFixes && (
+              <div style={{ fontSize: 11.5, color: 'var(--accent)', lineHeight: 1.45, marginTop: 4 }}>
+                {'Across both paths together, a ' + NAME[best] + ' would serve this placement better than the ' + NAME[pat] + '.'}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -4840,6 +4996,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             onTogglePower={() => setOut('pa_l', { on: !state.outputs.pa_l.on })}
             onToggleMute={() => setOut('pa_l', { mute: !state.outputs.pa_l.mute })}
             onVolume={(v) => setOutInspect('pa_l', { volume: v }, 'pa')}
+            marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.mains) : null}
             isInspected={state.inspect === 'pa'}
             onSelect={() => setState({ ...state, inspect: 'pa' })}/>
         </div>
@@ -4906,6 +5063,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             onTogglePower={() => setOut('pa_r', { on: !state.outputs.pa_r.on })}
             onToggleMute={() => setOut('pa_r', { mute: !state.outputs.pa_r.mute })}
             onVolume={(v) => setOutInspect('pa_r', { volume: v }, 'pa')}
+            marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.mains) : null}
             isInspected={state.inspect === 'pa'}
             onSelect={() => setState({ ...state, inspect: 'pa' })}/>
         </div>
@@ -12006,7 +12164,13 @@ function App() {
         onRestart={restart} onPrev={prev} onNext={next} onPick={pickLevel}
         trackPick={trackPick}
         completed={completed}
-        eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={wedgeRinging}
+        eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)}
+        /* The red MONITOR EQ glow is the same nudge as the auto-open, just quieter,
+           so it obeys the same rule: only light it where the graphic EQ is actually
+           the tool for the job. In a lesson whose fix is a mute, an HPF, or where the
+           microphone stands, a red EQ button sends the student to cut frequencies for
+           no reason (Kyle 2026-07-22). Sandbox has no prescribed fix, so it keeps it. */
+        eqRinging={wedgeRinging && (eqIsTheFix || !!level.isSandbox)}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
         stageHidden={effStageHidden}
         onToggleStage={state.big16 ? (() => setStage16Open(v => !v)) : ((stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null)}
@@ -12066,7 +12230,7 @@ function App() {
         open={!!placementFor} srcKey={placementFor}
         label={placementFor && window.SOURCES[placementFor] ? window.SOURCES[placementFor].label : ''}
         setup={state.micSetup && placementFor ? state.micSetup[placementFor] : null}
-        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 135, tilt: 5 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
+        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 5, paX: 2.4 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
         onClose={() => setPlacementFor(null)}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
@@ -12486,7 +12650,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   if (theGig.length > 0) COURSES.push({ key: 'thegig', label: 'THE GIG', color: 'var(--hot)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'The capstone. A 16-channel system, nothing connected and nothing switched on. Get the show running.', rows: theGig });
   COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a system from nothing and run a full show. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MIXING MONITORS', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build each performer\'s monitor mix, keep it clean, and handle "more me" without making the wedge ring.', rows: monitors });
-  if (feedbackCourse.length > 0) COURSES.push({ key: 'feedback-course', label: 'MANAGING FEEDBACK', color: '#ff8f6b', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Stop the squeal: run the monitors loud but with headroom, aim the mic so the wedge does not ring, close the mics you are not using, and ring out the rest.', rows: feedbackCourse });
+  if (feedbackCourse.length > 0) COURSES.push({ key: 'feedback-course', label: 'MANAGING FEEDBACK', color: '#ff8f6b', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Stop the squeal: run the monitors loud but with headroom, stand the mics where the wedge and the mains cannot get back into them, close the mics you are not using, and ring out the rest.', rows: feedbackCourse });
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 680, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>

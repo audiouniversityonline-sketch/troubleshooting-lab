@@ -78,6 +78,8 @@ window.GLOSSARY = {
   // Feedback and EQ
   'feedback':    'An infinite loop where the output of a system feeds into its input.',
   'ring out':    'Cutting the frequencies that feed back first, so monitors are clearer and louder.',
+  'polar pattern': 'The directions a microphone picks up from, and the direction it rejects.',
+  'null':        'The direction a microphone rejects most. Aim it at a speaker to fight feedback.',
   'graphic EQ':  'An EQ with a row of sliders, each cutting or boosting one fixed frequency band.',
   'line check':  'Confirming every input reaches the console on the right channel and sounds clean.'
 };
@@ -3207,6 +3209,60 @@ window.MANAGE_FEEDBACK = [
     sabotage: (s) => { mwBoard(s); s.channels[0].aux1 = 0.3; return s; },
     solution: 'The monitor is loud but sits about 6 dB under the ring point. Pros leave that margin on purpose, because the stage only gets louder once the show starts.',
     defaultInspect: 'wedge',
+  },
+  {
+    id: 'fbAim',
+    title: 'Aim the Null',
+    task: true,
+    defs: ['polar pattern', 'null', 'feedback'],
+    requireMargin: { wedge: 6 },
+    hint: 'Nothing on the console is wrong here. The mic is the problem: a hypercardioid keeps a live lobe pointing straight out its back, and that is exactly where Wedge 1 is. Open PLACEMENT on the Vocal 1 mic and read the WEDGE PATH number as you change the pattern.',
+    hints: [
+      { title: 'Point the null at the wedge', target: 'placement-vocal', text: 'Open PLACEMENT on the Vocal 1 mic and fit a pattern whose null lands on the wedge, until Wedge 1 reads at least +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; return !ctx.feedback && !!fm && -fm.wedge >= 6 && !!c && (c.wedge || 0) >= 0.25; } },
+    ],
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'wedge', min: 0.25 },
+    ],
+    sabotage: (s) => {
+      // The console is set correctly. The fault is the microphone on the stand:
+      // a hypercardioid, held level, with one wedge directly in front of the
+      // singer. Its rear lobe points at the wedge, which costs about 13 dB of
+      // gain before feedback and rings at a send the cardioid handles fine.
+      mwBoard(s);
+      s.channels[0].aux1 = 0.55;
+      s.micSetup = { vocal: { pattern: 'hyper', az: 180, tilt: 5, paX: 2.4 } };
+      return s;
+    },
+    solution: 'A cardioid rejects most from straight behind, which is where a wedge in front of the singer sits. Supercardioid and hypercardioid reject to the rear sides instead and keep a live lobe behind, so they suit a pair of wedges angled off to the sides, not one wedge straight in front.',
+    defaultInspect: 'wedge',
+  },
+  {
+    id: 'fbPa',
+    title: 'Behind the Speakers',
+    task: true,
+    defs: ['mains', 'feedback'],
+    requireMargin: { mains: 6 },
+    hint: 'This ring is not coming from a wedge. Wedge 1 is not even in the mix. It is the main speakers getting back into the vocal mic, because someone set the mains upstage. Open PLACEMENT on the Vocal 1 mic and drag the main speaker along the floor.',
+    hints: [
+      { title: 'Get the mic behind the mains', target: 'placement-vocal', text: 'Open PLACEMENT on the Vocal 1 mic and drag the main speaker downstage until the mic sits well behind it and Main L reads at least +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; return !ctx.feedback && !!fm && -fm.mains >= 6 && !!c && ((c.pa_l || 0) + (c.pa_r || 0)) >= 0.3; } },
+    ],
+    involves: [1, 2, 3, 4],
+    conditions: [
+      { source: 'vocal', dest: 'pa', min: 0.3 },
+    ],
+    sabotage: (s) => {
+      // No wedge send at all: this loop is the main speakers into the vocal mic.
+      // The mains are set almost level with the mic line, so the mic sits in
+      // their coverage with the full main mix pointed at it. Nothing on the
+      // console fixes it. Moving the speakers does.
+      mwBoard(s);
+      s.channels[0].fader = 0.78;
+      s.micSetup = { vocal: { pattern: 'cardioid', az: 180, tilt: 5, paX: 0.2 } };
+      return s;
+    },
+    solution: 'Every open microphone belongs behind the front face of the main speakers. Stand above the stage and look down: if a mic is out past the boxes, no amount of EQ or gain trimming will save it.',
+    defaultInspect: 'pa',
   },
   {
     id: 'fb3',
