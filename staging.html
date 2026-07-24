@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=230"></script>
+<script src="content-staging.js?v=231"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -662,6 +662,15 @@ window.__cableAudit = function (opts) {
         if (sx > cd.x && sx < cd.r && sy > cd.y && sy < cd.b) (inside[cd.label] = inside[cd.label] || []).push(d / len);
       }
       void 0;
+    }
+    // These rules are about the STAGE PLOT. The overlay this samples also carries
+    // the console-side snake fan-out, whose lines are a bundle by design and
+    // would otherwise report as stacked forever. A cable counts as a stage cable
+    // when most of it is on the stage; the main snake still leaves for FOH.
+    if (plot) {
+      let on = 0;
+      for (const q of pts) if (q[0] >= plot.left && q[0] <= plot.right && q[1] >= plot.top && q[1] <= plot.bottom + 60) on++;
+      if (on / pts.length < 0.6) return;
     }
     // Each cable is rendered as three superimposed paths: a black outline, the
     // coloured core, and a fat transparent hit area. They share geometry exactly,
@@ -6641,7 +6650,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       //      clear right-side margin.
       //   2. No stacking — each cable gets its own offset within a lane.
       let cableLanes = null;
-      if (state.big16) {
+      {
+        // Runs for BOTH boards. This was gated to `if (state.big16)`, which meant
+        // the MX-8 stage had no measured lanes and, worse, no entry in
+        // __stageCardEls at all — so __cableAudit() had nothing to check there and
+        // reported nothing while cables ran through both mains (Kyle 2026-07-24).
+        // Every ref below is null-safe, so the smaller board simply contributes
+        // fewer devices.
         const rectOf = (el) => {
           if (!el) return null;
           const r = el.getBoundingClientRect();
@@ -6677,7 +6692,7 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
         // devices leave less room than that, the band wins and rides higher.
         const plotEl = cont.querySelector('[data-stage-plot]') || cont;
         const stageFloorY = (plotEl.getBoundingClientRect().bottom - cb.top) / S;
-        const N_FRONT = 5;              // mains L+R and wedges 1-3; W4 goes over the back
+        const N_FRONT = state.big16 ? 5 : 4;   // mains L+R plus wedges 1-3 (16ch) or 1-2 (MX-8)
         const MIN_PITCH = 7;
         const need = (N_FRONT - 1) * MIN_PITCH + 10;
         const laneTop = Math.min(maxBottom + 14, stageFloorY - 10 - need);
@@ -7347,8 +7362,8 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             // upstage wedge (W4, by the kit) rides the BACK EDGE lane (above
             // every card). Each port gets its own offset so parallel runs never
             // stack. See cableLanes in the compute() effect.
-            : (c.big16 && L
-                ? (c.to.y > 480
+            : (L
+                ? ((!c.big16 || c.to.y > 480)
                     ? window._polyRound([
                         c.from,
                         { x: L.descendX - c.portId * L.descendPitch, y: c.from.y },                                  // out into this port's own vertical lane, CLEAR of the box
