@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=229"></script>
+<script src="content-staging.js?v=230"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -632,7 +632,14 @@ window.__cableAudit = function (opts) {
   if (!svgs.length) return { error: 'no svg' };
   const stageSvg = svgs.map((s) => ({ s, n: s.querySelectorAll('path').length })).sort((a, b) => b.n - a.n)[0].s;
   const paths = Array.prototype.slice.call(stageSvg.querySelectorAll('path'));
-  const hits = [];
+  // The stage floor. Cables belong ON the stage: one that runs out of the bottom
+  // ends up over the brief card underneath, which is what the plot looked like
+  // before this check existed (Kyle 2026-07-24).
+  const plotEl = document.querySelector('[data-stage-plot]');
+  const plot = plotEl ? plotEl.getBoundingClientRect() : null;
+  const CONNECTORS = /SUB-SNAK|SUB-S|STAGE BOX|^\?$/i;
+  const hits = [], below = [], along = [], samples = [];
+  const seenGeom = new Map();   // geometry key -> cable index, so one cable counts once
   paths.forEach((p, i) => {
     let len;
     try { len = p.getTotalLength(); } catch (e) { return; }
@@ -642,24 +649,77 @@ window.__cableAudit = function (opts) {
     const step = Math.max(2, len / 400);
     // Record the path-length fractions where the line is inside each card.
     const inside = {};
+    const pts = [];
+    let worstBelow = 0;
     for (let d = 0; d <= len; d += step) {
       let pt;
       try { pt = p.getPointAtLength(d); } catch (e) { break; }
       const sx = ctm.a * pt.x + ctm.c * pt.y + ctm.e;
       const sy = ctm.b * pt.x + ctm.d * pt.y + ctm.f;
+      pts.push([sx, sy]);
+      if (plot && sy > plot.bottom) worstBelow = Math.max(worstBelow, sy - plot.bottom);
       for (const cd of cards) {
         if (sx > cd.x && sx < cd.r && sy > cd.y && sy < cd.b) (inside[cd.label] = inside[cd.label] || []).push(d / len);
       }
+      void 0;
     }
+    // Each cable is rendered as three superimposed paths: a black outline, the
+    // coloured core, and a fat transparent hit area. They share geometry exactly,
+    // so key on it and keep only the first — otherwise every cable looks like a
+    // three-way stack and every other finding is reported three times.
+    const key = pts.length + '|' + pts.slice(0, 40).map((q) => Math.round(q[0]) + ',' + Math.round(q[1])).join(';');
+    if (seenGeom.has(key)) return;
+    seenGeom.set(key, samples.length);
+    samples.push(pts);
     // A cable that TERMINATES at a card (its own connection: a snake tail into
     // its head, a return up into its speaker) has all its inside-points bunched
     // at one END. A real CROSSING passes through the MIDDLE. Flag a card only
     // when the line sits inside it away from both ends — that is the thing that
     // obscures a card, and the thing these lanes exist to prevent.
-    const ks = Object.keys(inside).filter((label) => inside[label].some((f) => f > 0.18 && f < 0.82));
+    // Connection boxes are where cables are MEANT to end up inside: a cable to a
+    // low port on the stage box has to travel down through the box's own bounds
+    // to reach it. They are keep-outs for the runs-along rule, not for crossing.
+    const ks = Object.keys(inside).filter((label) =>
+      !CONNECTORS.test(label) && inside[label].some((f) => f > 0.18 && f < 0.82));
     if (ks.length) hits.push({ path: i, cards: ks });
+    // RUNS ALONG a device: not through its middle, but hugging it for a long
+    // stretch, which reads as a cable draped over the gear. A cable that PLUGS
+    // INTO a box legitimately sits inside it for a few samples, so a device only
+    // counts if the path neither starts nor ends inside it.
+    const endsIn = (cd) => {
+      const a = pts[0], z = pts[pts.length - 1];
+      const inRect = (q) => q && q[0] > cd.x - 12 && q[0] < cd.r + 12 && q[1] > cd.y - 12 && q[1] < cd.b + 12;
+      return inRect(a) || inRect(z);
+    };
+    const alongCards = Object.keys(inside).filter((label) => {
+      if (ks.includes(label) || inside[label].length < 10) return false;
+      const cd = cards.find((c) => c.label === label);
+      return cd && !endsIn(cd);
+    });
+    if (alongCards.length) along.push({ path: i, cards: alongCards });
+    if (worstBelow > 1) below.push({ path: i, pxBelowStage: Math.round(worstBelow) });
   });
-  return { cards: cards.length, sampledPaths: paths.length, crossings: hits };
+  // STACKED: two cables sharing the same lane so closely they read as one line.
+  // Parallel runs are fine and realistic; runs that sit on top of each other are
+  // the thing that makes a stage plot unreadable.
+  const stacked = [];
+  const near = opts.stackPx != null ? opts.stackPx : 1.5;
+  for (let a = 0; a < samples.length; a++) {
+    for (let b = a + 1; b < samples.length; b++) {
+      let shared = 0;
+      const A = samples[a], B = samples[b];
+      for (let k = 0; k < A.length; k += 2) {
+        for (let m = 0; m < B.length; m += 2) {
+          if (Math.abs(A[k][0] - B[m][0]) < near && Math.abs(A[k][1] - B[m][1]) < near) { shared++; break; }
+        }
+      }
+      if (shared >= 30) stacked.push({ paths: [a, b], sharedSamples: shared });
+    }
+  }
+  const out = { cards: cards.length, sampledPaths: paths.length,
+                crossings: hits, alongDevice: along, belowStage: below, stacked: stacked };
+  out.clean = !hits.length && !along.length && !below.length && !stacked.length;
+  return out;
 };
 
 function sourceFor(s, chIdxZero) {
@@ -5049,7 +5109,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     }}>
       <ZoneHeader label="Stage" sublabel="band, sources, mains + wedges · downstage ↓ audience" badge="LIVE AREA" badgeColor="var(--green)"/>
 
-      <div data-stage-plot="1" style={{ position: 'relative', minHeight: big16 ? 860 : 480 }}>
+      <div data-stage-plot="1" style={{ position: 'relative', minHeight: big16 ? 900 : 512 }}>
         {/* DRUM RISER — a labelled platform outline around the whole kit cluster
             (kick, snare, toms, overheads), the drummer's vocal mic (VOX 4) and
             the drummer's monitor (Wedge 4). Renders first so it paints UNDER the
@@ -6597,22 +6657,42 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           ...['vx1', 'vx2', 'vx3'].map((k) => sourceRefs.current[k]), ...subSnakeEls];
         const downRects = downstageEls.map(rectOf).filter(Boolean);
         // Every card on the stage, for the upstage (back-edge) lane and the audit.
-        const allEls = [...downstageEls, wedge4OnStageRef.current, ...sourceKeys.map((k) => sourceRefs.current[k])];
+        // The stage box and the sub-snake heads are devices too. They were left
+        // out of this list, so nothing stopped a cable being draped along the
+        // side of the box and nothing reported it (Kyle 2026-07-24).
+        const boxEls = [stageBoxRef.current,
+                        ...document.querySelectorAll('[data-zoom-key="drum"],[data-zoom-key="backline"],[data-zoom-key="vocal"]')];
+        const allEls = [...downstageEls, wedge4OnStageRef.current, ...sourceKeys.map((k) => sourceRefs.current[k]), ...boxEls];
         const allRects = allEls.map(rectOf).filter(Boolean);
         const maxBottom = downRects.length ? Math.max(...downRects.map((r) => r.b)) : 0;
         const minTop = allRects.length ? Math.min(...allRects.map((r) => r.y)) : 0;
         const boxLeftX = sbRect ? (sbRect.left - cb.left) / S : 0;
+        // The front return trough. Two rules, both of which were being broken:
+        // it has to CLEAR the lowest device, and it has to FIT ON THE STAGE. The
+        // old lane was maxBottom + 26 with a fixed 7 px pitch and no idea where
+        // the floor was, so once the vocal sub-snake moved downstage the whole
+        // band ran off the bottom of the plot and over the brief card beneath it,
+        // and the ports were too close together to read apart (Kyle 2026-07-24).
+        // Now the band is solved for: reserve what the lanes need, and if the
+        // devices leave less room than that, the band wins and rides higher.
+        const plotEl = cont.querySelector('[data-stage-plot]') || cont;
+        const stageFloorY = (plotEl.getBoundingClientRect().bottom - cb.top) / S;
+        const N_FRONT = 5;              // mains L+R and wedges 1-3; W4 goes over the back
+        const MIN_PITCH = 7;
+        const need = (N_FRONT - 1) * MIN_PITCH + 10;
+        const laneTop = Math.min(maxBottom + 14, stageFloorY - 10 - need);
+        const laneBand = stageFloorY - 10 - laneTop;
         cableLanes = {
-          // Front-row returns run their floor segment here, each port a few px
-          // apart, all BELOW every downstage card.
-          frontFloorY: maxBottom + 26,
-          frontPitch: 7,
+          // Front-row returns run their floor segment here, each port its own
+          // lane, all BELOW every downstage card and all ON the stage.
+          frontFloorY: laneTop,
+          frontPitch: Math.max(MIN_PITCH, Math.min(12, laneBand / (N_FRONT - 1))),
           // W4's perimeter run rides above every card.
           backEdgeY: minTop - 20,
           // Returns drop straight down in the box's own clear right-side margin
           // (right of the rightmost card), each port in its own vertical lane.
           descendX: boxLeftX - 16,
-          descendPitch: 8,
+          descendPitch: 11,
           // Keep-out rects, exposed so window.__cableAudit() can verify no path
           // enters a card. Screen-space, matching getBBox() in the audit.
           cards: allRects,
@@ -7271,13 +7351,19 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
                 ? (c.to.y > 480
                     ? window._polyRound([
                         c.from,
-                        { x: c.from.x, y: L.frontFloorY + c.portId * L.frontPitch },  // down the box edge to this port's floor lane (offset DOWN so it is always below every card)
-                        { x: c.to.x,   y: L.frontFloorY + c.portId * L.frontPitch },  // along the floor, below every card
-                        c.to,                                                          // up into the speaker bottom
+                        { x: L.descendX - c.portId * L.descendPitch, y: c.from.y },                                  // out into this port's own vertical lane, CLEAR of the box
+                        { x: L.descendX - c.portId * L.descendPitch, y: L.frontFloorY + c.portId * L.frontPitch },   // down that lane to this port's floor lane
+                        { x: c.to.x,   y: L.frontFloorY + c.portId * L.frontPitch },                                 // along the floor, below every card
+                        c.to,                                                                                        // up into the speaker bottom
                       ], 8)
+                    // W4 is the ONLY cable on the back-edge lane, so it takes the
+                    // ascent lane straight, with no per-port offset. Offsetting it
+                    // walked it left into the keys DI on its way up, which is the
+                    // drum-monitor cable Kyle spotted running through the gear.
                     : window._polyRound([
                         c.from,
-                        { x: c.from.x, y: L.backEdgeY },   // up the box edge to the back-edge lane
+                        { x: L.descendX, y: c.from.y },    // out clear of the box first
+                        { x: L.descendX, y: L.backEdgeY }, // straight up, in the gap between the box and the keys DI
                         { x: c.to.x,   y: L.backEdgeY },   // along the back edge, above every card
                         c.to,                              // down into the wedge (top-connected)
                       ], 8))
