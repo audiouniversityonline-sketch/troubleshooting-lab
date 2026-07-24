@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=217"></script>
+<script src="content-staging.js?v=219"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -11433,7 +11433,18 @@ function App() {
     setPracticeFaultsState(n);
   };
   // Picking a level from the menu leaves any "practice what needs it" focus.
-  const pickLevel = (i) => { focusRef.current = null; loadLevel(i); };
+  // trackPick remembers that the student entered this lesson from the Live Sound
+  // 101 companion track, so the top bar can say "LESSON 3.2" instead of the
+  // lesson's home course ("PATCHING · 01 / 08"), which is what made the track
+  // feel like a menu of excerpts. It stores the id too, so navigating away with
+  // the arrows falls back to the normal label instead of mislabelling.
+  const [trackPick, setTrackPick] = uS(null);
+  const pickLevel = (i, code) => {
+    focusRef.current = null;
+    const sc = SCENARIOS[i];
+    setTrackPick(code && sc ? { id: sc.id, code } : null);
+    loadLevel(i);
+  };
   // Practice what needs it: drill the fault types that need practice, steering
   // the auto-generator at the member's rusty faults, and roll a fresh rep. The
   // focus persists across Next rep until they pick another level or change
@@ -11947,6 +11958,7 @@ function App() {
         level={level} levelIdx={levelIdx} totalLevels={SCENARIOS.length}
         solved={solved} audioOn={audioOn} setAudioOn={setAudioOn}
         onRestart={restart} onPrev={prev} onNext={next} onPick={pickLevel}
+        trackPick={trackPick}
         completed={completed}
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={wedgeRinging}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
@@ -12365,10 +12377,24 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
     const b = bandOf(s);
     if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i }); else if (b === 'INPUT') inputSetup.push({ s, i }); else if (b === 'SYSTEM') systemLevel.push({ s, i }); else if (b === 'BIG16') bigBoard.push({ s, i }); else if (b === 'CHECK') soundcheck.push({ s, i }); else if (b === 'FBK') feedbackCourse.push({ s, i }); else if (b === 'GIG') theGig.push({ s, i });
   });
+  // Live Sound 101 companion track: the SAME exercises, re-ordered to follow the
+  // course lesson by lesson, so a student who just watched a video can find the
+  // matching hands-on exercise by its lesson number. Resolved by lesson id, so it
+  // reuses existing content instead of duplicating it, and an id that isn't in
+  // SCENARIOS is simply skipped — that is how exercises whose mechanic isn't
+  // built yet (hum, routing, mic placement) stay out of the menu until they are.
+  // `head` marks the first row of each course lesson so the list can group.
+  const ls101 = [];
+  (window.LS101_TRACK || []).forEach((t) => {
+    const i = SCENARIOS.findIndex((s) => String(s.id) === String(t.id));
+    if (i < 0) return;
+    const head = ls101.length === 0 || ls101[ls101.length - 1].code !== t.code;
+    ls101.push({ s: SCENARIOS[i], i, code: t.code, lesson: t.lesson, head });
+  });
   const practiceIdx = SCENARIOS.findIndex((s) => s.isPractice);
   const feedbackIdx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
   const sandboxIdx = SCENARIOS.findIndex((s) => s.isSandbox);
-  const go = (i) => { if (i >= 0) { onPick(i); onClose(); } };
+  const go = (i, code) => { if (i >= 0) { onPick(i, code); onClose(); } };
   const startBtn = (label, onClick) => (
     <button onClick={onClick} className="mono ui-no-select" style={{
       width: '100%', padding: '9px 12px', fontSize: 11, fontWeight: 800, letterSpacing: 0.6,
@@ -12384,10 +12410,11 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   ];
   // A course row in the Learn pane. `num` is the lesson's position WITHIN its
   // course (01, 02 ...); `free` unlocks it for the free tier (Mixer Tutorial).
-  const courseRow = ({ s, i }, num, free) => {
+  const courseRow = (row, num, free) => {
+    const { s, i } = row;
     const locked = !isMember && !free;
     return (
-      <div key={s.id} onClick={() => go(i)} className="ui-no-select"
+      <div key={s.id} onClick={() => go(i, row.code)} className="ui-no-select"
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 5, cursor: 'pointer', background: i === levelIdx ? '#2a2a2e' : 'transparent' }}
         onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
         onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
@@ -12400,6 +12427,9 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // the other two are gated, and a free viewer sees a lock instead of an
   // expander on them.
   const COURSES = [];
+  // The companion track goes FIRST: for a member working through Live Sound 101
+  // it is the spine, and the topical courses below are depth on one skill.
+  if (ls101.length > 0) COURSES.push({ key: 'ls101', label: 'LIVE SOUND 101', color: '#7ee787', tag: isMember ? 'COURSE' : 'MEMBERS', free: false, grouped: true, blurb: 'The hands-on half of the Live Sound 101 course. Each group below matches a lesson in the course, so when a video sends you here, find its lesson number and work through the exercises under it.', rows: ls101 });
   if (startHere.length) COURSES.push({ key: 'starthere', label: 'START HERE', color: 'var(--green)', tag: 'FREE', free: true, blurb: 'Start here to learn the essential skills, one step at a time.', rows: startHere });
   if (patching.length > 0) COURSES.push({ key: 'patching', label: 'PATCHING', color: 'var(--cool)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Read the input list, patch the system, and find the fault when a cable is wrong.', rows: patching });
   if (power.length > 0) COURSES.push({ key: 'power', label: 'POWER', color: 'var(--amber)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Hear the pop that bad power order causes, then learn the correct order up and down.', rows: power });
@@ -12473,7 +12503,16 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                       {isOpen && (
                         <div style={{ padding: '0 10px 8px', borderTop: '1px solid #222226' }}>
                           {co.blurb && <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.45, margin: '8px 2px' }}>{co.blurb}</div>}
-                          {co.rows.map((row, n) => courseRow(row, n + 1, co.free))}
+                          {co.rows.map((row, n) => (
+                            (co.grouped && row.head) ? (
+                              <React.Fragment key={'grp-' + row.s.id}>
+                                <div className="mono" style={{ fontSize: 8.5, letterSpacing: 0.9, fontWeight: 700, color: 'var(--ink-3)', margin: n === 0 ? '8px 2px 4px' : '12px 2px 4px', paddingTop: n === 0 ? 0 : 8, borderTop: n === 0 ? 'none' : '1px solid #222226' }}>
+                                  {(row.code === 'LAB' ? 'LAB ORIENTATION' : 'LESSON ' + row.code) + ' · ' + String(row.lesson || '').toUpperCase()}
+                                </div>
+                                {courseRow(row, n + 1, co.free)}
+                              </React.Fragment>
+                            ) : courseRow(row, n + 1, co.free)
+                          ))}
                         </div>
                       )}
                     </div>
@@ -12526,7 +12565,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, feedbackFreeLabel, feedbackExhausted, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, stage16Open, consoleSize, onSetConsoleSize, sizeSelectable, big16, zoomPct, onZoomIn, onZoomOut, onZoomReset }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, trackPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, feedbackFreeLabel, feedbackExhausted, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, stage16Open, consoleSize, onSetConsoleSize, sizeSelectable, big16, zoomPct, onZoomIn, onZoomOut, onZoomReset }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -12605,7 +12644,9 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         <button onClick={onPrev} disabled={levelIdx === 0} className="mono ui-no-select" style={navBtn}>←</button>
         <div onClick={() => setPicker(p => !p)} style={{ position: 'relative', cursor: 'pointer', minWidth: 320, textAlign: 'center' }} className="ui-no-select">
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5 }}>
-            {level.isPractice
+            {(trackPick && String(level.id) === String(trackPick.id))
+              ? (trackPick.code === 'LAB' ? 'LIVE SOUND 101 · LAB ORIENTATION' : 'LIVE SOUND 101 · LESSON ' + trackPick.code)
+              : level.isPractice
               ? (practiceFreeLeft != null ? 'PRACTICE MODE · FREE PREVIEW' : 'PRACTICE MODE · MEMBERS')
               : level.isFeedbackMode
               ? 'EAR TRAINING · MEMBERS'

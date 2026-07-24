@@ -3277,3 +3277,66 @@ window.MANAGE_FEEDBACK = [
     defaultInspect: 'wedge',
   },
 ];
+
+// ============================================================
+// LIVE SOUND 101 COMPANION TRACK — Kyle 2026-07-24
+// The Lab's exercises re-ordered to run alongside the Live Sound 101 course,
+// one group per course lesson, so a student finishing a video can open the Lab
+// and find the matching hands-on exercise by its lesson number.
+//
+// `code` is the LS101 lesson coordinate. NOTE the Section 4 numbering assumes
+// the new "Powering Up the System" video is inserted as S4.L1, which bumps
+// Channel Strip -> 4.2, Busses -> 4.3, Calibrating -> 4.4.
+//
+// Lessons with NO exercise (deliberately, not an oversight):
+//   1.2 Tracing        - same skill as 1.1, folded in
+//   2.1 Power/cables/placement - venue planning, no console action
+//   3.4 Consumer Devices - the real takeaway is gain structure, folded into 4.4
+//   4.2 Channel Strip  - would need channel EQ + compressor on every strip;
+//                        Kyle's existing walkthrough videos cover it instead
+//   5.4 Workbox        - physical kit
+//
+// PENDING mechanics (rows appear once the mechanic is built):
+//   3.3 hum / ground lift, 4.3 main-mix assign + pre/post fader,
+//   3.2 mic placement (null aiming + mic vs the mains)
+// ============================================================
+window.LS101_TRACK = [
+  { code: '1.1', lesson: 'Signal Flow', id: 'pt0' },
+  { code: '1.1', lesson: 'Signal Flow', id: 'pt3' },
+  { code: '2.2', lesson: 'Outputs', id: 'pt2' },
+  { code: '2.2', lesson: 'Outputs', id: 'ptSwap' },
+  { code: '3.1', lesson: 'Mic Types', id: 'is2' },
+  { code: '3.2', lesson: 'Microphone Feedback', id: 'fb1' },
+  { code: '3.2', lesson: 'Microphone Feedback', id: 'fb2' },
+  { code: '3.2', lesson: 'Microphone Feedback', id: 'fb3' },
+  { code: '3.2', lesson: 'Microphone Feedback', id: 'fb4' },
+  { code: '3.2', lesson: 'Microphone Feedback', id: 'fb5' },
+  { code: '3.3', lesson: 'DI Boxes', id: 'is3' },
+  { code: '4.1', lesson: 'Powering Up the System', id: 'pwPop' },
+  { code: '4.1', lesson: 'Powering Up the System', id: 'pwUp' },
+  { code: '4.1', lesson: 'Powering Up the System', id: 'pwDown' },
+  { code: '4.3', lesson: 'Busses and Master', id: 'mw1' },
+  { code: '4.4', lesson: 'Calibrating the System', id: 'is1' },
+  { code: '4.4', lesson: 'Calibrating the System', id: 'sy1' },
+  { code: '4.4', lesson: 'Calibrating the System', id: 'sy2' },
+  { code: '4.4', lesson: 'Calibrating the System', id: 'sy3' },
+  { code: '4.4', lesson: 'Calibrating the System', id: 'sy4' },
+  // Lab orientation, not an LS101 lesson: the soundcheck and the capstone both
+  // run on the 16-channel board, so this comes first or they arrive cold.
+  { code: 'LAB', lesson: 'Using the 16-Channel Board', id: 'bg1' },
+  { code: 'LAB', lesson: 'Using the 16-Channel Board', id: 'bg2' },
+  { code: 'LAB', lesson: 'Using the 16-Channel Board', id: 'bg3' },
+  { code: 'LAB', lesson: 'Using the 16-Channel Board', id: 'bg4' },
+  { code: '5.1', lesson: 'Soundcheck', id: 'sc1' },
+  { code: '5.1', lesson: 'Soundcheck', id: 'sc2' },
+  { code: '5.1', lesson: 'Soundcheck', id: 'sc3' },
+  { code: '5.1', lesson: 'Soundcheck', id: 'sc4' },
+  { code: '5.1', lesson: 'Soundcheck', id: 'sc5' },
+  { code: '5.1', lesson: 'Soundcheck', id: 'sc6' },
+  { code: '5.2', lesson: 'Troubleshooting', id: 'pt4' },
+  { code: '5.2', lesson: 'Troubleshooting', id: 'pt5' },
+  { code: '5.2', lesson: 'Troubleshooting', id: 'is4' },
+  { code: '5.2', lesson: 'Troubleshooting', id: 'is5' },
+  { code: '5.3', lesson: 'Advance Work', id: 'pt1' },
+  { code: '5.5', lesson: 'Final Lesson', id: 'gig1' },
+];
