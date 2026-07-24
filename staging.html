@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=226"></script>
+<script src="content-staging.js?v=227"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1721,28 +1721,36 @@ window.speakerLiveForPatch = speakerLiveForPatch;
 // never truly -inf (mfrs spec -15..-25 dB rear, best case a little past that).
 const MIC_A3 = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
 const POLAR_FLOOR = 0.045;
-// Degrees the floor wedge sits below the mic. Derived from a researched scene,
-// not picked, and every number in it is sourced:
-//   - a wedge's angle is quoted FLOOR to BAFFLE PLANE. 40 and 50 deg are the
-//     common pair, 55 for a performer further back, 30 for one almost on top of
-//     it. JBL publish 50 deg for the SRX812, so 50 is the scene's cabinet.
-//   - a wedge is aimed so its high-frequency axis lands on the performer's EARS
-//     (Kyle, and the standard placement guidance).
-//   - a performer stands 3 to 6 ft back from it.
-// Those cross-check: a 50 deg cabinet whose axis hits an ear at 1.60 m sits
-// 5.1 ft in front of the performer, in the middle of the quoted range. With the
-// capsule 0.15 m in front of the mouth at 1.52 m, the drop from capsule to wedge
-// is 43 deg.
+// Degrees the floor wedge sits below the mic. Derived from a surveyed scene, not
+// from one company's spec sheet.
 //
-// This replaces 50, which was wrong and had a real consequence. At 50 the wedge
-// landed on a supercardioid's null and the Lab taught that a supercardioid is
-// the mic for a wedge straight ahead. At the researched 43, with the mic angled
-// up at the mouth, the wedge sits ~147 deg off axis, where a CARDIOID rejects
-// best, which is the actual guidance: put the back of a cardioid at the monitor,
-// and offset the wedge to the side for a super or hyper. Reaching a super's null
-// takes wedges spread surprisingly wide or a severe mic angle, not one wedge in
-// front of the singer.
-const FLOOR_DROP = 43;
+// A wedge's angle is quoted FLOOR to BAFFLE PLANE. Normalising every figure to
+// that one definition, and computing it from the cabinet where a brand publishes
+// only dimensions:
+//   EAW MicroWedge MW12   27 deg published, 37 from its own drawing (13.1"H/17.3"D)
+//   Rat Sound MicroWedge  31 from dimensions (13"H/22"D)
+//   Meyer Sound MJF-212A  40 ("enclosure front angle")
+//   Martin Audio LE400C   40 one way up, 50 flipped ("angle of fire")
+//   Electro-Voice PXM-12MP 55 ("monitor floor angle")
+// Seven purpose-built wedges across six companies: mean 40, median 40, range
+// 27-55. Practitioners quote 30/40/45/50/55/60 as the set, with 40 and 50 "the
+// usual pair" chosen by how far back the performer stands. So the scene uses 40.
+//
+// JBL's 50 is deliberately NOT the anchor (Kyle 2026-07-24). It sits at the top
+// of the range, and the SRX812 is a main speaker with a monitor facet rather than
+// a purpose-built wedge. Including it anyway barely moves the average (41.2).
+//
+// A 40 deg cabinet, 17" deep by 14" tall, aimed so its axis lands on an ear at
+// 1.60 m, sits 3.9 ft in front of the performer, inside the 3-to-6 ft the
+// placement guidance gives. With the capsule 0.15 m in front of the mouth at
+// 1.52 m, that puts the wedge 55 deg below the capsule.
+//
+// This is why a SUPERCARDIOID is the standard stage vocal mic. At 55 deg below,
+// with the mic angled up at the mouth, the wedge sits ~135 deg off axis, and a
+// supercardioid rejects 6.7 dB harder there than a cardioid. Level the mic and
+// the wedge lands on its 127 deg null exactly. Tilt well up and a cardioid takes
+// over. The right pattern depends on where the wedge is, which is the point.
+const FLOOR_DROP = 55;
 // A mic's sensitivity at an angle whose cosine is cosT, for pattern `pat`.
 // One shared polar law for both loops (wedge and mains) so a pattern change
 // can never move one and not the other.
@@ -4085,7 +4093,7 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   const a = A[pat];
   const d2r = (d) => d * Math.PI / 180;
   const rOf = (aa, deg) => Math.abs(aa + (1 - aa) * Math.cos(d2r(deg)));
-  const FLOOR_DROP = 43;
+  const FLOOR_DROP = 55;
   const eff = { pattern: pat, az: 180, tilt, paX };
 
   // Both readings straight off the engine, converted to gain before feedback:
@@ -4100,24 +4108,23 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   // ---- scene, in metres, uniformly scaled so every drawn angle is true ----
   // The whole scene is pinned by one constraint (Kyle 2026-07-24): the wedge is
   // aimed ON AXIS at the singer's ear, so a line drawn perpendicular to its
-  // angled baffle lands on the ear. Every dimension below is researched, and they
-  // agree with each other: a 50 deg cabinet (JBL's published figure for the
-  // SRX812) whose axis hits an ear at 1.60 m lands 5.1 ft in front of the
-  // performer, which is the middle of the 3-to-6 ft the placement guidance gives.
-  // Capsule 0.15 m in front of the mouth, angled up at it, puts the wedge 43 deg
-  // below the capsule. The engine reads the same 43, so the picture and the loop
-  // cannot disagree.
+  // angled baffle lands on the ear. The cabinet is 17" deep by 14" tall, which
+  // makes its baffle 40 deg off the floor: the mean AND median of seven
+  // purpose-built wedges across six companies, not one brand's figure. Aimed at
+  // an ear at 1.60 m that lands 3.9 ft in front of the performer, inside the
+  // 3-to-6 ft the placement guidance gives, and puts the wedge 55 deg below a
+  // capsule sitting 0.15 m in front of the mouth. The engine reads the same 55.
   const VW = 700, VH = 380, X0 = -1.70, Z1 = 2.86, S = VW / 5.35;
   const px = (x) => (x - X0) * S;
   const pz = (z) => (Z1 - z) * S;
   const PA_MIN = -1.2, PA_MAX = 3.4;
-  const EAR = [-0.25, 1.60], MOUTH = [-0.15, 1.55], HEAD = [-0.22, 1.67];
+  const EAR = [-0.25, 1.60], MOUTH = [-0.15, 1.55], HEAD = [-0.28, 1.67];
   const MIC = [px(0), pz(1.52)];
   // Wedge cabinet in side elevation: bottom edge on the floor, vertical back
   // downstage, and the baffle running from the front-bottom corner up to the
   // back-top corner. 0.50 m deep by 0.60 m tall makes that baffle 50 deg off the
   // floor, the published angle, and puts its acoustic centre at (1.30, 0.30).
-  const WA = [1.05, 0], WB = [1.55, 0], WC = [1.55, 0.60];
+  const WA = [0.727, 0], WB = [1.157, 0], WC = [1.157, 0.36];
   const WBC = [(WA[0] + WC[0]) / 2, (WA[1] + WC[1]) / 2]; // baffle centre
   const WEDGE = [px(WBC[0]), pz(WBC[1])];
   const SPK = [px(paX), pz(2.12)];

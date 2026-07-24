@@ -3216,7 +3216,7 @@ window.MANAGE_FEEDBACK = [
     task: true,
     defs: ['polar pattern', 'null', 'feedback'],
     requireMargin: { wedge: 6 },
-    hint: 'Nothing on the console is wrong here. The mic is the problem. A wedge in front of a singer sits about 43 degrees below the capsule, and with the mic angled up at the mouth that puts it near the back of the pattern. A cardioid rejects hardest straight out the back, so that is where it belongs. A hypercardioid keeps a live lobe back there instead. Open PLACEMENT on the Vocal 1 mic and watch the WEDGE PATH number as you change the pattern.',
+    hint: 'Nothing on the console is wrong here. The mic is the problem. A wedge in front of a singer sits low and close, about 55 degrees below the capsule, so it is not straight behind the mic, it is well under it. A supercardioid rejects hardest at about that angle, which is why it is the standard stage vocal mic. Open PLACEMENT on the Vocal 1 mic and watch the WEDGE PATH number as you change the pattern.',
     hints: [
       { title: 'Point the null at the wedge', target: 'placement-vocal', text: 'Open PLACEMENT on the Vocal 1 mic and put a null on the wedge, with the pattern or the tilt, until Wedge 1 reads at least +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; return !ctx.feedback && !!fm && -fm.wedge >= 6 && !!c && (c.wedge || 0) >= 0.25; } },
     ],
@@ -3226,19 +3226,20 @@ window.MANAGE_FEEDBACK = [
     ],
     sabotage: (s) => {
       // The console is set correctly. The fault is the microphone on the stand.
-      // The wedge sits 43 deg below the capsule (researched geometry: a 50 deg
-      // cabinet aimed at the ear, 5 ft out) and the mic is angled up at the
-      // mouth, which puts the wedge about 147 deg off axis. Measured at aux 0.55:
-      // hypercardioid -4.5 dB and ringing, supercardioid +3.2 which stops the
-      // ring but misses the 6 dB gate, cardioid +8.6 which passes. Tilting a
-      // cardioid up, or tilting a supercardioid DOWN so the wedge lands in its
-      // 127 deg null, both reach +13.7. Wrong mic, two right answers.
+      // The wedge sits 55 deg below the capsule (surveyed geometry: a 40 deg
+      // cabinet, the mean of seven wedges across six brands, aimed at the ear
+      // 3.9 ft out) and the mic is angled up at the mouth, which puts the wedge
+      // about 135 deg off axis. Measured at aux 0.70: hypercardioid -3.1 and
+      // ringing, cardioid +2.6 which stops the ring but misses the 6 dB gate,
+      // supercardioid +9.4 which passes. Levelling the supercardioid drops the
+      // wedge onto its 127 deg null for +12.8, and a cardioid tilted well up
+      // reaches +12.5. Wrong mic, more than one right answer.
       mwBoard(s);
-      s.channels[0].aux1 = 0.55;
+      s.channels[0].aux1 = 0.70;
       s.micSetup = { vocal: { pattern: 'hyper', az: 180, tilt: 10, paX: 2.4 } };
       return s;
     },
-    solution: 'With one wedge in front of a singer, put the back of a cardioid on it. That is where a cardioid rejects hardest, and tilting the mic up swings the null further onto the wedge. Supercardioid and hypercardioid reject furthest at about 120 degrees off the front instead, so they want the wedge offset to one side, or a pair of wedges spread wide. They are not worse microphones, they just want a different stage.',
+    solution: 'A floor wedge is not straight behind the mic, it is low and close, about 55 degrees under the capsule. A supercardioid rejects hardest around 125 degrees off the front, which is almost exactly where that wedge sits, and that is why a supercardioid is the standard stage vocal mic. A cardioid rejects straight out the back, so it wants the mic tilted well up, or the wedge further out and flatter. A hypercardioid reaches furthest round, about 110 degrees, so it suits a wedge off to one side rather than straight ahead. There is no best pattern, only the one that puts a null where your wedge actually is.',
     defaultInspect: 'wedge',
   },
   {
