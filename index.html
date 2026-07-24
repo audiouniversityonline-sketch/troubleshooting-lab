@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=98"></script>
+<script src="content.js?v=99"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -632,7 +632,14 @@ window.__cableAudit = function (opts) {
   if (!svgs.length) return { error: 'no svg' };
   const stageSvg = svgs.map((s) => ({ s, n: s.querySelectorAll('path').length })).sort((a, b) => b.n - a.n)[0].s;
   const paths = Array.prototype.slice.call(stageSvg.querySelectorAll('path'));
-  const hits = [];
+  // The stage floor. Cables belong ON the stage: one that runs out of the bottom
+  // ends up over the brief card underneath, which is what the plot looked like
+  // before this check existed (Kyle 2026-07-24).
+  const plotEl = document.querySelector('[data-stage-plot]');
+  const plot = plotEl ? plotEl.getBoundingClientRect() : null;
+  const CONNECTORS = /SUB-SNAK|SUB-S|STAGE BOX|^\?$/i;
+  const hits = [], below = [], along = [], samples = [];
+  const seenGeom = new Map();   // geometry key -> cable index, so one cable counts once
   paths.forEach((p, i) => {
     let len;
     try { len = p.getTotalLength(); } catch (e) { return; }
@@ -642,24 +649,86 @@ window.__cableAudit = function (opts) {
     const step = Math.max(2, len / 400);
     // Record the path-length fractions where the line is inside each card.
     const inside = {};
+    const pts = [];
+    let worstBelow = 0;
     for (let d = 0; d <= len; d += step) {
       let pt;
       try { pt = p.getPointAtLength(d); } catch (e) { break; }
       const sx = ctm.a * pt.x + ctm.c * pt.y + ctm.e;
       const sy = ctm.b * pt.x + ctm.d * pt.y + ctm.f;
+      pts.push([sx, sy]);
+      if (plot && sy > plot.bottom) worstBelow = Math.max(worstBelow, sy - plot.bottom);
       for (const cd of cards) {
         if (sx > cd.x && sx < cd.r && sy > cd.y && sy < cd.b) (inside[cd.label] = inside[cd.label] || []).push(d / len);
       }
+      void 0;
     }
+    // These rules are about the STAGE PLOT. The overlay this samples also carries
+    // the console-side snake fan-out, whose lines are a bundle by design and
+    // would otherwise report as stacked forever. A cable counts as a stage cable
+    // when most of it is on the stage; the main snake still leaves for FOH.
+    if (plot) {
+      let on = 0;
+      for (const q of pts) if (q[0] >= plot.left && q[0] <= plot.right && q[1] >= plot.top && q[1] <= plot.bottom + 60) on++;
+      if (on / pts.length < 0.6) return;
+    }
+    // Each cable is rendered as three superimposed paths: a black outline, the
+    // coloured core, and a fat transparent hit area. They share geometry exactly,
+    // so key on it and keep only the first — otherwise every cable looks like a
+    // three-way stack and every other finding is reported three times.
+    const key = pts.length + '|' + pts.slice(0, 40).map((q) => Math.round(q[0]) + ',' + Math.round(q[1])).join(';');
+    if (seenGeom.has(key)) return;
+    seenGeom.set(key, samples.length);
+    samples.push(pts);
     // A cable that TERMINATES at a card (its own connection: a snake tail into
     // its head, a return up into its speaker) has all its inside-points bunched
     // at one END. A real CROSSING passes through the MIDDLE. Flag a card only
     // when the line sits inside it away from both ends — that is the thing that
     // obscures a card, and the thing these lanes exist to prevent.
-    const ks = Object.keys(inside).filter((label) => inside[label].some((f) => f > 0.18 && f < 0.82));
+    // Connection boxes are where cables are MEANT to end up inside: a cable to a
+    // low port on the stage box has to travel down through the box's own bounds
+    // to reach it. They are keep-outs for the runs-along rule, not for crossing.
+    const ks = Object.keys(inside).filter((label) =>
+      !CONNECTORS.test(label) && inside[label].some((f) => f > 0.18 && f < 0.82));
     if (ks.length) hits.push({ path: i, cards: ks });
+    // RUNS ALONG a device: not through its middle, but hugging it for a long
+    // stretch, which reads as a cable draped over the gear. A cable that PLUGS
+    // INTO a box legitimately sits inside it for a few samples, so a device only
+    // counts if the path neither starts nor ends inside it.
+    const endsIn = (cd) => {
+      const a = pts[0], z = pts[pts.length - 1];
+      const inRect = (q) => q && q[0] > cd.x - 12 && q[0] < cd.r + 12 && q[1] > cd.y - 12 && q[1] < cd.b + 12;
+      return inRect(a) || inRect(z);
+    };
+    const alongCards = Object.keys(inside).filter((label) => {
+      if (ks.includes(label) || inside[label].length < 10) return false;
+      const cd = cards.find((c) => c.label === label);
+      return cd && !endsIn(cd);
+    });
+    if (alongCards.length) along.push({ path: i, cards: alongCards });
+    if (worstBelow > 1) below.push({ path: i, pxBelowStage: Math.round(worstBelow) });
   });
-  return { cards: cards.length, sampledPaths: paths.length, crossings: hits };
+  // STACKED: two cables sharing the same lane so closely they read as one line.
+  // Parallel runs are fine and realistic; runs that sit on top of each other are
+  // the thing that makes a stage plot unreadable.
+  const stacked = [];
+  const near = opts.stackPx != null ? opts.stackPx : 1.5;
+  for (let a = 0; a < samples.length; a++) {
+    for (let b = a + 1; b < samples.length; b++) {
+      let shared = 0;
+      const A = samples[a], B = samples[b];
+      for (let k = 0; k < A.length; k += 2) {
+        for (let m = 0; m < B.length; m += 2) {
+          if (Math.abs(A[k][0] - B[m][0]) < near && Math.abs(A[k][1] - B[m][1]) < near) { shared++; break; }
+        }
+      }
+      if (shared >= 30) stacked.push({ paths: [a, b], sharedSamples: shared });
+    }
+  }
+  const out = { cards: cards.length, sampledPaths: paths.length,
+                crossings: hits, alongDevice: along, belowStage: below, stacked: stacked };
+  out.clean = !hits.length && !along.length && !below.length && !stacked.length;
+  return out;
 };
 
 function sourceFor(s, chIdxZero) {
@@ -839,6 +908,23 @@ function computeAudio(s, envelope) {
     return chanIn[i].level * faderGain(ch.fader) * dcaGainFor(s, i);
   });
 
+  // MAIN MIX ASSIGN (the LR / MAIN routing button). A channel only reaches the
+  // audience when it is assigned to the main mix. Aux sends are deliberately NOT
+  // gated by this: an unassigned channel can still be loud in a monitor mix,
+  // which is exactly what makes the fault confusing on a real desk — the
+  // performer hears themselves fine and insists the channel works, but the room
+  // gets nothing. `post` itself is left alone so the channel's own meter keeps
+  // reading; the fader IS working, the signal just isn't routed anywhere.
+  // Defaults to assigned, so every existing lesson and scenario is unchanged.
+  const toMain = s.channels.map((ch) => (ch.toMain === false ? 0 : 1));
+  // PRE-FADER vs POST-FADER aux sends. Pre-fader is the default and the standard
+  // for monitor mixes: the send is taken BEFORE the channel fader, so riding the
+  // fader for the room never changes what the performer hears. Post-fader follows
+  // the channel fader, which is what a recording or stream feed wants. Stored per
+  // aux bus on the master section (state.master.auxPost[n]); absent = pre-fader.
+  const auxIsPost = (n) => !!(s.master && s.master.auxPost && s.master.auxPost[n]);
+  const auxFeed = (n, i) => (auxIsPost(n) ? post[i] : chanIn[i].level);
+
   // POWER SUMMING. Different sources (a voice, a bass, a keyboard) are
   // uncorrelated signals, and uncorrelated signals don't stack amplitude-to-
   // amplitude — their POWERS add, so the combined level grows as the square
@@ -855,8 +941,8 @@ function computeAudio(s, envelope) {
   let mixL2 = 0, mixR2 = 0;
   for (let i = 0; i < s.channels.length; i++) {
     const g = panGains(s.channels[i].pan);
-    const vL = post[i] * g.L;
-    const vR = post[i] * g.R;
+    const vL = post[i] * g.L * toMain[i];
+    const vR = post[i] * g.R * toMain[i];
     mixL2 += vL * vL;
     mixR2 += vR * vR;
   }
@@ -901,7 +987,7 @@ function computeAudio(s, envelope) {
     // regardless of what the engineer is listening to in their cans. (A DCA
     // does NOT scale the aux send: monitor sends are pre-fader, so the DCA's
     // fader only rides the main-mix path.)
-    return chanIn[i].level * knobGain(ch.aux1);
+    return auxFeed(1, i) * knobGain(ch.aux1);
   });
   // AUX 1 / AUX 2 SEND BUSES — sum of all channels' aux send levels through
   // the per-bus master send. These represent what's leaving the desk on each
@@ -915,7 +1001,7 @@ function computeAudio(s, envelope) {
   const aux2 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
     // PFL does NOT gate aux 2 either.
-    return chanIn[i].level * knobGain(ch.aux2);
+    return auxFeed(2, i) * knobGain(ch.aux2);
   });
   const wedge2Mix = Math.sqrt(aux2.reduce((a, b) => a + b * b, 0)) * aux2MasterGain * (mixerOn ? 1 : 0);
   const w2 = o.wedge2 || { on: true, mute: false, volume: 0 };
@@ -925,14 +1011,14 @@ function computeAudio(s, envelope) {
   // mixer-gated math as aux 1/2.
   const aux3 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
-    return chanIn[i].level * knobGain(ch.aux3 || 0);
+    return auxFeed(3, i) * knobGain(ch.aux3 || 0);
   });
   const wedge3Mix = Math.sqrt(aux3.reduce((a, b) => a + b * b, 0)) * aux3MasterGain * (mixerOn ? 1 : 0);
   const w3 = o.wedge3 || { on: true, mute: false, volume: 0 };
 
   const aux4 = s.channels.map((ch, i) => {
     if (ch.mute || chMutedByGroup(s, i)) return 0;
-    return chanIn[i].level * knobGain(ch.aux4 || 0);
+    return auxFeed(4, i) * knobGain(ch.aux4 || 0);
   });
   const wedge4Mix = Math.sqrt(aux4.reduce((a, b) => a + b * b, 0)) * aux4MasterGain * (mixerOn ? 1 : 0);
   const w4 = o.wedge4 || { on: true, mute: false, volume: 0 };
@@ -992,8 +1078,8 @@ function computeAudio(s, envelope) {
       if (chanIn[i].srcKey !== srcKey) continue;
       const ch = s.channels[i];
       const g = panGains(ch.pan);
-      cL += post[i] * g.L;
-      cR += post[i] * g.R;
+      cL += post[i] * g.L * toMain[i];
+      cR += post[i] * g.R * toMain[i];
       cA1 += aux1[i];
       cA2 += aux2[i];
       cA3 += aux3[i];
@@ -1700,30 +1786,71 @@ window.speakerLiveForPatch = speakerLiveForPatch;
 // WORSE — the bug this replaces.) a: cardioid .5 / super .375 / hyper .25 sets
 // where the null falls (cardioid straight back at 180°, super ~125°, hyper ~110°,
 // with super/hyper keeping a live rear lobe behind — a hyper pointed rear-at-wedge
-// is worse than a super). Floor 0.1 (~ -20 dB): a real null is deep but never
-// truly -inf (mfrs spec -15..-25 dB rear).
+// is worse than a super). POLAR_FLOOR 0.045 (~ -27 dB): a real null is deep but
+// never truly -inf (mfrs spec -15..-25 dB rear, best case a little past that).
 const MIC_A3 = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
-const FLOOR_DROP = 35; // degrees a floor wedge sits below the mic
+const POLAR_FLOOR = 0.045;
+// Degrees the floor wedge sits below the mic. Derived from a surveyed scene, not
+// from one company's spec sheet.
+//
+// A wedge's angle is quoted FLOOR to BAFFLE PLANE. Normalising every figure to
+// that one definition, and computing it from the cabinet where a brand publishes
+// only dimensions:
+//   EAW MicroWedge MW12   27 deg published, 37 from its own drawing (13.1"H/17.3"D)
+//   Rat Sound MicroWedge  31 from dimensions (13"H/22"D)
+//   Meyer Sound MJF-212A  40 ("enclosure front angle")
+//   Martin Audio LE400C   40 one way up, 50 flipped ("angle of fire")
+//   Electro-Voice PXM-12MP 55 ("monitor floor angle")
+// Seven purpose-built wedges across six companies: mean 40, median 40, range
+// 27-55. Practitioners quote 30/40/45/50/55/60 as the set, with 40 and 50 "the
+// usual pair" chosen by how far back the performer stands. So the scene uses 40.
+//
+// JBL's 50 is deliberately NOT the anchor (Kyle 2026-07-24). It sits at the top
+// of the range, and the SRX812 is a main speaker with a monitor facet rather than
+// a purpose-built wedge. Including it anyway barely moves the average (41.2).
+//
+// A 40 deg cabinet, 17" deep by 14" tall, aimed so its axis lands on an ear at
+// 1.60 m, sits 3.9 ft in front of the performer, inside the 3-to-6 ft the
+// placement guidance gives. With the capsule 0.15 m in front of the mouth at
+// 1.52 m, that puts the wedge 55 deg below the capsule.
+//
+// This is why a SUPERCARDIOID is the standard stage vocal mic. At 55 deg below,
+// with the mic angled up at the mouth, the wedge sits ~135 deg off axis, and a
+// supercardioid rejects 6.7 dB harder there than a cardioid. Level the mic and
+// the wedge lands on its 127 deg null exactly. Tilt well up and a cardioid takes
+// over. The right pattern depends on where the wedge is, which is the point.
+const FLOOR_DROP = 55;
+// A mic's sensitivity at an angle whose cosine is cosT, for pattern `pat`.
+// One shared polar law for both loops (wedge and mains) so a pattern change
+// can never move one and not the other.
+function micPolar(pat, cosT) {
+  const a = MIC_A3[pat] != null ? MIC_A3[pat] : 0.5;
+  return Math.max(POLAR_FLOOR, Math.abs(a + (1 - a) * cosT));
+}
 function micRejectionRaw(setup) {
-  const a = MIC_A3[setup.pattern] != null ? MIC_A3[setup.pattern] : 0.5;
-  const az = (setup.az != null ? setup.az : 0) * Math.PI / 180;
+  const az = (setup.az != null ? setup.az : 180) * Math.PI / 180;
   const tilt = (setup.tilt != null ? setup.tilt : 0) * Math.PI / 180;
   const phi = FLOOR_DROP * Math.PI / 180;
   const cosT = Math.cos(tilt) * Math.cos(phi) * Math.cos(az) - Math.sin(tilt) * Math.sin(phi);
-  return Math.max(0.1, Math.abs(a + (1 - a) * cosT));
+  return micPolar(setup.pattern, cosT);
 }
 window.micRejectionRaw = micRejectionRaw;
-// Placement is applied RELATIVE to a realistic DEFAULT (a decently-aimed cardioid,
-// wedge behind and below). That default is the reference the whole feedback
-// calibration is anchored to, so placement works BOTH ways: aim the wedge into
-// the null and you EARN gain before feedback; drop it right in front of the mic
-// (on-axis) and you LOSE it and ring sooner — the actual point of the feature.
-// The old model used on-axis as the baseline, so a bad placement was the neutral
-// case and could never hurt. No setup returns 1.0 (identical to the default), so
-// every existing lesson's feedback calibration is untouched; only when a student
-// aims the mic does the loop move. Verified vs research: front->null spread ~18
-// dB, wedge on-axis ~ +12 dB hotter loop, a real GBF penalty.
-const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 135, tilt: 5 };
+// Placement is applied RELATIVE to a realistic DEFAULT (a cardioid held roughly
+// level, one wedge on the floor in front of the performer aiming up at them).
+// That default is the reference the whole feedback calibration is anchored to,
+// so placement works BOTH ways: tilt the mic up so its null drops onto the wedge
+// and you EARN gain before feedback; tilt it down toward the wedge, or fit a
+// pattern with a live rear lobe, and you LOSE it and ring sooner.
+//
+// az defaults to 180 — the wedge sits DIRECTLY in front of the performer, which
+// is where a floor wedge lives in almost every real setup (Kyle 2026-07-24), and
+// the reason the panel now shows one side elevation instead of two plan views.
+// With the wedge dead behind the mic, a cardioid's null is already close to it
+// and super/hyper aim a live rear lobe straight at it, so pattern choice matters
+// a lot here. No setup returns 1.0 (identical to the default), so every existing
+// lesson's feedback calibration is untouched; only when a student aims the mic
+// does the loop move.
+const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 180, tilt: 10 };
 const REF_REJ = micRejectionRaw(DEFAULT_MIC_SETUP);
 function micRejection3D(setup) {
   if (!setup) return 1.0;
@@ -1731,6 +1858,64 @@ function micRejection3D(setup) {
 }
 window.micRejection3D = micRejection3D;
 window.DEFAULT_MIC_SETUP = DEFAULT_MIC_SETUP;
+
+// ── Mic vs the MAIN speakers ───────────────────────────────────────────────
+// The universal rule of system setup: the mains belong DOWNSTAGE of every open
+// mic. Stand above the stage and look down, and every microphone should be
+// behind the front face of the speakers. Break it — a speaker set upstage of the
+// mic line, or a singer who walks out past the boxes — and the mic sits inside
+// the coverage pattern with nothing between it and full system output.
+//
+// The mic's own polar pattern is deliberately NOT in this path (Kyle 2026-07-24).
+// The mains live off to the SIDES of the stage, not straight out in front of the
+// vocalist, so in the horizontal plane a supercardioid or hypercardioid already
+// rejects them; the rear lobe a side elevation appears to aim at the boxes is not
+// aimed at them at all. What actually isolates a mic from the mains is the
+// spacing between the two and which side of the speaker the mic is standing on.
+// So this path is TWO terms, both read off `state.paLine` (metres the mains stand
+// DOWNSTAGE of the mic line; negative means the mics are out in front of them):
+//   1. the SPEAKER's directivity toward the mic, as a sharp knee rather than a
+//      gentle slope. Out in front of the box is a serious problem; level with it
+//      is borderline; behind it, the cabinet shadows the mic and you are set.
+//   2. inverse-square distance.
+// Returned as a dB delta against the default placement, so an unset mic is 0 dB
+// and no existing lesson's calibration moves. Backing further off buys little,
+// which is correct: the lateral offset already dominates the distance.
+const PA_LAT = 3.0;      // metres the mains sit to the SIDE of the mic
+const PA_RISE = 0.6;     // metres the box sits above the capsule (on a stick)
+const PA_TILT = 10;      // degrees the box is aimed down into the audience
+const PA_REAR_DB = 20;   // on-axis vs behind the box, full-range cabinet
+const PA_KNEE = 62;      // degrees off the box axis where the level starts falling away
+const PA_SOFT = 11;      // how many degrees that fall-off is spread over
+function paPathDb(x) {
+  const d = Math.sqrt(x * x + PA_LAT * PA_LAT + PA_RISE * PA_RISE);
+  // Speaker axis points downstage (+x) and PA_TILT down; this is the angle from
+  // that axis round to where the mic is standing.
+  const st = PA_TILT * Math.PI / 180;
+  const cosS = Math.min(1, Math.max(-1, (-x * Math.cos(st) + PA_RISE * Math.sin(st)) / d));
+  const ang = Math.acos(cosS) * 180 / Math.PI;
+  const spkDb = -PA_REAR_DB / (1 + Math.exp(-(ang - PA_KNEE) / PA_SOFT));
+  return spkDb - 20 * Math.log10(d);
+}
+const PA_LINE_DEFAULT = 2.4;   // metres the mains stand DOWNSTAGE of the mic line
+const PA_LINE_MIN = -1.2;      // dragged upstage: the mics are out past the boxes
+const PA_LINE_MAX = 2.6;
+window.PA_LINE_DEFAULT = PA_LINE_DEFAULT;
+window.PA_LINE_MIN = PA_LINE_MIN;
+window.PA_LINE_MAX = PA_LINE_MAX;
+function paLineOf(s) { return (s && s.paLine != null) ? s.paLine : PA_LINE_DEFAULT; }
+window.paLineOf = paLineOf;
+const REF_PA_DB = paPathDb(PA_LINE_DEFAULT);
+// Where the mains stand is a property of the SYSTEM, not of each microphone
+// (Kyle 2026-07-24). Held per-mic it let Vocal 1 believe it was behind the boxes
+// while Vocal 2 believed it was in front of them, which cannot be true on one
+// stage, and it was invisible on the stage plot. So it reads one number off the
+// state and every open mic shares it. A state that has never set it reads the
+// default and contributes 0 dB, so no existing lesson moves.
+function paPlacementDb(s) {
+  return Math.max(-6, Math.min(16, paPathDb(paLineOf(s)) - REF_PA_DB));
+}
+window.paPlacementDb = paPlacementDb;
 const _ringActive = {};
 // Barkhausen anchor for the acoustic loop: FEED_0DB is the wedge feed (legacy
 // linear) at which a 0 dB resonance band sits exactly at loop gain = 1. The
@@ -1742,9 +1927,12 @@ const _ringActive = {};
 const FEED_0DB = 0.83;
 const RING_SUSTAIN_DB = -1.7; // a started ring holds on until ~1.7 dB under onset
 window.RING_SUSTAIN_DB = RING_SUSTAIN_DB;
+// Mains face away from the mics, so a normally-placed mic only rings them when
+// the main mix is cranked hard. Module-level because feedbackMargins reports the
+// mains loop too and the two must never drift apart.
+const MAINS_DB = -9.6;
 function detectFeedback(s, audio) {
   if (!s || !s.channels || !audio || !audio.contributions) return null;
-  const MAINS_DB = -9.6;  // mains face away from the mics — ring only when cranked hard
   const o = s.outputs || {};
   const rings = [];
   // Per-band loop check for one wedge. Two wedge models:
@@ -1811,10 +1999,12 @@ function detectFeedback(s, audio) {
       checkWedge('wedge3', o.wedge3, (c.wedge3 || 0) / (eqg.wedge3 || 1) * rej, ch.highpass, i);
       checkWedge('wedge4', o.wedge4, (c.wedge4 || 0) / (eqg.wedge4 || 1) * rej, ch.highpass, i);
     }
-    // Mains loop — no single band; the ring tone falls back to 2 kHz.
+    // Mains loop — no single band; the ring tone falls back to 2 kHz. MAINS_DB
+    // is the baseline for a normally-placed mic (behind the boxes); paPlacementDb
+    // is what the student's own placement adds or takes away from there.
     const paFeed = (c.pa_l || 0) + (c.pa_r || 0);
     const mainsLoopDb = (paFeed > 0.001)
-      ? 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + (ch.highpass ? -4.4 : 0)
+      ? 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + paPlacementDb(s) + (ch.highpass ? -4.4 : 0)
       : -999;
     const mKey = 'mains:' + i;
     const mTh = _ringActive[mKey] ? RING_SUSTAIN_DB : 0;
@@ -1842,7 +2032,7 @@ window.detectFeedback = detectFeedback;
 // Same loop math as detectFeedback, read-only (no hysteresis), reporting the
 // tallest band per wedge so a persistent readout can teach headroom discipline.
 function feedbackMargins(s, audio) {
-  const out = { wedge: -999, wedge2: -999, wedge3: -999, wedge4: -999 };
+  const out = { wedge: -999, wedge2: -999, wedge3: -999, wedge4: -999, mains: -999 };
   if (!s || !s.channels || !audio || !audio.contributions) return out;
   const o = s.outputs || {};
   const eqg = audio.eqGain || { wedge: 1, wedge2: 1, wedge3: 1, wedge4: 1 };
@@ -1877,6 +2067,13 @@ function feedbackMargins(s, audio) {
     for (const wKey of keys) {
       const m = maxLoopFor(wKey, o[wKey], (c[wKey] || 0) / (eqg[wKey] || 1) * rej, ch.highpass);
       if (m > out[wKey]) out[wKey] = m;
+    }
+    // Same mains loop detectFeedback runs, reported as a margin so a lesson can
+    // gate on headroom in front of the speakers, not just at the wedges.
+    const paFeed = (c.pa_l || 0) + (c.pa_r || 0);
+    if (paFeed > 0.001) {
+      const mm = 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + paPlacementDb(s) + (ch.highpass ? -4.4 : 0);
+      if (mm > out.mains) out.mains = mm;
     }
   }
   return out;
@@ -2608,9 +2805,20 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
       {/* The walkthrough spotlight anchors on the whole fader+meter row (not
           just the fader), so the ring frames the full assembly and sits
           centered, including the meter the lesson is talking about. */}
-      <div data-walk={'ch' + (idx + 1) + '-fader'} style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
-        <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>
-        <M level={channelLevel} height={172} segments={22} mkey={'chlvl:' + idx}/>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
+        <div data-walk={'ch' + (idx + 1) + '-fader'} style={{ display: 'flex', alignItems: 'flex-end', gap: 4 }}>
+          <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>
+          <M level={channelLevel} height={172} segments={22} mkey={'chlvl:' + idx}/>
+        </div>
+        {/* BUS ASSIGN. Routing lives down in the fader block on a real desk, to
+            the RIGHT of the fader (Kyle 2026-07-24), not up with mute and solo.
+            Its own bottom-aligned column so more bus buttons can stack above. */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+          <div className="mono" style={{ fontSize: 5.5, letterSpacing: 0.3, color: 'var(--ink-3)', lineHeight: 1 }}>BUS</div>
+          {walk('lr', <BP active={ch.toMain !== false} onClick={() => set({ toMain: ch.toMain === false })} label="LR" width={22} height={16} fontSize={7}
+            color="var(--green)"
+            tip="Assigns this channel to the main mix, what the audience hears. Switched off, the channel still reaches the monitors but never the room."/>)}
+        </div>
       </div>
 
       <div style={{
@@ -2658,18 +2866,26 @@ function MasterSection({ master, onChange, paLevel, paRLevel, powered = true, on
           the overall level of its aux bus (one per wedge) before it leaves the
           desk. Four wedges, four masters, wrapped 2x2. */}
       <div data-walk="master-aux" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
-        <K value={master.aux1 != null ? master.aux1 : 0.75}
-           onChange={(v) => onChange({ ...master, aux1: v })}
-           label="AUX 1" size={28} color="var(--aux)" />
-        <K value={master.aux2 != null ? master.aux2 : 0.75}
-           onChange={(v) => onChange({ ...master, aux2: v })}
-           label="AUX 2" size={28} color="var(--cool)" />
-        <K value={master.aux3 != null ? master.aux3 : 0.75}
-           onChange={(v) => onChange({ ...master, aux3: v })}
-           label="AUX 3" size={28} color="var(--green)" />
-        <K value={master.aux4 != null ? master.aux4 : 0.75}
-           onChange={(v) => onChange({ ...master, aux4: v })}
-           label="AUX 4" size={28} color="var(--amber)" />
+        {[1, 2, 3, 4].map((n) => {
+          const isPost = !!(master.auxPost && master.auxPost[n]);
+          const col = n === 1 ? 'var(--aux)' : n === 2 ? 'var(--cool)' : n === 3 ? 'var(--green)' : 'var(--amber)';
+          return (
+            <div key={n} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <K value={master['aux' + n] != null ? master['aux' + n] : 0.75}
+                 onChange={(v) => onChange({ ...master, ['aux' + n]: v })}
+                 label={'AUX ' + n} size={28} color={col} />
+              <div data-walk={'aux' + n + '-prepost'}
+                onClick={() => onChange({ ...master, auxPost: { ...(master.auxPost || {}), [n]: !isPost } })}
+                className="mono ui-no-select"
+                title="Pre-fader takes the send before the channel fader, so riding a fader for the room never changes what the performer hears. That is the standard for monitors. Post-fader follows the channel fader, which is what a recording or stream feed wants."
+                style={{ fontSize: 6.5, fontWeight: 800, letterSpacing: 0.3, cursor: 'pointer', padding: '1px 3px', borderRadius: 3, lineHeight: 1.3,
+                  color: isPost ? '#0a0a0c' : 'var(--ink-3)', background: isPost ? col : '#0a0a0c',
+                  border: '1px solid ' + (isPost ? col : '#38383e') }}>
+                {isPost ? 'POST' : 'PRE'}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div style={{ width: '100%', height: 1, background: '#0a0a0c', boxShadow: '0 1px 0 #3a3a40' }}/>
@@ -3626,7 +3842,7 @@ function SourceCard({ srcKey, label, kind, diActive, muted, isTesting, onTest, o
               and drum overheads. On a close mic like the guitar amp mic it would do
               nothing, so it's hidden. */}
           {!compact && onOpenPlacement && SOURCES[srcKey] && SOURCES[srcKey].canFeedback && (
-            <div onClick={(e) => { e.stopPropagation(); onOpenPlacement(srcKey); }} className="mono ui-no-select"
+            <div data-walk={'placement-' + srcKey} onClick={(e) => { e.stopPropagation(); onOpenPlacement(srcKey); }} className="mono ui-no-select"
               style={{ fontSize: 8, padding: '2px 6px', background: '#0a0a0c', color: 'var(--accent)', border: '1px solid #38383e', borderRadius: 2, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5 }}>PLACEMENT</div>
           )}
           {/* Mute the source's sound only. The mic stays open, so the channel can
@@ -3678,7 +3894,7 @@ function PowerButton({ on, onClick, width = 30, height = 14 }) {
   );
 }
 
-function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, showPower = true }) {
+function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePower, onToggleMute, onVolume, isInspected, onSelect, showPower = true, marginInfo }) {
   const animate = on && !mute && level > 0.05;
   const intensity = Math.min(1, level);
   // signalArriving is what a real powered speaker's "SIG" LED shows: signal
@@ -3707,6 +3923,16 @@ function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePowe
         fontSize: 7, letterSpacing: 1.5, fontWeight: 700,
         color: on ? 'var(--ink-3)' : '#ff8676',
       }}>MAIN · {side}</div>
+      {/* Unlike a wedge, whose level you actively ride toward the limit, the mains
+          loop is set once by where the mics stand. A permanent "+12+" on every
+          lesson is clutter, so this only appears once there is something to say. */}
+      {on && marginInfo && marginInfo.db < 12 && (
+        <div className="mono" title="How much louder the main mix can get before an open mic feeds back into it. Set by where the mics sit relative to the speakers. Pros leave about 6 dB."
+          style={{ fontSize: 7, fontWeight: 800, letterSpacing: 0.3, whiteSpace: 'nowrap', marginTop: -1,
+            color: marginInfo.status === 'ok' ? 'var(--green)' : marginInfo.status === 'low' ? 'var(--accent)' : 'var(--hot)' }}>
+          {marginInfo.db < 0 ? 'FEEDING BACK' : (marginInfo.db >= 12 ? '+12+' : '+' + marginInfo.db.toFixed(0)) + ' dB to F/B'}
+        </div>
+      )}
       <div style={{
         width: 36, height: 36, borderRadius: '50%',
         background: 'radial-gradient(circle at 40% 35%, #4a4a52 0%, #1a1a1d 60%, #0a0a0c 100%)',
@@ -3915,149 +4141,226 @@ function MonitorEqPanel({ open, onClose, wedge, wedge2, wedge3, wedge4, onBandCh
 }
 window.MonitorEqPanel = MonitorEqPanel;
 
-// ── Mic Placement (both planes) ────────────────────────────────────────────
-// The dedicated visual trainer for the biggest real feedback lever: where the
-// wedge sits relative to the mic's pickup pattern. Two linked plan views — top
-// down (drag the wedge's horizontal angle) and side (the mic's vertical tilt) —
-// driven by state.micSetup[key] = { pattern, az, tilt }. Rejection is read live
-// from the SAME micRejection3D the feedback engine uses, so the picture and the
-// loop can never disagree. cardioid rejects straight back; super/hyper reject to
-// the rear sides and keep a live lobe behind, so cardioid is not always ideal —
-// the best pattern depends on the tilt, which the side view makes visible.
-function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
+// ── Mic Placement (side elevation) ─────────────────────────────────────────
+// One view, drawn to scale in metres, of the two paths that set a vocal mic's
+// gain before feedback: the floor wedge in front of the performer, and the main
+// speaker downstage of them. The top-down plan view is gone (Kyle 2026-07-24):
+// a floor wedge sits directly in front of the performer in almost every real
+// setup, so its horizontal angle is not a variable worth half the panel, and one
+// honest side elevation explains both paths better than two half-views explained
+// one. A side elevation projects the lateral axis out, so the mains are drawn at
+// their downstage distance and height; the engine still places them off to the
+// side, which is why the drawn angle to the box is wider than the true one.
+//
+// Every number on screen comes from the SAME engine functions the feedback loop
+// uses — micRejection3D for the wedge, paPlacementDb for the mains — so the
+// picture and the loop can never disagree. Both are reported as gain before
+// feedback against a standard setup: positive means this placement bought
+// headroom, negative means it gave headroom away.
+function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onClose }) {
   const svgRef = React.useRef(null);
   const dragRef = React.useRef(false);
   if (!open) return null;
   const A = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
   const NAME = { cardioid: 'cardioid', super: 'supercardioid', hyper: 'hypercardioid' };
   const capFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 135, tilt: 5 };
+  const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 10 };
   const pat = (setup && setup.pattern) || DEF.pattern;
-  const az = (setup && setup.az != null) ? setup.az : DEF.az;
   const tilt = (setup && setup.tilt != null) ? setup.tilt : DEF.tilt;
+  const paNow = paLine != null ? paLine : (window.PA_LINE_DEFAULT != null ? window.PA_LINE_DEFAULT : 2.4);
   const a = A[pat];
   const d2r = (d) => d * Math.PI / 180;
   const rOf = (aa, deg) => Math.abs(aa + (1 - aa) * Math.cos(d2r(deg)));
-  const FLOOR_DROP = 35;
-  // TRUE 3D angle to the floor wedge (spherical law of cosines), the same math
-  // the feedback engine's micRejectionRaw uses, so this panel's number can never
-  // drift from the loop. cosT drives the alt-pattern coaching below; rej3 comes
-  // straight from the shared engine function.
-  const cosT = Math.cos(d2r(tilt)) * Math.cos(d2r(FLOOR_DROP)) * Math.cos(d2r(az)) - Math.sin(d2r(tilt)) * Math.sin(d2r(FLOOR_DROP));
-  const rej3 = window.micRejectionRaw ? window.micRejectionRaw({ pattern: pat, az, tilt }) : Math.max(0.1, Math.abs(a + (1 - a) * cosT));
-  const rejDb = Math.round(20 * Math.log10(rej3));
-  const nullDeg = pat === 'cardioid' ? 180 : Math.acos(-a / (1 - a)) * 180 / Math.PI;
-  let stColor, stWord;
-  if (rej3 < 0.2) { stColor = 'var(--green)'; stWord = 'Strong rejection'; }
-  else if (rej3 < 0.55) { stColor = 'var(--accent)'; stWord = 'Partial rejection'; }
-  else { stColor = 'var(--hot)'; stWord = 'Little rejection'; }
+  const FLOOR_DROP = 55;
+  const eff = { pattern: pat, az: 180, tilt };
 
-  const TCX = 150, TCY = 168, R = 88, RW = 116;
-  const tdPt = (deg, rad) => [TCX + rad * Math.sin(d2r(deg)), TCY - rad * Math.cos(d2r(deg))];
-  let tdD = '';
-  for (let t = 0; t <= 360; t += 4) { const p = tdPt(t, R * rOf(a, t)); tdD += (t === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ' '; }
-  tdD += 'Z';
-  const tdNulls = pat === 'cardioid' ? [180] : [nullDeg, 360 - nullDeg];
-  const wpt = tdPt(az, RW);
+  // Both readings straight off the engine, converted to gain before feedback:
+  // micRejection3D returns a coupling ratio (>1 = hotter loop = less headroom),
+  // paPlacementDb returns dB added to the mains loop, so both get negated.
+  const wedgeDb = window.micRejection3D ? -20 * Math.log10(window.micRejection3D(eff)) : 0;
+  const mainsDb = window.paPlacementDb ? -window.paPlacementDb({ paLine: paNow }) : 0;
+  const tone = (db) => (db >= 1 ? 'var(--green)' : db > -3 ? 'var(--accent)' : 'var(--hot)');
+  const wTone = tone(wedgeDb), mTone = tone(mainsDb);
+  const sign = (db) => (db >= 0 ? '+' : '') + db.toFixed(0);
 
-  const SMX = 96, SMY = 96, dm = 50, SR = 74, FY = 250, SW = [206, 238];
-  const cap = [SMX + dm * Math.cos(d2r(tilt)), SMY + dm * Math.sin(d2r(tilt))];
+  // ---- scene, in metres, uniformly scaled so every drawn angle is true ----
+  // The whole scene is pinned by one constraint (Kyle 2026-07-24): the wedge is
+  // aimed ON AXIS at the singer's ear, so a line drawn perpendicular to its
+  // angled baffle lands on the ear. The cabinet is 17" deep by 14" tall, which
+  // makes its baffle 40 deg off the floor: the mean AND median of seven
+  // purpose-built wedges across six companies, not one brand's figure. Aimed at
+  // an ear at 1.60 m that lands 3.9 ft in front of the performer, inside the
+  // 3-to-6 ft the placement guidance gives, and puts the wedge 55 deg below a
+  // capsule sitting 0.15 m in front of the mouth. The engine reads the same 55.
+  const VW = 700, VH = 380, X0 = -1.70, Z1 = 2.86, S = VW / 5.35;
+  const px = (x) => (x - X0) * S;
+  const pz = (z) => (Z1 - z) * S;
+  const EAR = [-0.25, 1.60], MOUTH = [-0.15, 1.55], HEAD = [-0.28, 1.67];
+  const MIC = [px(0), pz(1.52)];
+  // Wedge cabinet in side elevation: bottom edge on the floor, vertical back
+  // downstage, and the baffle running from the front-bottom corner up to the
+  // back-top corner. 0.50 m deep by 0.60 m tall makes that baffle 50 deg off the
+  // floor, the published angle, and puts its acoustic centre at (1.30, 0.30).
+  const WA = [0.727, 0], WB = [1.157, 0], WC = [1.157, 0.36];
+  const WBC = [(WA[0] + WC[0]) / 2, (WA[1] + WC[1]) / 2]; // baffle centre
+  const WEDGE = [px(WBC[0]), pz(WBC[1])];
+  const SPK = [px(paNow), pz(2.12)];
+  const sa = d2r(10); // the box is aimed down into the audience, matching PA_TILT
+
+  // Mic polar pattern in the plane of the view. faAng is the screen angle of the
+  // mic axis: it points upstage at the performer, tilted up by `tilt`.
   const faAng = Math.atan2(-Math.sin(d2r(tilt)), -Math.cos(d2r(tilt)));
-  let svD = '';
-  for (let t = 0; t <= 360; t += 4) { const rr = SR * rOf(a, t); const ang = faAng + d2r(t); svD += (t === 0 ? 'M' : 'L') + (cap[0] + rr * Math.cos(ang)).toFixed(1) + ' ' + (cap[1] + rr * Math.sin(ang)).toFixed(1) + ' '; }
-  svD += 'Z';
-  const svNulls = pat === 'cardioid' ? [180] : [nullDeg, -nullDeg];
+  const PR = 0.30 * S;
+  let polarD = '';
+  for (let t = 0; t <= 360; t += 4) {
+    const rr = PR * rOf(a, t), ang = faAng + d2r(t);
+    polarD += (t === 0 ? 'M' : 'L') + (MIC[0] + rr * Math.cos(ang)).toFixed(1) + ' ' + (MIC[1] + rr * Math.sin(ang)).toFixed(1) + ' ';
+  }
+  polarD += 'Z';
+  const nullDeg = pat === 'cardioid' ? 180 : Math.acos(-a / (1 - a)) * 180 / Math.PI;
+  const nulls = pat === 'cardioid' ? [180] : [nullDeg, -nullDeg];
+  const capEnd = [MIC[0] + 0.17 * S * Math.cos(faAng + Math.PI), MIC[1] + 0.17 * S * Math.sin(faAng + Math.PI)];
 
-  const couplingP = (p) => Math.abs(A[p] + (1 - A[p]) * cosT);
-  let best = pat, bestc = rej3;
-  ['cardioid', 'super', 'hyper'].forEach((p) => { const cc = couplingP(p); if (cc < bestc - 0.03) { bestc = cc; best = p; } });
-  let coach;
-  if (rej3 < 0.2) coach = 'Good. From here the ' + NAME[pat] + ' strongly rejects sound coming from the wedge, so you have headroom before it rings.';
-  else if (best !== pat && bestc < 0.22) coach = capFirst(NAME[pat]) + ' is not the best fit at this angle. A ' + NAME[best] + ' would put its null closer to the wedge. Try the pattern, or aim the wedge and tilt so a null lands on it.';
-  else coach = 'The wedge is in a sensitive part of the pattern, so the mic passes it back into the loop. Drag it toward a green null, or tilt the mic so a null swings onto the wedge.';
+  // Main speaker mouth and its coverage. Whether the mic falls in front of the
+  // box or behind it is the whole point of the view.
+  const mouth = [SPK[0] + 0.17 * S * Math.cos(sa), SPK[1] + 0.17 * S * Math.sin(sa)];
+  const covR = 1.9 * S, covHalf = d2r(35);
+  const c1 = [mouth[0] + covR * Math.cos(sa - covHalf), mouth[1] + covR * Math.sin(sa - covHalf)];
+  const c2 = [mouth[0] + covR * Math.cos(sa + covHalf), mouth[1] + covR * Math.sin(sa + covHalf)];
+  const covD = 'M' + mouth[0].toFixed(1) + ' ' + mouth[1].toFixed(1) +
+    ' L' + c1[0].toFixed(1) + ' ' + c1[1].toFixed(1) +
+    ' A' + covR.toFixed(1) + ' ' + covR.toFixed(1) + ' 0 0 1 ' + c2[0].toFixed(1) + ' ' + c2[1].toFixed(1) + ' Z';
 
-  const setAz = (e) => {
-    const svg = svgRef.current; if (!svg) return;
-    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
-    const q = pt.matrixTransform(svg.getScreenCTM().inverse());
-    let deg = Math.atan2(q.x - TCX, -(q.y - TCY)) * 180 / Math.PI; if (deg < 0) deg += 360;
-    onChange({ az: Math.round(deg) });
-  };
+  // Pattern scoring, wedge path only. The mic's pattern no longer touches the
+  // mains path at all, because the mains stand off to the SIDE of the stage where
+  // a supercardioid or hypercardioid already rejects them in the horizontal
+  // plane. So there is exactly one place a pattern recommendation can come from,
+  // and it is this one.
+  const scoreW = (p) => (window.micRejection3D ? -20 * Math.log10(window.micRejection3D({ pattern: p, az: 180, tilt })) : 0);
+  let bestW = pat, bestWs = scoreW(pat);
+  ['cardioid', 'super', 'hyper'].forEach((p) => { const sc = scoreW(p); if (sc > bestWs + 1) { bestWs = sc; bestW = p; } });
+
+  let wedgeCoach;
+  if (wedgeDb >= 2) wedgeCoach = 'The ' + NAME[pat] + ' rejects sound coming from the wedge well at this angle, so you have level in hand before it rings.';
+  else if (bestW !== pat) wedgeCoach = capFirst(NAME[pat]) + ' is not the best fit for this wedge angle. A ' + NAME[bestW] + ' would put a null closer to it.';
+  else if (tilt < FLOOR_DROP - 20) wedgeCoach = 'The wedge is in a live part of the pattern. Tilt the mic up and its null swings down onto the wedge.';
+  else wedgeCoach = 'The wedge sits in a live part of the pattern and tilt alone will not clear it. Try another pattern.';
+
+  let mainsCoach;
+  if (paNow < 0) mainsCoach = 'The mic is out past the main speaker, inside its coverage, with the full main mix pointed at it. No pattern saves a mic from that. Move the main speakers downstage on the stage plot until the mic is behind them.';
+  else if (paNow < 0.8) mainsCoach = 'The mic is right at the front face of the main speaker, still in its coverage. Move the main speakers downstage on the stage plot until the mic sits behind them.';
+  else if (mainsDb < -3) mainsCoach = 'The mic is close to the front of the speaker. Every open microphone belongs behind the front face of the mains.';
+  else mainsCoach = 'The mic is behind the speaker, which is what protects it here. The mains stand off to the side of the stage, so this path is set by that spacing and by the cabinet shadowing the mic, not by the pattern on the mic.';
+
   const patBtn = (p, txt) => (
-    <div key={p} onClick={() => onChange({ pattern: p })} className="mono ui-no-select"
+    <div key={p} data-walk={'mic-pattern-' + p} onClick={() => onChange({ pattern: p })} className="mono ui-no-select"
       style={{ fontSize: 9, padding: '4px 9px', borderRadius: 4, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.4,
         background: pat === p ? 'var(--accent)' : '#0a0a0c', color: pat === p ? '#0a0a0c' : 'var(--ink-2)',
         border: '1px solid ' + (pat === p ? 'var(--accent)' : '#38383e') }}>{txt}</div>
   );
+  const stat = (db, col, name) => (
+    <div style={{ textAlign: 'center', minWidth: 96 }}>
+      <div className="display" style={{ fontSize: 22, fontWeight: 800, color: col, lineHeight: 1 }}>{sign(db)} dB</div>
+      <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, marginTop: 3 }}>{name}</div>
+    </div>
+  );
 
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 62, background: 'rgba(0,0,0,0.5)' }}>
-      <div onClick={(e) => e.stopPropagation()} className="ui-no-select" style={{ background: 'linear-gradient(180deg,#1c1c20 0%, #141417 100%)', border: '1px solid #38383e', borderRadius: 10, padding: '14px 16px', boxShadow: '0 16px 48px rgba(0,0,0,0.6)', width: 660, maxWidth: '94vw' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      <div onClick={(e) => e.stopPropagation()} data-walk="placement-panel" className="ui-no-select" style={{ background: 'linear-gradient(180deg,#1c1c20 0%, #141417 100%)', border: '1px solid #38383e', borderRadius: 10, padding: '14px 16px', boxShadow: '0 16px 48px rgba(0,0,0,0.6)', width: 700, maxWidth: '94vw' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <div className="display" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Mic placement</div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 0.6 }}>{(label || '').toUpperCase()}</div>
           <div style={{ flex: 1 }}/>
           <div style={{ display: 'flex', gap: 5 }}>{patBtn('cardioid', 'CARDIOID')}{patBtn('super', 'SUPER')}{patBtn('hyper', 'HYPER')}</div>
           <div onClick={onClose} className="mono ui-no-select" style={{ fontSize: 12, color: 'var(--ink-2)', cursor: 'pointer', padding: '2px 6px', marginLeft: 4 }}>✕</div>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ flex: 1, background: '#0d0d10', border: '1px solid #2a2a2e', borderRadius: 6, padding: 6 }}>
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 2 }}>LOOKING DOWN · DRAG THE WEDGE</div>
-            <svg ref={svgRef} viewBox="0 0 300 300" style={{ width: '100%', display: 'block', touchAction: 'none', cursor: 'grab' }}
-              onPointerDown={(e) => { dragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} setAz(e); }}
-              onPointerMove={(e) => { if (dragRef.current) setAz(e); }}
-              onPointerUp={() => { dragRef.current = false; }} onPointerCancel={() => { dragRef.current = false; }}>
-              <text x="150" y="14" textAnchor="middle" style={{ fontSize: 10, fill: 'var(--ink-3)' }}>singer</text>
-              <circle cx="150" cy="42" r="15" fill="none" stroke="var(--ink-2)" strokeWidth="1.3"/>
-              <path d={tdD} fill="var(--accent)" fillOpacity="0.10" stroke="var(--accent)" strokeWidth="1.4"/>
-              {tdNulls.map((g, i) => { const q = tdPt(g, R + 18); const l = tdPt(g, R + 30); return (
+
+        <div style={{ background: '#0d0d10', border: '1px solid #2a2a2e', borderRadius: 6, padding: '5px 6px 2px' }}>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 1 }}>SIDE VIEW · THE MIC, ITS WEDGE AND THE MAINS</div>
+          <svg ref={svgRef} viewBox={'0 0 ' + VW + ' ' + VH} style={{ width: '100%', display: 'block' }}>
+            {/* main speaker coverage, drawn first so everything sits on top */}
+            <path d={covD} fill={mTone} fillOpacity="0.06" stroke={mTone} strokeOpacity="0.22" strokeWidth="1"/>
+
+            {/* floor and the audience direction */}
+            <line x1="0" y1={pz(0)} x2={VW} y2={pz(0)} stroke="#38383e" strokeWidth="1.4"/>
+            <text x="8" y={pz(0) - 6} style={{ fontSize: 9, fill: 'var(--ink-3)' }}>floor</text>
+            <text x={VW - 8} y={pz(0) - 6} textAnchor="end" style={{ fontSize: 9, fill: 'var(--ink-3)' }}>audience ▸</text>
+
+            {/* the performer, facing the audience. The ear is marked because it is
+                what the wedge is aimed at, and the reason the scene is laid out
+                the way it is. */}
+            <circle cx={px(HEAD[0])} cy={pz(HEAD[1])} r={0.115 * S} fill="none" stroke="var(--ink-2)" strokeWidth="1.3"/>
+            <path d={'M' + px(HEAD[0]) + ' ' + pz(1.55) + ' L' + px(HEAD[0]) + ' ' + pz(0)} stroke="var(--ink-2)" strokeWidth="1.3" fill="none" opacity="0.7"/>
+            <circle cx={px(EAR[0])} cy={pz(EAR[1])} r="2.6" fill="var(--green)"/>
+            <text x={px(EAR[0]) - 0.16 * S} y={pz(EAR[1]) + 3} textAnchor="end" style={{ fontSize: 8.5, fill: 'var(--green)' }}>ear</text>
+            <text x={px(HEAD[0])} y={pz(0) - 8} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-3)' }}>singer</text>
+
+            {/* The wedge, drawn as a real cabinet: bottom on the floor, short
+                vertical back downstage, and the baffle running from the front
+                bottom corner up to the back top corner. It is aimed AT THE EAR,
+                not straight up, so the singer stands on axis. */}
+            <polygon points={[[px(WA[0]), pz(WA[1])], [px(WB[0]), pz(WB[1])], [px(WC[0]), pz(WC[1])]].map((q) => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ')}
+              fill="#1c1c20" stroke="var(--ink)" strokeWidth="1.3"/>
+            {/* the baffle face, and the axis it throws at the singer */}
+            <line x1={px(WA[0])} y1={pz(WA[1])} x2={px(WC[0])} y2={pz(WC[1])} stroke="var(--aux)" strokeWidth="2.6"/>
+            <line x1={WEDGE[0]} y1={WEDGE[1]} x2={px(EAR[0])} y2={pz(EAR[1])} stroke="var(--green)" strokeWidth="1" strokeDasharray="2 5" opacity="0.75"/>
+            <text x={(WEDGE[0] + px(EAR[0])) / 2} y={(WEDGE[1] + pz(EAR[1])) / 2 - 6} textAnchor="middle" style={{ fontSize: 8.5, fill: 'var(--green)' }}>on axis</text>
+            <text x={px(WB[0]) + 8} y={pz(0) - 8} style={{ fontSize: 9, fill: 'var(--ink-2)' }}>wedge</text>
+
+            {/* the two loop paths into the capsule */}
+            <line x1={WEDGE[0]} y1={WEDGE[1]} x2={MIC[0]} y2={MIC[1]} stroke={wTone} strokeWidth="1.8" strokeDasharray="4 4"/>
+            {/* the mains stand off to the SIDE of the stage. A side elevation
+                cannot show that, and without saying so the drawing reads as if
+                the mic's rear lobe were pointed at the boxes, which it is not. */}
+            <text x={SPK[0]} y={pz(2.12) - 0.42 * S} textAnchor="middle" style={{ fontSize: 8.5, fill: 'var(--ink-3)' }}>off to the side of the stage</text>
+            <line x1={mouth[0].toFixed(1)} y1={mouth[1].toFixed(1)} x2={MIC[0]} y2={MIC[1]} stroke={mTone} strokeWidth="1.8" strokeDasharray="4 4"/>
+
+            {/* mic pattern, nulls, and the mic itself */}
+            <path d={polarD} fill="var(--accent)" fillOpacity="0.10" stroke="var(--accent)" strokeWidth="1.4"/>
+            {nulls.map((g, i) => {
+              const gg = faAng + d2r(g);
+              const qx = MIC[0] + (PR + 14) * Math.cos(gg), qy = MIC[1] + (PR + 14) * Math.sin(gg);
+              const lx = MIC[0] + (PR + 27) * Math.cos(gg), ly = MIC[1] + (PR + 27) * Math.sin(gg);
+              return (
                 <g key={i}>
-                  <line x1={TCX} y1={TCY} x2={q[0].toFixed(1)} y2={q[1].toFixed(1)} stroke="var(--green)" strokeWidth="1" strokeDasharray="3 4" opacity="0.7"/>
-                  <text x={l[0].toFixed(1)} y={(l[1] + 3).toFixed(1)} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--green)' }}>null</text>
-                </g>); })}
-              <line x1={wpt[0].toFixed(1)} y1={wpt[1].toFixed(1)} x2={TCX} y2={TCY} stroke={stColor} strokeWidth="1.8" strokeDasharray="4 4"/>
-              <circle cx={TCX} cy={TCY} r="5" fill="var(--ink)"/>
-              <text x={TCX} y={TCY + 18} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>mic</text>
-              <g transform={'translate(' + wpt[0].toFixed(1) + ',' + wpt[1].toFixed(1) + ')'}>
-                <rect x="-16" y="-9" width="32" height="18" rx="3" fill="#1c1c20" stroke={stColor} strokeWidth="1.5"/>
-                <text x="0" y="4" textAnchor="middle" style={{ fontSize: 8.5, fill: 'var(--ink)' }}>wedge</text>
-              </g>
-            </svg>
-          </div>
-          <div style={{ flex: 1, background: '#0d0d10', border: '1px solid #2a2a2e', borderRadius: 6, padding: 6 }}>
-            <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 2 }}>FROM THE SIDE · MIC TILT</div>
-            <svg viewBox="0 0 300 300" style={{ width: '100%', display: 'block' }}>
-              <line x1="20" y1={FY} x2="284" y2={FY} stroke="#38383e" strokeWidth="1.4"/>
-              <text x="34" y={FY + 15} style={{ fontSize: 9, fill: 'var(--ink-3)' }}>floor</text>
-              <circle cx={SMX - 26} cy={SMY - 6} r="20" fill="none" stroke="var(--ink-2)" strokeWidth="1.3"/>
-              <circle cx={SMX} cy={SMY} r="2.5" fill="var(--ink-2)"/>
-              <polygon points="188,250 236,250 230,232 200,238" fill="#1c1c20" stroke="var(--ink)" strokeWidth="1.3"/>
-              <text x="212" y={FY + 15} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>wedge</text>
-              <path d={svD} fill="var(--accent)" fillOpacity="0.10" stroke="var(--accent)" strokeWidth="1.4"/>
-              {svNulls.map((g, i) => { const gg = faAng + d2r(g); const qx = cap[0] + (SR + 16) * Math.cos(gg), qy = cap[1] + (SR + 16) * Math.sin(gg); const lx = cap[0] + (SR + 28) * Math.cos(gg), ly = cap[1] + (SR + 28) * Math.sin(gg); return (
-                <g key={i}>
-                  <line x1={cap[0].toFixed(1)} y1={cap[1].toFixed(1)} x2={qx.toFixed(1)} y2={qy.toFixed(1)} stroke="var(--green)" strokeWidth="1" strokeDasharray="3 4" opacity="0.7"/>
+                  <line x1={MIC[0]} y1={MIC[1]} x2={qx.toFixed(1)} y2={qy.toFixed(1)} stroke="var(--green)" strokeWidth="1" strokeDasharray="3 4" opacity="0.7"/>
                   <text x={lx.toFixed(1)} y={(ly + 3).toFixed(1)} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--green)' }}>null</text>
-                </g>); })}
-              <line x1={SW[0]} y1={SW[1]} x2={cap[0].toFixed(1)} y2={cap[1].toFixed(1)} stroke={stColor} strokeWidth="1.8" strokeDasharray="4 4"/>
-              <line x1={cap[0].toFixed(1)} y1={cap[1].toFixed(1)} x2={(cap[0] + 22 * Math.cos(d2r(tilt))).toFixed(1)} y2={(cap[1] + 22 * Math.sin(d2r(tilt))).toFixed(1)} stroke="var(--ink)" strokeWidth="5" strokeLinecap="round"/>
-              <circle cx={cap[0].toFixed(1)} cy={cap[1].toFixed(1)} r="4" fill="var(--ink)"/>
-            </svg>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, padding: '0 4px' }}>
-              <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)' }}>TILT</span>
-              <input type="range" min="-20" max="50" step="5" value={tilt} onChange={(e) => onChange({ tilt: +e.target.value })} style={{ flex: 1 }}/>
-              <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-2)', minWidth: 64, textAlign: 'right' }}>{tilt > 0 ? 'up ' + tilt + '°' : tilt < 0 ? 'down ' + (-tilt) + '°' : 'level'}</span>
-            </div>
+                </g>);
+            })}
+            <line x1={MIC[0]} y1={MIC[1]} x2={capEnd[0].toFixed(1)} y2={capEnd[1].toFixed(1)} stroke="var(--ink)" strokeWidth="5" strokeLinecap="round"/>
+            <circle cx={MIC[0]} cy={MIC[1]} r="4" fill="var(--ink)"/>
+            <text x={MIC[0]} y={MIC[1] - 0.32 * S} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>mic</text>
+
+            {/* main speaker on a pole. The hit area is the whole column so it is
+                easy to grab at any height. */}
+            <g data-walk="pa-position">
+              <line x1={SPK[0]} y1={pz(0)} x2={SPK[0]} y2={SPK[1]} stroke="#4a4a52" strokeWidth="3"/>
+              <g transform={'translate(' + SPK[0].toFixed(1) + ',' + SPK[1].toFixed(1) + ') rotate(10)'}>
+                <rect x={-0.17 * S} y={-0.27 * S} width={0.34 * S} height={0.54 * S} rx="3" fill="#1c1c20" stroke={mTone} strokeWidth="1.6"/>
+                <rect x={0.09 * S} y={-0.19 * S} width={0.07 * S} height={0.38 * S} rx="2" fill="#0a0a0c" stroke="#4a4a52" strokeWidth="1"/>
+              </g>
+              <text x={SPK[0]} y={pz(0) - 30} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>main speaker</text>
+              <text x={SPK[0]} y={pz(0) - 17} textAnchor="middle" className="mono" style={{ fontSize: 8.5, fill: mTone }}>
+                {paNow >= 0.05 ? paNow.toFixed(1) + ' m downstage of the mic' : paNow <= -0.05 ? (-paNow).toFixed(1) + ' m upstage of the mic' : 'level with the mic'}
+              </text>
+            </g>
+          </svg>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 4px 4px' }}>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)' }}>MIC TILT</span>
+            <input data-walk="mic-tilt" type="range" min="-20" max="60" step="5" value={tilt} onChange={(e) => onChange({ tilt: +e.target.value })} style={{ flex: 1 }}/>
+            <span className="mono" style={{ fontSize: 8.5, color: 'var(--ink-2)', minWidth: 64, textAlign: 'right' }}>{tilt > 0 ? 'up ' + tilt + '°' : tilt < 0 ? 'down ' + (-tilt) + '°' : 'level'}</span>
           </div>
         </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
-          <div style={{ textAlign: 'center', minWidth: 92 }}>
-            <div className="display" style={{ fontSize: 22, fontWeight: 800, color: stColor, lineHeight: 1 }}>{rejDb} dB</div>
-            <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, marginTop: 2 }}>REJECTION</div>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div className="mono" style={{ fontSize: 9, fontWeight: 700, color: stColor, letterSpacing: 0.5, marginBottom: 3 }}>{stWord.toUpperCase()}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>{coach}</div>
+          {stat(wedgeDb, wTone, 'WEDGE PATH')}
+          {stat(mainsDb, mTone, 'MAIN SPEAKER PATH')}
+          <div style={{ flex: 1, borderLeft: '1px solid #2a2a2e', paddingLeft: 12 }}>
+            <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, marginBottom: 4 }}>GAIN BEFORE FEEDBACK, AGAINST A STANDARD SETUP</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>{wedgeCoach}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 4 }}>{mainsCoach}</div>
+
           </div>
         </div>
       </div>
@@ -4733,6 +5036,39 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   //     corners; the two guitars mid; the three front vocals downstage.
   // top + left only; the per-source marginLeft (to centre on `left`) is applied
   // in the map from wOf(k) so each card centres on its own width.
+  // Where the mains stand, on the stage plot. The plan view runs downstage DOWN,
+  // so a bigger paLine sits lower. Calibrated so the default (PA_LINE_DEFAULT)
+  // lands exactly where the boxes have always been drawn, which means no existing
+  // lesson's stage moves. Dragged fully upstage the boxes end up ABOVE the vocal
+  // mic row, so "the mics are out past the PA" is something you SEE rather than
+  // something you have to open a panel to discover (Kyle 2026-07-24).
+  // Pixels per metre of mains travel. With the singers moved onto the downstage
+  // line the boxes only have to move a little to end up behind them, so this is
+  // much smaller than it was: the old range walked the mains to the middle of the
+  // stage, which is not a thing that happens at a show (Kyle 2026-07-24).
+  const PA_PX_PER_M = big16 ? 49 : 35;
+  // Half a main speaker's height, so the mains line lands on the plane of the
+  // boxes rather than 16 px downstage of it.
+  const PA_HALF = 63;
+  const paLine = window.paLineOf ? window.paLineOf(state) : 2.4;
+  const paBase = big16 ? 48 : 40;
+  const paBottom = paBase + (2.4 - paLine) * PA_PX_PER_M;
+  const setPaLine = (clientY, el) => {
+    const box = el && el.closest('[data-stage-plot]');
+    if (!box) return;
+    const r = box.getBoundingClientRect();
+    // invert the mapping: pointer y -> bottom offset -> metres
+    const bottom = r.bottom - clientY - PA_HALF;
+    const v = 2.4 - (bottom - paBase) / PA_PX_PER_M;
+    const lo = window.PA_LINE_MIN != null ? window.PA_LINE_MIN : -1.2;
+    const hi = window.PA_LINE_MAX != null ? window.PA_LINE_MAX : 2.6;
+    setState((prev) => ({ ...prev, paLine: Math.round(Math.max(lo, Math.min(hi, v)) * 20) / 20 }));
+  };
+  // A plain object literal here is re-created on every render, so the drag flag
+  // reset itself the moment the first pointermove called setState and the drag
+  // died after one frame. It has to be a ref that survives renders.
+  const paDragRef = React.useRef(false);
+
   const positions = big16 ? {
     // Drum kit tucked hard against the UPSTAGE edge, bird's-eye tight cluster:
     // VOX 4 (drummer) on top, snare below, kick below that; toms hugging the
@@ -4753,11 +5089,14 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     egtr:  { top: 150, left: '24%' },              // electric gtr, left of the kit
     agtr:  { top: 150, left: '76%' },              // acoustic gtr, right of the kit
     keys:  { top: 150, left: '88%' },              // keys rig, far stage-right
-    // The three singers across the downstage line, numbered 1-2-3 left to right
-    // so each lines up over its own wedge below.
-    vx1:   { top: 476, left: '26%' },              // Vocal 1 — stage-left
-    vx2:   { top: 476, left: '46%' },              // Vocal 2 — centre
-    vx3:   { top: 476, left: '66%' },              // Vocal 3 — stage-right
+    // The three singers hard on the DOWNSTAGE line, each directly over its own
+    // wedge, numbered 1-2-3 left to right. They used to sit at 476, the middle of
+    // the stage, with 122 px of empty floor between them and their wedges, which
+    // is not where a singer stands and it forced the mains to travel halfway up
+    // the stage to get behind them (Kyle 2026-07-24).
+    vx1:   { top: 548, left: '26%' },              // Vocal 1 — stage-left
+    vx2:   { top: 548, left: '46%' },              // Vocal 2 — centre
+    vx3:   { top: 548, left: '66%' },              // Vocal 3 — stage-right
   } : {
     // MX-8 stage plot (audience at the bottom, screen = FOH view). Two mirrored
     // columns so the vocal channels read left-to-right from FOH: Vocal 1 on the
@@ -4766,8 +5105,8 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     // stage box on the right edge.
     guitar: { top: 44,  left: '24%', marginLeft: -(SRC_W / 2) },            // bass DI — upstage left, behind Vocal 1
     laptop: { top: 44,  left: '58%', marginLeft: -(SRC_W / 2) },            // keys DI — upstage right, behind Vocal 2
-    vocal:  { top: 206, left: '28%', marginLeft: -(SRC_W / 2) },            // vocal 1 — downstage left, over Wedge 1
-    vocal2: { top: 206, left: '54%', marginLeft: -(SRC_W / 2) },            // vocal 2 — downstage right, over Wedge 2
+    vocal:  { top: 226, left: '28%', marginLeft: -(SRC_W / 2) },            // vocal 1 — downstage left, over Wedge 1
+    vocal2: { top: 226, left: '54%', marginLeft: -(SRC_W / 2) },            // vocal 2 — downstage right, over Wedge 2
   };
 
   return (
@@ -4779,7 +5118,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     }}>
       <ZoneHeader label="Stage" sublabel="band, sources, mains + wedges · downstage ↓ audience" badge="LIVE AREA" badgeColor="var(--green)"/>
 
-      <div style={{ position: 'relative', minHeight: big16 ? 860 : 480 }}>
+      <div data-stage-plot="1" style={{ position: 'relative', minHeight: big16 ? 900 : 512 }}>
         {/* DRUM RISER — a labelled platform outline around the whole kit cluster
             (kick, snare, toms, overheads), the drummer's vocal mic (VOX 4) and
             the drummer's monitor (Wedge 4). Renders first so it paints UNDER the
@@ -4794,22 +5133,47 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               letterSpacing: 1.6, fontWeight: 700, color: '#8a8792' }}>DRUM RISER</div>
           </div>
         )}
+        {/* THE MAINS LINE. On a real stage plot you read the in-front / behind
+            relationship straight off the drawing, so it is drawn here: the plane
+            of the main speakers, running the width of the stage. Every open mic
+            belongs UPSTAGE of it. A mic below this line is out in the coverage
+            and will ring long before it is loud (Kyle 2026-07-24). Turns red the
+            moment any source card crosses to the wrong side of it. */}
+        {(() => {
+          const micsBehind = paLine >= 0.15;
+          const col = micsBehind ? 'rgba(122,122,132,0.55)' : 'var(--hot)';
+          return (
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: paBottom + PA_HALF, pointerEvents: 'none', zIndex: 1 }}>
+              <div style={{ borderTop: '1px dashed ' + col, opacity: micsBehind ? 0.8 : 1 }}/>
+              <div className="mono" style={{ position: 'absolute', right: 4, top: 2, fontSize: 7,
+                letterSpacing: 1.2, fontWeight: 700, color: col, whiteSpace: 'nowrap' }}>
+                {micsBehind ? 'MAINS LINE · MICS BEHIND' : 'MAINS LINE · MICS OUT IN FRONT'}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Downstage row — PA L, Wedge 1, Wedge 2, PA R, evenly spaced along
             the front of the stage. Each one's cable comes out of its bottom
             edge and runs along the front rail back to the stage box. */}
-        <div ref={paLRef} data-walk="out-pa-l" style={{ position: 'absolute', bottom: big16 ? 48 : 40, left: big16 ? '11%' : '7%', transform: 'translateX(-50%)' }}>
+        <div ref={paLRef} data-walk="out-pa-l" title="Drag upstage or downstage. Every open mic belongs behind the front face of the mains."
+          onPointerDown={(e) => { paDragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} }}
+          onPointerMove={(e) => { if (paDragRef.current) setPaLine(e.clientY, e.currentTarget); }}
+          onPointerUp={() => { paDragRef.current = false; }} onPointerCancel={() => { paDragRef.current = false; }}
+          style={{ position: 'absolute', cursor: 'ns-resize', bottom: paBottom, left: big16 ? '11%' : '7%', transform: 'translateX(-50%)' }}>
           <PASpeaker side="L" showPower={!isPassive}
             on={isPassive ? paShowsOn : state.outputs.pa_l.on} mute={state.outputs.pa_l.mute} volume={state.outputs.pa_l.volume} level={audio.outputs.pa_l}
             signalArriving={(audio.speakerInput?.pa_l || 0) > 0.04}
             onTogglePower={() => setOut('pa_l', { on: !state.outputs.pa_l.on })}
             onToggleMute={() => setOut('pa_l', { mute: !state.outputs.pa_l.mute })}
             onVolume={(v) => setOutInspect('pa_l', { volume: v }, 'pa')}
+            marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.mains) : null}
             isInspected={state.inspect === 'pa'}
             onSelect={() => setState({ ...state, inspect: 'pa' })}/>
         </div>
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '26%' : '28%', transform: 'translateX(-50%)' }}>
+          <div ref={wedgeOnStageRef} data-walk="out-wedge1" style={{ position: 'absolute', bottom: big16 ? 96 : 76, left: big16 ? '26%' : '28%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 1" on={state.outputs.wedge.on} mute={state.outputs.wedge.mute} volume={state.outputs.wedge.volume} level={audio.outputs.wedge}
               onTogglePower={() => setOut('wedge', { on: !state.outputs.wedge.on })}
               onToggleMute={() => setOut('wedge', { mute: !state.outputs.wedge.mute })}
@@ -4822,7 +5186,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         {topo.wedgeLocation === 'stage' && (
-          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 96 : 96, left: big16 ? '46%' : '54%', transform: 'translateX(-50%)' }}>
+          <div ref={wedge2OnStageRef} data-walk="out-wedge2" style={{ position: 'absolute', bottom: big16 ? 96 : 76, left: big16 ? '46%' : '54%', transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 2" accent="var(--cool)" on={state.outputs.wedge2.on} mute={state.outputs.wedge2.mute} volume={state.outputs.wedge2.volume} level={audio.outputs.wedge2}
               onTogglePower={() => setOut('wedge2', { on: !state.outputs.wedge2.on })}
               onToggleMute={() => setOut('wedge2', { mute: !state.outputs.wedge2.mute })}
@@ -4838,7 +5202,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             wedge etc). The MX-8 runs two vocal wedges only — Vocal 1 → Wedge 1,
             Vocal 2 → Wedge 2 — so W3/W4 are not on the small stage. */}
         {topo.wedgeLocation === 'stage' && big16 && (
-          <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', ...(big16 ? { bottom: 96, left: '66%' } : { bottom: 96, left: '54%' }), transform: 'translateX(-50%)' }}>
+          <div ref={wedge3OnStageRef} data-walk="out-wedge3" style={{ position: 'absolute', ...(big16 ? { bottom: 96, left: '66%' } : { bottom: 76, left: '54%' }), transform: 'translateX(-50%)' }}>
             <Wedge label="WEDGE 3" accent="var(--green)" on={state.outputs.wedge3.on} mute={state.outputs.wedge3.mute} volume={state.outputs.wedge3.volume} level={audio.outputs.wedge3}
               onTogglePower={() => setOut('wedge3', { on: !state.outputs.wedge3.on })}
               onToggleMute={() => setOut('wedge3', { mute: !state.outputs.wedge3.mute })}
@@ -4863,13 +5227,18 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
           </div>
         )}
 
-        <div ref={paRRef} data-walk="out-pa-r" style={{ position: 'absolute', bottom: big16 ? 48 : 40, left: big16 ? '89%' : '73%', transform: 'translateX(-50%)' }}>
+        <div ref={paRRef} data-walk="out-pa-r" title="Drag upstage or downstage. Every open mic belongs behind the front face of the mains."
+          onPointerDown={(e) => { paDragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} }}
+          onPointerMove={(e) => { if (paDragRef.current) setPaLine(e.clientY, e.currentTarget); }}
+          onPointerUp={() => { paDragRef.current = false; }} onPointerCancel={() => { paDragRef.current = false; }}
+          style={{ position: 'absolute', cursor: 'ns-resize', bottom: paBottom, left: big16 ? '89%' : '73%', transform: 'translateX(-50%)' }}>
           <PASpeaker side="R" showPower={!isPassive}
             on={isPassive ? paShowsOn : state.outputs.pa_r.on} mute={state.outputs.pa_r.mute} volume={state.outputs.pa_r.volume} level={audio.outputs.pa_r}
             signalArriving={(audio.speakerInput?.pa_r || 0) > 0.04}
             onTogglePower={() => setOut('pa_r', { on: !state.outputs.pa_r.on })}
             onToggleMute={() => setOut('pa_r', { mute: !state.outputs.pa_r.mute })}
             onVolume={(v) => setOutInspect('pa_r', { volume: v }, 'pa')}
+            marginInfo={wedgeMargins && window.feedbackMarginInfo ? window.feedbackMarginInfo(wedgeMargins.mains) : null}
             isInspected={state.inspect === 'pa'}
             onSelect={() => setState({ ...state, inspect: 'pa' })}/>
         </div>
@@ -4970,7 +5339,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
                 vocal mics drop down through that gap into it; its multicore runs
                 up and over to the main box on the LEFT of the stage, clear of
                 Wedge 4's return on the right. */}
-            <div data-zoomable data-zoom-key="vocal" style={{ position: 'absolute', top: 760, left: '36%', transform: 'translateX(-50%)' }}>
+            <div data-zoomable data-zoom-key="vocal" style={{ position: 'absolute', top: 806, left: '36%', transform: 'translateX(-50%)' }}>
               <SubSnakeHead label="VOCAL SUB-SNAKE" group="down" items={voxItems} subJackRefs={subJackRefs} outRef={downHeadOutRef}/>
             </div>
             {/* Side-stage box — a vertical 16-in / 8-out rack on the stage-right
@@ -6281,7 +6650,13 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
       //      clear right-side margin.
       //   2. No stacking — each cable gets its own offset within a lane.
       let cableLanes = null;
-      if (state.big16) {
+      {
+        // Runs for BOTH boards. This was gated to `if (state.big16)`, which meant
+        // the MX-8 stage had no measured lanes and, worse, no entry in
+        // __stageCardEls at all — so __cableAudit() had nothing to check there and
+        // reported nothing while cables ran through both mains (Kyle 2026-07-24).
+        // Every ref below is null-safe, so the smaller board simply contributes
+        // fewer devices.
         const rectOf = (el) => {
           if (!el) return null;
           const r = el.getBoundingClientRect();
@@ -6297,22 +6672,42 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
           ...['vx1', 'vx2', 'vx3'].map((k) => sourceRefs.current[k]), ...subSnakeEls];
         const downRects = downstageEls.map(rectOf).filter(Boolean);
         // Every card on the stage, for the upstage (back-edge) lane and the audit.
-        const allEls = [...downstageEls, wedge4OnStageRef.current, ...sourceKeys.map((k) => sourceRefs.current[k])];
+        // The stage box and the sub-snake heads are devices too. They were left
+        // out of this list, so nothing stopped a cable being draped along the
+        // side of the box and nothing reported it (Kyle 2026-07-24).
+        const boxEls = [stageBoxRef.current,
+                        ...document.querySelectorAll('[data-zoom-key="drum"],[data-zoom-key="backline"],[data-zoom-key="vocal"]')];
+        const allEls = [...downstageEls, wedge4OnStageRef.current, ...sourceKeys.map((k) => sourceRefs.current[k]), ...boxEls];
         const allRects = allEls.map(rectOf).filter(Boolean);
         const maxBottom = downRects.length ? Math.max(...downRects.map((r) => r.b)) : 0;
         const minTop = allRects.length ? Math.min(...allRects.map((r) => r.y)) : 0;
         const boxLeftX = sbRect ? (sbRect.left - cb.left) / S : 0;
+        // The front return trough. Two rules, both of which were being broken:
+        // it has to CLEAR the lowest device, and it has to FIT ON THE STAGE. The
+        // old lane was maxBottom + 26 with a fixed 7 px pitch and no idea where
+        // the floor was, so once the vocal sub-snake moved downstage the whole
+        // band ran off the bottom of the plot and over the brief card beneath it,
+        // and the ports were too close together to read apart (Kyle 2026-07-24).
+        // Now the band is solved for: reserve what the lanes need, and if the
+        // devices leave less room than that, the band wins and rides higher.
+        const plotEl = cont.querySelector('[data-stage-plot]') || cont;
+        const stageFloorY = (plotEl.getBoundingClientRect().bottom - cb.top) / S;
+        const N_FRONT = state.big16 ? 5 : 4;   // mains L+R plus wedges 1-3 (16ch) or 1-2 (MX-8)
+        const MIN_PITCH = 7;
+        const need = (N_FRONT - 1) * MIN_PITCH + 10;
+        const laneTop = Math.min(maxBottom + 14, stageFloorY - 10 - need);
+        const laneBand = stageFloorY - 10 - laneTop;
         cableLanes = {
-          // Front-row returns run their floor segment here, each port a few px
-          // apart, all BELOW every downstage card.
-          frontFloorY: maxBottom + 26,
-          frontPitch: 7,
+          // Front-row returns run their floor segment here, each port its own
+          // lane, all BELOW every downstage card and all ON the stage.
+          frontFloorY: laneTop,
+          frontPitch: Math.max(MIN_PITCH, Math.min(12, laneBand / (N_FRONT - 1))),
           // W4's perimeter run rides above every card.
           backEdgeY: minTop - 20,
           // Returns drop straight down in the box's own clear right-side margin
           // (right of the rightmost card), each port in its own vertical lane.
           descendX: boxLeftX - 16,
-          descendPitch: 8,
+          descendPitch: 11,
           // Keep-out rects, exposed so window.__cableAudit() can verify no path
           // enters a card. Screen-space, matching getBBox() in the audit.
           cards: allRects,
@@ -6967,17 +7362,23 @@ function Chain({ state, setState, audio, sidebarContent, fitScale = 1, surface, 
             // upstage wedge (W4, by the kit) rides the BACK EDGE lane (above
             // every card). Each port gets its own offset so parallel runs never
             // stack. See cableLanes in the compute() effect.
-            : (c.big16 && L
-                ? (c.to.y > 480
+            : (L
+                ? ((!c.big16 || c.to.y > 480)
                     ? window._polyRound([
                         c.from,
-                        { x: c.from.x, y: L.frontFloorY + c.portId * L.frontPitch },  // down the box edge to this port's floor lane (offset DOWN so it is always below every card)
-                        { x: c.to.x,   y: L.frontFloorY + c.portId * L.frontPitch },  // along the floor, below every card
-                        c.to,                                                          // up into the speaker bottom
+                        { x: L.descendX - c.portId * L.descendPitch, y: c.from.y },                                  // out into this port's own vertical lane, CLEAR of the box
+                        { x: L.descendX - c.portId * L.descendPitch, y: L.frontFloorY + c.portId * L.frontPitch },   // down that lane to this port's floor lane
+                        { x: c.to.x,   y: L.frontFloorY + c.portId * L.frontPitch },                                 // along the floor, below every card
+                        c.to,                                                                                        // up into the speaker bottom
                       ], 8)
+                    // W4 is the ONLY cable on the back-edge lane, so it takes the
+                    // ascent lane straight, with no per-port offset. Offsetting it
+                    // walked it left into the keys DI on its way up, which is the
+                    // drum-monitor cable Kyle spotted running through the gear.
                     : window._polyRound([
                         c.from,
-                        { x: c.from.x, y: L.backEdgeY },   // up the box edge to the back-edge lane
+                        { x: L.descendX, y: c.from.y },    // out clear of the box first
+                        { x: L.descendX, y: L.backEdgeY }, // straight up, in the gap between the box and the keys DI
                         { x: c.to.x,   y: L.backEdgeY },   // along the back edge, above every card
                         c.to,                              // down into the wedge (top-connected)
                       ], 8))
@@ -7733,6 +8134,13 @@ if (Array.isArray(window.SOUNDCHECK)) {
   window.SOUNDCHECK.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isSoundcheck: true }));
 }
 
+// Managing Feedback (members): the causes and cures of the squeal — gain before
+// feedback, mic placement, fewer open mics, ring-out and HPF. Its own FBK picker
+// band, member-gated via isLesson.
+if (Array.isArray(window.MANAGE_FEEDBACK)) {
+  window.MANAGE_FEEDBACK.forEach((l) => SCENARIOS.push({ ...l, isLesson: true, isFeedbackCourse: true }));
+}
+
 // The Gig (members): the capstone challenge. isLesson keeps it member-gated
 // and puts it in the picker; isChallenge on the entry itself hides the answer
 // key and puts the hint behind a button, the way Practice does.
@@ -7838,6 +8246,7 @@ const INPUT_SETUP_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i
 const SYSTEM_LEVEL_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isSystemLevel);
 const BIG_BOARD_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isBigBoard);
 const SOUNDCHECK_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isSoundcheck);
+const FEEDBACK_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isFeedbackCourse);
 const THE_GIG_INDEXES = SCENARIOS.map((s, i) => i).filter((i) => SCENARIOS[i].isTheGig);
 const SH_FINALE_ID = 105;
 // Where a visitor lands with no resume target: members go to lesson 1 of Run
@@ -7868,6 +8277,7 @@ function bandOf(l) {
   if (l.isSystemLevel) return 'SYSTEM';  // System Level course (members)
   if (l.isBigBoard) return 'BIG16';      // 16-Channel Mode orientation (members)
   if (l.isSoundcheck) return 'CHECK';    // Soundcheck course (members)
+  if (l.isFeedbackCourse) return 'FBK';  // Managing Feedback course (members)
   if (l.isTheGig) return 'GIG';          // The Gig capstone (members)
   if (l.isPower) return 'POWER';       // Power Up / Power Down course (members)
   if (l.isInputSetup) return 'INPUT';  // Input Setup course (members)
@@ -9886,7 +10296,17 @@ function App() {
   // howl (gain too hot, no glowing band) is deliberately excluded — it points at
   // the gain, not the monitor EQ, so opening the panel there only misleads.
   const wedgeRinging = !!(feedback && feedback.wedgeRing);
-  uE(() => { if (wedgeRinging) setEqPanelOpen(true); }, [wedgeRinging]);
+  // ...but ONLY where the graphic EQ is actually the answer. A guided lesson whose
+  // fix is the HPF, a mute, or mic placement was having the EQ thrown open over
+  // the top of it, which both suggests the wrong tool and hides the guide's
+  // spotlight (an open panel suppresses the walkthrough target). Ring-out lessons
+  // opt in with `eqRingOut`; Practice and Ear Training always ring out, so they
+  // keep the old behavior. (Kyle 2026-07-22.)
+  const eqIsTheFix = !!(level && (level.eqRingOut || level.isFeedbackMode || level.isPractice));
+  // eqIsTheFix is in the deps so moving from one ringing lesson straight to another
+  // (where only the flag changed, not the ring) still re-evaluates. Closing the panel
+  // by hand mid-ring still sticks, because neither dependency changes when you do.
+  uE(() => { if (wedgeRinging && eqIsTheFix) setEqPanelOpen(true); }, [wedgeRinging, eqIsTheFix]);
 
   // Fault warning modal. Pops and distortion announce themselves in a centered
   // dismissible modal instead of stacking text into the brief card. Feedback is
@@ -10106,7 +10526,36 @@ function App() {
     // Output-check lesson: the test ends with every listed speaker switched
     // back on. Stops a "solved" board whose mains never came back.
     const outputsOnOk = !level.requireOutputsOn || level.requireOutputsOn.every((k) => { const o = state.outputs[k]; return !!(o && o.on); });
-    const normalWon = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk && outputsOnOk;
+    // Mixing Monitors ring-out: a lesson can require a raw aux send to sit at or
+    // above (or between) a level, read STRAIGHT OFF THE KNOB (requireSend:
+    // [{ ch:1, aux:1, min:0.6 }]). This is immune to the wedge EQ — the ring-out
+    // lesson needs the send kept UP so the fix is the graphic-EQ cut, not pulling
+    // the singer down, and the post-EQ contribution can't gate that because the
+    // cut itself lowers it. State-checked like mute/HPF.
+    const sendOk = !level.requireSend || level.requireSend.every((r) => {
+      const c = state.channels[r.ch - 1];
+      if (!c) return false;
+      const v = c['aux' + r.aux] || 0;
+      if (r.min != null && v < r.min) return false;
+      if (r.max != null && v > r.max) return false;
+      return true;
+    });
+    // Managing Feedback: a lesson can require a wedge to keep at least N dB of
+    // gain-before-feedback HEADROOM (requireMargin: { wedge: 6 }). Reads the same
+    // feedbackMargins model the on-wedge "+N dB to F/B" readout shows, so the
+    // "run it loud but leave about 6 dB" discipline is graded, not just eyeballed.
+    // feedbackMargins returns the hottest loop in dB (higher = closer to ringing);
+    // the usable margin is its negative. No mic loop on a wedge = huge margin.
+    const marginOk = !level.requireMargin || (() => {
+      const fm = window.feedbackMargins ? window.feedbackMargins(state, window.computeAudio(state)) : null;
+      if (!fm) return false;
+      return Object.keys(level.requireMargin).every((k) => (fm[k] != null ? -fm[k] : 999) >= level.requireMargin[k]);
+    })();
+    // Managing Feedback: a lesson can require a channel to be MUTED — an unused
+    // open mic has to be CLOSED, not just turned down in one send (it is still
+    // live in every other mix). requireMute: [2].
+    const muteOk = !level.requireMute || level.requireMute.every((ch) => { const c = state.channels[ch - 1]; return !!(c && c.mute); });
+    const normalWon = flowOk && pflClear && pflChecked && pflEachOk && clean && balanced && noFeedback && toneOk && poweredUp && poweredDown && zeroedOk && verifiedOk && gainOk && patchOk && soundOk && adjustOk && hpfOk && outputsOnOk && sendOk && marginOk && muteOk;
     // A "hear the pop" lesson (popIsTheGoal) inverts the whole thing: causing
     // the pop IS the objective. The win is simply that the student has popped
     // the system this attempt (hasPoppedRef, set above when `blocked` went
@@ -11395,7 +11844,18 @@ function App() {
     setPracticeFaultsState(n);
   };
   // Picking a level from the menu leaves any "practice what needs it" focus.
-  const pickLevel = (i) => { focusRef.current = null; loadLevel(i); };
+  // trackPick remembers that the student entered this lesson from the Live Sound
+  // 101 companion track, so the top bar can say "LESSON 3.2" instead of the
+  // lesson's home course ("PATCHING · 01 / 08"), which is what made the track
+  // feel like a menu of excerpts. It stores the id too, so navigating away with
+  // the arrows falls back to the normal label instead of mislabelling.
+  const [trackPick, setTrackPick] = uS(null);
+  const pickLevel = (i, code) => {
+    focusRef.current = null;
+    const sc = SCENARIOS[i];
+    setTrackPick(code && sc ? { id: sc.id, code } : null);
+    loadLevel(i);
+  };
   // Practice what needs it: drill the fault types that need practice, steering
   // the auto-generator at the member's rusty faults, and roll a fresh rep. The
   // focus persists across Next rep until they pick another level or change
@@ -11909,8 +12369,15 @@ function App() {
         level={level} levelIdx={levelIdx} totalLevels={SCENARIOS.length}
         solved={solved} audioOn={audioOn} setAudioOn={setAudioOn}
         onRestart={restart} onPrev={prev} onNext={next} onPick={pickLevel}
+        trackPick={trackPick}
         completed={completed}
-        eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)} eqRinging={wedgeRinging}
+        eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)}
+        /* The red MONITOR EQ glow is the same nudge as the auto-open, just quieter,
+           so it obeys the same rule: only light it where the graphic EQ is actually
+           the tool for the job. In a lesson whose fix is a mute, an HPF, or where the
+           microphone stands, a red EQ button sends the student to cut frequencies for
+           no reason (Kyle 2026-07-22). Sandbox has no prescribed fix, so it keeps it. */
+        eqRinging={wedgeRinging && (eqIsTheFix || !!level.isSandbox)}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
         stageHidden={effStageHidden}
         onToggleStage={state.big16 ? (() => setStage16Open(v => !v)) : ((stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null)}
@@ -11970,7 +12437,8 @@ function App() {
         open={!!placementFor} srcKey={placementFor}
         label={placementFor && window.SOURCES[placementFor] ? window.SOURCES[placementFor].label : ''}
         setup={state.micSetup && placementFor ? state.micSetup[placementFor] : null}
-        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 135, tilt: 5 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
+        paLine={window.paLineOf ? window.paLineOf(state) : null}
+        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 10 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
         onClose={() => setPlacementFor(null)}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
@@ -12086,7 +12554,7 @@ function App() {
                           // Solving the LAST lesson of a member course is a course
                           // pass, and the debrief says so instead of quietly
                           // rolling into the next course's first lesson.
-                          const names = { PATCHING: 'Patching', POWER: 'Power', INPUT: 'Input Setup', MONITOR: 'Mixing Monitors', SYSTEM: 'System Level', BIG16: '16-Channel Mode', CHECK: 'Soundcheck' };
+                          const names = { PATCHING: 'Patching', POWER: 'Power', INPUT: 'Input Setup', MONITOR: 'Mixing Monitors', SYSTEM: 'System Level', BIG16: '16-Channel Mode', CHECK: 'Soundcheck', FBK: 'Managing Feedback' };
                           const b = bandOf(level);
                           if (!names[b]) return null;
                           const nxt = SCENARIOS[levelIdx + 1];
@@ -12311,7 +12779,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // Free visitors land with Mixer Tutorial expanded (their starting course);
   // members get a clean list unless they're mid-course.
   const initialOpenCourse = level
-    ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : level.isPatching ? 'patching' : level.isBigBoard ? 'bigboard' : level.isSoundcheck ? 'soundcheck' : (bandOf(level) === 'LEARN' ? 'show' : (TIER !== 'member' ? 'mixer' : null)))
+    ? (level.isWalkthrough ? 'mixer' : level.isMonitor ? 'monitor' : level.isFeedbackCourse ? 'feedback-course' : level.isPatching ? 'patching' : level.isBigBoard ? 'bigboard' : level.isSoundcheck ? 'soundcheck' : (bandOf(level) === 'LEARN' ? 'show' : (TIER !== 'member' ? 'mixer' : null)))
     : (TIER !== 'member' ? 'mixer' : null);
   const [openCourse, setOpenCourse] = uS(initialOpenCourse);
   // When the picker is open on load, the resume effect may swap the level in
@@ -12321,16 +12789,30 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // never fights a manual mode switch.
   uE(() => { setMode(curMode); }, [levelIdx]);
   const isMember = TIER === 'member';
-  const lessons = []; const libraries = []; const monitors = []; const patching = []; const power = []; const inputSetup = []; const startHere = []; const systemLevel = []; const theGig = []; const bigBoard = []; const soundcheck = [];
+  const lessons = []; const libraries = []; const monitors = []; const patching = []; const power = []; const inputSetup = []; const startHere = []; const systemLevel = []; const theGig = []; const bigBoard = []; const soundcheck = []; const feedbackCourse = [];
   SCENARIOS.forEach((s, i) => {
     if (s.isStartHere) { startHere.push({ s, i }); return; }
     const b = bandOf(s);
-    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i }); else if (b === 'INPUT') inputSetup.push({ s, i }); else if (b === 'SYSTEM') systemLevel.push({ s, i }); else if (b === 'BIG16') bigBoard.push({ s, i }); else if (b === 'CHECK') soundcheck.push({ s, i }); else if (b === 'GIG') theGig.push({ s, i });
+    if (b === 'LEARN') lessons.push({ s, i }); else if (b === 'LIBRARY') libraries.push({ s, i }); else if (b === 'MONITOR') monitors.push({ s, i }); else if (b === 'PATCHING') patching.push({ s, i }); else if (b === 'POWER') power.push({ s, i }); else if (b === 'INPUT') inputSetup.push({ s, i }); else if (b === 'SYSTEM') systemLevel.push({ s, i }); else if (b === 'BIG16') bigBoard.push({ s, i }); else if (b === 'CHECK') soundcheck.push({ s, i }); else if (b === 'FBK') feedbackCourse.push({ s, i }); else if (b === 'GIG') theGig.push({ s, i });
+  });
+  // Live Sound 101 companion track: the SAME exercises, re-ordered to follow the
+  // course lesson by lesson, so a student who just watched a video can find the
+  // matching hands-on exercise by its lesson number. Resolved by lesson id, so it
+  // reuses existing content instead of duplicating it, and an id that isn't in
+  // SCENARIOS is simply skipped — that is how exercises whose mechanic isn't
+  // built yet (hum, routing, mic placement) stay out of the menu until they are.
+  // `head` marks the first row of each course lesson so the list can group.
+  const ls101 = [];
+  (window.LS101_TRACK || []).forEach((t) => {
+    const i = SCENARIOS.findIndex((s) => String(s.id) === String(t.id));
+    if (i < 0) return;
+    const head = ls101.length === 0 || ls101[ls101.length - 1].code !== t.code;
+    ls101.push({ s: SCENARIOS[i], i, code: t.code, lesson: t.lesson, head });
   });
   const practiceIdx = SCENARIOS.findIndex((s) => s.isPractice);
   const feedbackIdx = SCENARIOS.findIndex((s) => s.isFeedbackMode);
   const sandboxIdx = SCENARIOS.findIndex((s) => s.isSandbox);
-  const go = (i) => { if (i >= 0) { onPick(i); onClose(); } };
+  const go = (i, code) => { if (i >= 0) { onPick(i, code); onClose(); } };
   const startBtn = (label, onClick) => (
     <button onClick={onClick} className="mono ui-no-select" style={{
       width: '100%', padding: '9px 12px', fontSize: 11, fontWeight: 800, letterSpacing: 0.6,
@@ -12346,10 +12828,11 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   ];
   // A course row in the Learn pane. `num` is the lesson's position WITHIN its
   // course (01, 02 ...); `free` unlocks it for the free tier (Mixer Tutorial).
-  const courseRow = ({ s, i }, num, free) => {
+  const courseRow = (row, num, free) => {
+    const { s, i } = row;
     const locked = !isMember && !free;
     return (
-      <div key={s.id} onClick={() => go(i)} className="ui-no-select"
+      <div key={s.id} onClick={() => go(i, row.code)} className="ui-no-select"
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 5, cursor: 'pointer', background: i === levelIdx ? '#2a2a2e' : 'transparent' }}
         onMouseEnter={(e) => e.currentTarget.style.background = '#23232a'}
         onMouseLeave={(e) => e.currentTarget.style.background = i === levelIdx ? '#2a2a2e' : 'transparent'}>
@@ -12362,6 +12845,9 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   // the other two are gated, and a free viewer sees a lock instead of an
   // expander on them.
   const COURSES = [];
+  // The companion track goes FIRST: for a member working through Live Sound 101
+  // it is the spine, and the topical courses below are depth on one skill.
+  if (ls101.length > 0) COURSES.push({ key: 'ls101', label: 'LIVE SOUND 101', color: '#7ee787', tag: isMember ? 'COURSE' : 'MEMBERS', free: false, grouped: true, blurb: 'The hands-on half of the Live Sound 101 course. Each group below matches a lesson in the course, so when a video sends you here, find its lesson number and work through the exercises under it.', rows: ls101 });
   if (startHere.length) COURSES.push({ key: 'starthere', label: 'START HERE', color: 'var(--green)', tag: 'FREE', free: true, blurb: 'Start here to learn the essential skills, one step at a time.', rows: startHere });
   if (patching.length > 0) COURSES.push({ key: 'patching', label: 'PATCHING', color: 'var(--cool)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Read the input list, patch the system, and find the fault when a cable is wrong.', rows: patching });
   if (power.length > 0) COURSES.push({ key: 'power', label: 'POWER', color: 'var(--amber)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Hear the pop that bad power order causes, then learn the correct order up and down.', rows: power });
@@ -12372,6 +12858,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   if (theGig.length > 0) COURSES.push({ key: 'thegig', label: 'THE GIG', color: 'var(--hot)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'The capstone. A 16-channel system, nothing connected and nothing switched on. Get the show running.', rows: theGig });
   COURSES.push({ key: 'show', label: 'RUN THE SHOW', color: 'var(--accent)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Set up a system from nothing and run a full show. Ten lessons, in order.', rows: lessons });
   if (monitors.length > 0) COURSES.push({ key: 'monitor', label: 'MIXING MONITORS', color: 'var(--aux)', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Build each performer\'s monitor mix, keep it clean, and handle "more me" without making the wedge ring.', rows: monitors });
+  if (feedbackCourse.length > 0) COURSES.push({ key: 'feedback-course', label: 'MANAGING FEEDBACK', color: '#ff8f6b', tag: isMember ? null : 'MEMBERS', free: false, blurb: 'Stop the squeal: run the monitors loud but with headroom, stand the mics where the wedge and the mains cannot get back into them, close the mics you are not using, and ring out the rest.', rows: feedbackCourse });
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 680, maxWidth: '94vw', background: 'linear-gradient(180deg,#1c1c20 0%, #141418 100%)', border: '1px solid #38383e', borderRadius: 12, overflow: 'hidden', boxShadow: '0 16px 48px rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', maxHeight: '88vh' }}>
@@ -12434,7 +12921,16 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
                       {isOpen && (
                         <div style={{ padding: '0 10px 8px', borderTop: '1px solid #222226' }}>
                           {co.blurb && <div style={{ fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.45, margin: '8px 2px' }}>{co.blurb}</div>}
-                          {co.rows.map((row, n) => courseRow(row, n + 1, co.free))}
+                          {co.rows.map((row, n) => (
+                            (co.grouped && row.head) ? (
+                              <React.Fragment key={'grp-' + row.s.id}>
+                                <div className="mono" style={{ fontSize: 8.5, letterSpacing: 0.9, fontWeight: 700, color: 'var(--ink-3)', margin: n === 0 ? '8px 2px 4px' : '12px 2px 4px', paddingTop: n === 0 ? 0 : 8, borderTop: n === 0 ? 'none' : '1px solid #222226' }}>
+                                  {(row.code === 'LAB' ? 'LAB ORIENTATION' : 'LESSON ' + row.code) + ' · ' + String(row.lesson || '').toUpperCase()}
+                                </div>
+                                {courseRow(row, n + 1, co.free)}
+                              </React.Fragment>
+                            ) : courseRow(row, n + 1, co.free)
+                          ))}
                         </div>
                       )}
                     </div>
@@ -12487,7 +12983,7 @@ function ModePicker({ onClose, level, levelIdx, completed, practicePanel, feedba
   );
 }
 
-function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, feedbackFreeLabel, feedbackExhausted, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, stage16Open, consoleSize, onSetConsoleSize, sizeSelectable, big16, zoomPct, onZoomIn, onZoomOut, onZoomReset }) {
+function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onRestart, onPrev, onNext, onPick, trackPick, completed, eqOpen, onToggleEq, eqRinging, onOpenProgress, onOpenIoList, onOpenCatalog, nudgeSound, practiceFaults, onSetPracticeFaults, feedbackByEar, onSetFeedbackByEar, feedbackFreeLabel, feedbackExhausted, practiceFreeLeft, rank, rankClean, onTrainRank, liveShow, onSetLiveShow, onSelectDifficulty, onPracticeFaults, onPracticeLive, startOpen, streak, stageHidden, onToggleStage, stage16Open, consoleSize, onSetConsoleSize, sizeSelectable, big16, zoomPct, onZoomIn, onZoomOut, onZoomReset }) {
   // The mode menu opens on load (startOpen) so every visit begins with "what do
   // you want to do?" instead of dropping the user onto a board with no context.
   // startOpen is held false while the first-run tour is up, then flips true once
@@ -12566,7 +13062,9 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
         <button onClick={onPrev} disabled={levelIdx === 0} className="mono ui-no-select" style={navBtn}>←</button>
         <div onClick={() => setPicker(p => !p)} style={{ position: 'relative', cursor: 'pointer', minWidth: 320, textAlign: 'center' }} className="ui-no-select">
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.5 }}>
-            {level.isPractice
+            {(trackPick && String(level.id) === String(trackPick.id))
+              ? (trackPick.code === 'LAB' ? 'LIVE SOUND 101 · LAB ORIENTATION' : 'LIVE SOUND 101 · LESSON ' + trackPick.code)
+              : level.isPractice
               ? (practiceFreeLeft != null ? 'PRACTICE MODE · FREE PREVIEW' : 'PRACTICE MODE · MEMBERS')
               : level.isFeedbackMode
               ? 'EAR TRAINING · MEMBERS'
@@ -12574,6 +13072,8 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
               ? 'FREE PLAY · NO GOAL'
               : level.isMonitor
               ? 'MIXING MONITORS · MEMBERS'
+              : level.isFeedbackCourse
+              ? `MANAGING FEEDBACK · ${String(FEEDBACK_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(FEEDBACK_INDEXES.length).padStart(2, '0')}`
               : level.isPatching
               ? `PATCHING · ${String(PATCHING_INDEXES.indexOf(levelIdx) + 1).padStart(2, '0')} / ${String(PATCHING_INDEXES.length).padStart(2, '0')}`
               : level.isPower
@@ -12820,7 +13320,7 @@ function BriefCard({ level, conditions, audio, phantomPop, onReset, pflClear, pf
   })();
   const workChip = (
     <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 1.2, fontWeight: 700 }}>
-      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : level.isPatching ? 'PATCHING' : level.isPower ? 'POWER' : level.isInputSetup ? 'INPUT SETUP' : level.isMonitor ? 'MIXING MONITORS' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
+      {level.isPractice ? 'PRACTICE' : level.isFeedbackMode ? 'EAR TRAINING' : level.isStartHere ? 'START HERE' : level.isPatching ? 'PATCHING' : level.isPower ? 'POWER' : level.isInputSetup ? 'INPUT SETUP' : level.isMonitor ? 'MIXING MONITORS' : level.isFeedbackCourse ? 'MANAGING FEEDBACK' : 'LEVEL · ' + String(level.id).padStart(2, '0')}
     </div>
   );
 
