@@ -3236,7 +3236,7 @@ window.MANAGE_FEEDBACK = [
       // reaches +12.5. Wrong mic, more than one right answer.
       mwBoard(s);
       s.channels[0].aux1 = 0.70;
-      s.micSetup = { vocal: { pattern: 'hyper', az: 180, tilt: 10, paX: 2.4 } };
+      s.micSetup = { vocal: { pattern: 'hyper', az: 180, tilt: 10 } };
       return s;
     },
     solution: 'A floor wedge is not straight behind the mic, it is low and close, about 55 degrees under the capsule. A supercardioid rejects hardest around 125 degrees off the front, which is almost exactly where that wedge sits, and that is why a supercardioid is the standard stage vocal mic. A cardioid rejects straight out the back, so it wants the mic tilted well up, or the wedge further out and flatter. A hypercardioid reaches furthest round, about 110 degrees, so it suits a wedge off to one side rather than straight ahead. There is no best pattern, only the one that puts a null where your wedge actually is.',
@@ -3248,9 +3248,9 @@ window.MANAGE_FEEDBACK = [
     task: true,
     defs: ['mains', 'feedback'],
     requireMargin: { mains: 6 },
-    hint: 'This ring is not coming from a wedge. Wedge 1 is not even in the mix. It is the main speakers getting back into the vocal mic, because someone set the mains upstage of the mic line and left the singer standing out in front of them. Open PLACEMENT on the Vocal 1 mic and drag the main speaker along the floor. The pattern on the mic will not help you here.',
+    hint: 'This ring is not coming from a wedge. Wedge 1 is not even in the mix. Look at the stage: the mains line is drawn above the vocal mics, which means the singers are standing out in front of the speakers. Drag Main L or Main R downstage until the mic row is behind that line. The pattern on the mic will not help you here.',
     hints: [
-      { title: 'Get the mic behind the mains', target: 'placement-vocal', text: 'Open PLACEMENT on the Vocal 1 mic and drag the main speaker downstage until the mic sits well behind it and Main L reads at least +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; return !ctx.feedback && !!fm && -fm.mains >= 6 && !!c && ((c.pa_l || 0) + (c.pa_r || 0)) >= 0.3; } },
+      { title: 'Get the mics behind the mains', target: 'out-pa-l', text: 'Drag Main L or Main R downstage on the stage until the vocal mics sit well behind the mains line and Main L reads at least +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; return !ctx.feedback && !!fm && -fm.mains >= 6 && !!c && ((c.pa_l || 0) + (c.pa_r || 0)) >= 0.3; } },
     ],
     involves: [1, 2, 3, 4],
     conditions: [
@@ -3258,17 +3258,18 @@ window.MANAGE_FEEDBACK = [
     ],
     sabotage: (s) => {
       // No wedge send at all: this loop is the main speakers into the vocal mic.
-      // The mains are set a metre UPSTAGE of the mic, so the singer is standing
-      // out in front of the boxes with the full main mix pointed at them. The
-      // mic's pattern is no help, because the mains are off to the side where a
-      // directional mic already rejects them horizontally. Nothing on the console
-      // fixes it either. Moving the speakers does.
+      // paLine is a property of the SYSTEM, so setting it a metre upstage puts
+      // EVERY open mic out in front of the boxes at once, and the stage plot
+      // draws the mains line above the vocal mic row to show it. The mic's
+      // pattern is no help, because the mains stand off to the side where a
+      // directional mic already rejects them horizontally. Nothing on the
+      // console fixes it either. Moving the speakers does.
       mwBoard(s);
       s.channels[0].fader = 0.76;
-      s.micSetup = { vocal: { pattern: 'cardioid', az: 180, tilt: 5, paX: -1.0 } };
+      s.paLine = -1.0;
       return s;
     },
-    solution: 'Every open microphone belongs behind the front face of the main speakers. Stand above the stage and look down: if a mic is out past the boxes, no pattern, no EQ and no gain trimming will save it. Once the mic is level with the speakers or behind them, the spacing and the cabinet do the work for you.',
+    solution: 'Every open microphone belongs behind the front face of the main speakers, and where those speakers stand is one fact about the system, not a setting on each mic. Stand above the stage and look down: if a mic is out past the boxes, no pattern, no EQ and no gain trimming will save it. Once the mics are behind the mains line, the spacing and the cabinet do the work for you.',
     defaultInspect: 'pa',
   },
   {

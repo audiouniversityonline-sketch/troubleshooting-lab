@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=227"></script>
+<script src="content-staging.js?v=228"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1781,7 +1781,7 @@ window.micRejectionRaw = micRejectionRaw;
 // a lot here. No setup returns 1.0 (identical to the default), so every existing
 // lesson's feedback calibration is untouched; only when a student aims the mic
 // does the loop move.
-const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 180, tilt: 10, paX: 2.4 };
+const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 180, tilt: 10 };
 const REF_REJ = micRejectionRaw(DEFAULT_MIC_SETUP);
 function micRejection3D(setup) {
   if (!setup) return 1.0;
@@ -1803,8 +1803,8 @@ window.DEFAULT_MIC_SETUP = DEFAULT_MIC_SETUP;
 // rejects them; the rear lobe a side elevation appears to aim at the boxes is not
 // aimed at them at all. What actually isolates a mic from the mains is the
 // spacing between the two and which side of the speaker the mic is standing on.
-// So this path is TWO terms, both read off `paX` (metres the mic sits UPSTAGE of
-// the mains; negative means the mic is out in front of them):
+// So this path is TWO terms, both read off `state.paLine` (metres the mains stand
+// DOWNSTAGE of the mic line; negative means the mics are out in front of them):
 //   1. the SPEAKER's directivity toward the mic, as a sharp knee rather than a
 //      gentle slope. Out in front of the box is a serious problem; level with it
 //      is borderline; behind it, the cabinet shadows the mic and you are set.
@@ -1818,8 +1818,7 @@ const PA_TILT = 10;      // degrees the box is aimed down into the audience
 const PA_REAR_DB = 20;   // on-axis vs behind the box, full-range cabinet
 const PA_KNEE = 62;      // degrees off the box axis where the level starts falling away
 const PA_SOFT = 11;      // how many degrees that fall-off is spread over
-function paPathDb(setup) {
-  const x = setup.paX != null ? setup.paX : 2.4;
+function paPathDb(x) {
   const d = Math.sqrt(x * x + PA_LAT * PA_LAT + PA_RISE * PA_RISE);
   // Speaker axis points downstage (+x) and PA_TILT down; this is the angle from
   // that axis round to where the mic is standing.
@@ -1829,13 +1828,23 @@ function paPathDb(setup) {
   const spkDb = -PA_REAR_DB / (1 + Math.exp(-(ang - PA_KNEE) / PA_SOFT));
   return spkDb - 20 * Math.log10(d);
 }
-const REF_PA_DB = paPathDb(DEFAULT_MIC_SETUP);
-// A mic the student has never touched is 0 dB — existing lessons are untouched.
-// Once a placement exists, pattern and tilt move this loop too even if the
-// lesson never set a PA position, because on a real stage they always do.
-function paPlacementDb(setup) {
-  if (!setup) return 0;
-  return Math.max(-6, Math.min(16, paPathDb(setup) - REF_PA_DB));
+const PA_LINE_DEFAULT = 2.4;   // metres the mains stand DOWNSTAGE of the mic line
+const PA_LINE_MIN = -1.2;      // dragged upstage: the mics are out past the boxes
+const PA_LINE_MAX = 2.6;
+window.PA_LINE_DEFAULT = PA_LINE_DEFAULT;
+window.PA_LINE_MIN = PA_LINE_MIN;
+window.PA_LINE_MAX = PA_LINE_MAX;
+function paLineOf(s) { return (s && s.paLine != null) ? s.paLine : PA_LINE_DEFAULT; }
+window.paLineOf = paLineOf;
+const REF_PA_DB = paPathDb(PA_LINE_DEFAULT);
+// Where the mains stand is a property of the SYSTEM, not of each microphone
+// (Kyle 2026-07-24). Held per-mic it let Vocal 1 believe it was behind the boxes
+// while Vocal 2 believed it was in front of them, which cannot be true on one
+// stage, and it was invisible on the stage plot. So it reads one number off the
+// state and every open mic shares it. A state that has never set it reads the
+// default and contributes 0 dB, so no existing lesson moves.
+function paPlacementDb(s) {
+  return Math.max(-6, Math.min(16, paPathDb(paLineOf(s)) - REF_PA_DB));
 }
 window.paPlacementDb = paPlacementDb;
 const _ringActive = {};
@@ -1926,7 +1935,7 @@ function detectFeedback(s, audio) {
     // is what the student's own placement adds or takes away from there.
     const paFeed = (c.pa_l || 0) + (c.pa_r || 0);
     const mainsLoopDb = (paFeed > 0.001)
-      ? 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + paPlacementDb(s.micSetup && s.micSetup[srcKey]) + (ch.highpass ? -4.4 : 0)
+      ? 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + paPlacementDb(s) + (ch.highpass ? -4.4 : 0)
       : -999;
     const mKey = 'mains:' + i;
     const mTh = _ringActive[mKey] ? RING_SUSTAIN_DB : 0;
@@ -1994,7 +2003,7 @@ function feedbackMargins(s, audio) {
     // gate on headroom in front of the speakers, not just at the wedges.
     const paFeed = (c.pa_l || 0) + (c.pa_r || 0);
     if (paFeed > 0.001) {
-      const mm = 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + paPlacementDb(s.micSetup && s.micSetup[srcKey]) + (ch.highpass ? -4.4 : 0);
+      const mm = 20 * Math.log10(paFeed / FEED_0DB) + MAINS_DB + paPlacementDb(s) + (ch.highpass ? -4.4 : 0);
       if (mm > out.mains) out.mains = mm;
     }
   }
@@ -4079,28 +4088,28 @@ window.MonitorEqPanel = MonitorEqPanel;
 // picture and the loop can never disagree. Both are reported as gain before
 // feedback against a standard setup: positive means this placement bought
 // headroom, negative means it gave headroom away.
-function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
+function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onClose }) {
   const svgRef = React.useRef(null);
   const dragRef = React.useRef(false);
   if (!open) return null;
   const A = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
   const NAME = { cardioid: 'cardioid', super: 'supercardioid', hyper: 'hypercardioid' };
   const capFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 10, paX: 2.4 };
+  const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 10 };
   const pat = (setup && setup.pattern) || DEF.pattern;
   const tilt = (setup && setup.tilt != null) ? setup.tilt : DEF.tilt;
-  const paX = (setup && setup.paX != null) ? setup.paX : (DEF.paX != null ? DEF.paX : 2.4);
+  const paNow = paLine != null ? paLine : (window.PA_LINE_DEFAULT != null ? window.PA_LINE_DEFAULT : 2.4);
   const a = A[pat];
   const d2r = (d) => d * Math.PI / 180;
   const rOf = (aa, deg) => Math.abs(aa + (1 - aa) * Math.cos(d2r(deg)));
   const FLOOR_DROP = 55;
-  const eff = { pattern: pat, az: 180, tilt, paX };
+  const eff = { pattern: pat, az: 180, tilt };
 
   // Both readings straight off the engine, converted to gain before feedback:
   // micRejection3D returns a coupling ratio (>1 = hotter loop = less headroom),
   // paPlacementDb returns dB added to the mains loop, so both get negated.
   const wedgeDb = window.micRejection3D ? -20 * Math.log10(window.micRejection3D(eff)) : 0;
-  const mainsDb = window.paPlacementDb ? -window.paPlacementDb(eff) : 0;
+  const mainsDb = window.paPlacementDb ? -window.paPlacementDb({ paLine: paNow }) : 0;
   const tone = (db) => (db >= 1 ? 'var(--green)' : db > -3 ? 'var(--accent)' : 'var(--hot)');
   const wTone = tone(wedgeDb), mTone = tone(mainsDb);
   const sign = (db) => (db >= 0 ? '+' : '') + db.toFixed(0);
@@ -4117,7 +4126,6 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   const VW = 700, VH = 380, X0 = -1.70, Z1 = 2.86, S = VW / 5.35;
   const px = (x) => (x - X0) * S;
   const pz = (z) => (Z1 - z) * S;
-  const PA_MIN = -1.2, PA_MAX = 3.4;
   const EAR = [-0.25, 1.60], MOUTH = [-0.15, 1.55], HEAD = [-0.28, 1.67];
   const MIC = [px(0), pz(1.52)];
   // Wedge cabinet in side elevation: bottom edge on the floor, vertical back
@@ -4127,7 +4135,7 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   const WA = [0.727, 0], WB = [1.157, 0], WC = [1.157, 0.36];
   const WBC = [(WA[0] + WC[0]) / 2, (WA[1] + WC[1]) / 2]; // baffle centre
   const WEDGE = [px(WBC[0]), pz(WBC[1])];
-  const SPK = [px(paX), pz(2.12)];
+  const SPK = [px(paNow), pz(2.12)];
   const sa = d2r(10); // the box is aimed down into the audience, matching PA_TILT
 
   // Mic polar pattern in the plane of the view. faAng is the screen angle of the
@@ -4159,7 +4167,7 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   // a supercardioid or hypercardioid already rejects them in the horizontal
   // plane. So there is exactly one place a pattern recommendation can come from,
   // and it is this one.
-  const scoreW = (p) => (window.micRejection3D ? -20 * Math.log10(window.micRejection3D({ pattern: p, az: 180, tilt, paX })) : 0);
+  const scoreW = (p) => (window.micRejection3D ? -20 * Math.log10(window.micRejection3D({ pattern: p, az: 180, tilt })) : 0);
   let bestW = pat, bestWs = scoreW(pat);
   ['cardioid', 'super', 'hyper'].forEach((p) => { const sc = scoreW(p); if (sc > bestWs + 1) { bestWs = sc; bestW = p; } });
 
@@ -4170,18 +4178,11 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
   else wedgeCoach = 'The wedge sits in a live part of the pattern and tilt alone will not clear it. Try another pattern.';
 
   let mainsCoach;
-  if (paX < 0) mainsCoach = 'The mic is out past the main speaker, inside its coverage, with the full main mix pointed at it. No pattern saves a mic from that. Drag the speaker downstage until the mic is behind it.';
-  else if (paX < 0.8) mainsCoach = 'The mic is right at the front face of the main speaker, still in its coverage. Drag the speaker downstage until the mic sits behind it.';
+  if (paNow < 0) mainsCoach = 'The mic is out past the main speaker, inside its coverage, with the full main mix pointed at it. No pattern saves a mic from that. Move the main speakers downstage on the stage plot until the mic is behind them.';
+  else if (paNow < 0.8) mainsCoach = 'The mic is right at the front face of the main speaker, still in its coverage. Move the main speakers downstage on the stage plot until the mic sits behind them.';
   else if (mainsDb < -3) mainsCoach = 'The mic is close to the front of the speaker. Every open microphone belongs behind the front face of the mains.';
   else mainsCoach = 'The mic is behind the speaker, which is what protects it here. The mains stand off to the side of the stage, so this path is set by that spacing and by the cabinet shadowing the mic, not by the pattern on the mic.';
 
-  const setPa = (e) => {
-    const svg = svgRef.current; if (!svg) return;
-    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
-    const q = pt.matrixTransform(svg.getScreenCTM().inverse());
-    const wx = q.x / S + X0;
-    onChange({ paX: Math.round(Math.max(PA_MIN, Math.min(PA_MAX, wx)) * 20) / 20 });
-  };
   const patBtn = (p, txt) => (
     <div key={p} data-walk={'mic-pattern-' + p} onClick={() => onChange({ pattern: p })} className="mono ui-no-select"
       style={{ fontSize: 9, padding: '4px 9px', borderRadius: 4, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.4,
@@ -4207,10 +4208,8 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
         </div>
 
         <div style={{ background: '#0d0d10', border: '1px solid #2a2a2e', borderRadius: 6, padding: '5px 6px 2px' }}>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 1 }}>SIDE VIEW · DRAG THE MAIN SPEAKER</div>
-          <svg ref={svgRef} viewBox={'0 0 ' + VW + ' ' + VH} style={{ width: '100%', display: 'block', touchAction: 'none' }}
-            onPointerMove={(e) => { if (dragRef.current) setPa(e); }}
-            onPointerUp={() => { dragRef.current = false; }} onPointerCancel={() => { dragRef.current = false; }}>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 1 }}>SIDE VIEW · THE MIC, ITS WEDGE AND THE MAINS</div>
+          <svg ref={svgRef} viewBox={'0 0 ' + VW + ' ' + VH} style={{ width: '100%', display: 'block' }}>
             {/* main speaker coverage, drawn first so everything sits on top */}
             <path d={covD} fill={mTone} fillOpacity="0.06" stroke={mTone} strokeOpacity="0.22" strokeWidth="1"/>
 
@@ -4266,17 +4265,15 @@ function PlacementPanel({ open, srcKey, label, setup, onChange, onClose }) {
 
             {/* main speaker on a pole. The hit area is the whole column so it is
                 easy to grab at any height. */}
-            <g data-walk="pa-position" style={{ cursor: 'ew-resize' }}
-              onPointerDown={(e) => { dragRef.current = true; try { e.currentTarget.ownerSVGElement.setPointerCapture(e.pointerId); } catch (x) {} setPa(e); }}>
-              <rect x={SPK[0] - 0.45 * S} y="0" width={0.9 * S} height={pz(0)} fill="transparent"/>
+            <g data-walk="pa-position">
               <line x1={SPK[0]} y1={pz(0)} x2={SPK[0]} y2={SPK[1]} stroke="#4a4a52" strokeWidth="3"/>
               <g transform={'translate(' + SPK[0].toFixed(1) + ',' + SPK[1].toFixed(1) + ') rotate(10)'}>
                 <rect x={-0.17 * S} y={-0.27 * S} width={0.34 * S} height={0.54 * S} rx="3" fill="#1c1c20" stroke={mTone} strokeWidth="1.6"/>
                 <rect x={0.09 * S} y={-0.19 * S} width={0.07 * S} height={0.38 * S} rx="2" fill="#0a0a0c" stroke="#4a4a52" strokeWidth="1"/>
               </g>
-              <text x={SPK[0]} y={pz(0) - 30} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>◂ main speaker ▸</text>
+              <text x={SPK[0]} y={pz(0) - 30} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>main speaker</text>
               <text x={SPK[0]} y={pz(0) - 17} textAnchor="middle" className="mono" style={{ fontSize: 8.5, fill: mTone }}>
-                {paX >= 0.05 ? paX.toFixed(1) + ' m in front of the mic' : paX <= -0.05 ? (-paX).toFixed(1) + ' m behind the mic' : 'level with the mic'}
+                {paNow >= 0.05 ? paNow.toFixed(1) + ' m downstage of the mic' : paNow <= -0.05 ? (-paNow).toFixed(1) + ' m upstage of the mic' : 'level with the mic'}
               </text>
             </g>
           </svg>
@@ -4970,6 +4967,32 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   //     corners; the two guitars mid; the three front vocals downstage.
   // top + left only; the per-source marginLeft (to centre on `left`) is applied
   // in the map from wOf(k) so each card centres on its own width.
+  // Where the mains stand, on the stage plot. The plan view runs downstage DOWN,
+  // so a bigger paLine sits lower. Calibrated so the default (PA_LINE_DEFAULT)
+  // lands exactly where the boxes have always been drawn, which means no existing
+  // lesson's stage moves. Dragged fully upstage the boxes end up ABOVE the vocal
+  // mic row, so "the mics are out past the PA" is something you SEE rather than
+  // something you have to open a panel to discover (Kyle 2026-07-24).
+  const PA_PX_PER_M = big16 ? 60 : 54;
+  const paLine = window.paLineOf ? window.paLineOf(state) : 2.4;
+  const paBase = big16 ? 48 : 40;
+  const paBottom = paBase + (2.4 - paLine) * PA_PX_PER_M;
+  const setPaLine = (clientY, el) => {
+    const box = el && el.closest('[data-stage-plot]');
+    if (!box) return;
+    const r = box.getBoundingClientRect();
+    // invert the mapping: pointer y -> bottom offset -> metres
+    const bottom = r.bottom - clientY - 47;
+    const v = 2.4 - (bottom - paBase) / PA_PX_PER_M;
+    const lo = window.PA_LINE_MIN != null ? window.PA_LINE_MIN : -1.2;
+    const hi = window.PA_LINE_MAX != null ? window.PA_LINE_MAX : 2.6;
+    setState((prev) => ({ ...prev, paLine: Math.round(Math.max(lo, Math.min(hi, v)) * 20) / 20 }));
+  };
+  // A plain object literal here is re-created on every render, so the drag flag
+  // reset itself the moment the first pointermove called setState and the drag
+  // died after one frame. It has to be a ref that survives renders.
+  const paDragRef = React.useRef(false);
+
   const positions = big16 ? {
     // Drum kit tucked hard against the UPSTAGE edge, bird's-eye tight cluster:
     // VOX 4 (drummer) on top, snare below, kick below that; toms hugging the
@@ -5016,7 +5039,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
     }}>
       <ZoneHeader label="Stage" sublabel="band, sources, mains + wedges · downstage ↓ audience" badge="LIVE AREA" badgeColor="var(--green)"/>
 
-      <div style={{ position: 'relative', minHeight: big16 ? 860 : 480 }}>
+      <div data-stage-plot="1" style={{ position: 'relative', minHeight: big16 ? 860 : 480 }}>
         {/* DRUM RISER — a labelled platform outline around the whole kit cluster
             (kick, snare, toms, overheads), the drummer's vocal mic (VOX 4) and
             the drummer's monitor (Wedge 4). Renders first so it paints UNDER the
@@ -5031,10 +5054,34 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
               letterSpacing: 1.6, fontWeight: 700, color: '#8a8792' }}>DRUM RISER</div>
           </div>
         )}
+        {/* THE MAINS LINE. On a real stage plot you read the in-front / behind
+            relationship straight off the drawing, so it is drawn here: the plane
+            of the main speakers, running the width of the stage. Every open mic
+            belongs UPSTAGE of it. A mic below this line is out in the coverage
+            and will ring long before it is loud (Kyle 2026-07-24). Turns red the
+            moment any source card crosses to the wrong side of it. */}
+        {(() => {
+          const micsBehind = paLine >= 0.15;
+          const col = micsBehind ? 'rgba(122,122,132,0.55)' : 'var(--hot)';
+          return (
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: paBottom + 47, pointerEvents: 'none', zIndex: 1 }}>
+              <div style={{ borderTop: '1px dashed ' + col, opacity: micsBehind ? 0.8 : 1 }}/>
+              <div className="mono" style={{ position: 'absolute', right: 4, top: 2, fontSize: 7,
+                letterSpacing: 1.2, fontWeight: 700, color: col, whiteSpace: 'nowrap' }}>
+                {micsBehind ? 'MAINS LINE · MICS BEHIND' : 'MAINS LINE · MICS OUT IN FRONT'}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Downstage row — PA L, Wedge 1, Wedge 2, PA R, evenly spaced along
             the front of the stage. Each one's cable comes out of its bottom
             edge and runs along the front rail back to the stage box. */}
-        <div ref={paLRef} data-walk="out-pa-l" style={{ position: 'absolute', bottom: big16 ? 48 : 40, left: big16 ? '11%' : '7%', transform: 'translateX(-50%)' }}>
+        <div ref={paLRef} data-walk="out-pa-l" title="Drag upstage or downstage. Every open mic belongs behind the front face of the mains."
+          onPointerDown={(e) => { paDragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} }}
+          onPointerMove={(e) => { if (paDragRef.current) setPaLine(e.clientY, e.currentTarget); }}
+          onPointerUp={() => { paDragRef.current = false; }} onPointerCancel={() => { paDragRef.current = false; }}
+          style={{ position: 'absolute', cursor: 'ns-resize', bottom: paBottom, left: big16 ? '11%' : '7%', transform: 'translateX(-50%)' }}>
           <PASpeaker side="L" showPower={!isPassive}
             on={isPassive ? paShowsOn : state.outputs.pa_l.on} mute={state.outputs.pa_l.mute} volume={state.outputs.pa_l.volume} level={audio.outputs.pa_l}
             signalArriving={(audio.speakerInput?.pa_l || 0) > 0.04}
@@ -5101,7 +5148,11 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
           </div>
         )}
 
-        <div ref={paRRef} data-walk="out-pa-r" style={{ position: 'absolute', bottom: big16 ? 48 : 40, left: big16 ? '89%' : '73%', transform: 'translateX(-50%)' }}>
+        <div ref={paRRef} data-walk="out-pa-r" title="Drag upstage or downstage. Every open mic belongs behind the front face of the mains."
+          onPointerDown={(e) => { paDragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} }}
+          onPointerMove={(e) => { if (paDragRef.current) setPaLine(e.clientY, e.currentTarget); }}
+          onPointerUp={() => { paDragRef.current = false; }} onPointerCancel={() => { paDragRef.current = false; }}
+          style={{ position: 'absolute', cursor: 'ns-resize', bottom: paBottom, left: big16 ? '89%' : '73%', transform: 'translateX(-50%)' }}>
           <PASpeaker side="R" showPower={!isPassive}
             on={isPassive ? paShowsOn : state.outputs.pa_r.on} mute={state.outputs.pa_r.mute} volume={state.outputs.pa_r.volume} level={audio.outputs.pa_r}
             signalArriving={(audio.speakerInput?.pa_r || 0) > 0.04}
@@ -12275,7 +12326,8 @@ function App() {
         open={!!placementFor} srcKey={placementFor}
         label={placementFor && window.SOURCES[placementFor] ? window.SOURCES[placementFor].label : ''}
         setup={state.micSetup && placementFor ? state.micSetup[placementFor] : null}
-        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 10, paX: 2.4 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
+        paLine={window.paLineOf ? window.paLineOf(state) : null}
+        onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 10 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
         onClose={() => setPlacementFor(null)}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
