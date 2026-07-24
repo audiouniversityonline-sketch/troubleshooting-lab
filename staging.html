@@ -124,7 +124,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=221"></script>
+<script src="content-staging.js?v=222"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -2626,19 +2626,18 @@ function ChannelStrip({ ch, idx, onChange, onPhantomToggle, onInspect, channelLe
           just the fader), so the ring frames the full assembly and sits
           centered, including the meter the lesson is talking about. */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginTop: 1 }}>
-        {/* BUS ASSIGN. On a real desk the routing buttons live down in the fader
-            block, beside the fader travel, not up with mute and solo (Mackie
-            ProFX, A&H ZED, Soundcraft Signature all put them here). Kept as its
-            own bottom-aligned column so more bus buttons can stack above it. */}
+        <div data-walk={'ch' + (idx + 1) + '-fader'} style={{ display: 'flex', alignItems: 'flex-end', gap: 4 }}>
+          <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>
+          <M level={channelLevel} height={172} segments={22} mkey={'chlvl:' + idx}/>
+        </div>
+        {/* BUS ASSIGN. Routing lives down in the fader block on a real desk, to
+            the RIGHT of the fader (Kyle 2026-07-24), not up with mute and solo.
+            Its own bottom-aligned column so more bus buttons can stack above. */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
           <div className="mono" style={{ fontSize: 5.5, letterSpacing: 0.3, color: 'var(--ink-3)', lineHeight: 1 }}>BUS</div>
           {walk('lr', <BP active={ch.toMain !== false} onClick={() => set({ toMain: ch.toMain === false })} label="LR" width={22} height={16} fontSize={7}
             color="var(--green)"
             tip="Assigns this channel to the main mix, what the audience hears. Switched off, the channel still reaches the monitors but never the room."/>)}
-        </div>
-        <div data-walk={'ch' + (idx + 1) + '-fader'} style={{ display: 'flex', alignItems: 'flex-end', gap: 4 }}>
-          <F value={ch.fader} onChange={(v) => { set({ fader: v }); insp('pa'); }} height={172}/>
-          <M level={channelLevel} height={172} segments={22} mkey={'chlvl:' + idx}/>
         </div>
       </div>
 

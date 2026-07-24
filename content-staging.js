@@ -861,14 +861,17 @@ window.START_HERE = [
     title: 'Bring Vocal 1 into the Mix',
     involves: [1, 2, 3, 4],
     // Vocal 1 arrives with its gain already set (lesson 103's work carried
-    // forward) and still in PFL, so this lesson is only the three moves that
-    // put a channel into the main mix.
+    // forward) and still in PFL, so this lesson is only the moves that put a
+    // channel into the main mix. The LR assign is one of them: the channel is
+    // unassigned at load, so PFL proves the signal is there while the room still
+    // gets nothing until it is routed.
     requireNoPfl: true,
     gainStructure: { refChannel: 1, unity: 0.75, faderTol: 0.06, inputBand: [0.645, 4.566] },
-    defs: ['mute', 'fader', 'unity'],
-    hint: 'PFL only feeds your headphones, so disengaging it does not change the audience mix. The channel reaches the audience when it is unmuted and its fader is up.',
+    defs: ['main mix', 'mute', 'fader', 'unity'],
+    hint: 'PFL only feeds your headphones, so disengaging it does not change the audience mix. A channel reaches the audience when it is assigned to the main mix with LR, unmuted, and its fader is up. LR is the button by the bottom of the fader.',
     hints: [
       { title: 'Leave PFL', target: 'ch1-pfl', text: 'Press PFL on channel 1 again to disengage it.', done: (ctx) => ctx.state.channels[0] && !ctx.state.channels[0].solo },
+      { title: 'Assign it to the main mix', target: 'ch1-lr', text: 'Press LR at the bottom of channel 1 to assign it to the main mix.', done: (ctx) => ctx.state.channels[0] && ctx.state.channels[0].toMain !== false },
       { title: 'Unmute the channel', target: 'ch1-mute', text: 'Switch MUTE off on channel 1.', done: (ctx) => ctx.state.channels[0] && !ctx.state.channels[0].mute },
       { title: 'Fader to unity', target: 'ch1-fader', text: 'Raise the channel 1 fader to the U mark.', done: (ctx) => ctx.state.channels[0] && Math.abs(ctx.state.channels[0].fader - 0.75) <= 0.06 },
     ],
@@ -880,11 +883,11 @@ window.START_HERE = [
       s.outputs.pa_l.volume = 0.65; s.outputs.pa_r.volume = 0.65;
       s.channels[2].phantom = true;
       // Gain already set in the previous lesson; still in PFL, muted, fader down.
-      s.channels[0].gain = window.HEALTHY_GAIN_BY_CH[0]; s.channels[0].fader = 0; s.channels[0].mute = true; s.channels[0].solo = true;
+      s.channels[0].gain = window.HEALTHY_GAIN_BY_CH[0]; s.channels[0].fader = 0; s.channels[0].mute = true; s.channels[0].solo = true; s.channels[0].toMain = false;
       s.channels[1].gain = 0; s.channels[1].fader = 0; s.channels[1].mute = true; s.channels[1].solo = false; s.channels[1].phantom = false;
       return s;
     },
-    solution: 'Disengage PFL, unmute, fader to unity. That is the same three moves for every channel you bring into the mix.',
+    solution: 'Assign it to the main mix, unmute, fader to unity. Those are the same moves for every channel you bring into the mix, and LR is the one people forget.',
     defaultInspect: 'pa',
   },
   {
@@ -1202,6 +1205,11 @@ window.PRACTICE_FAULTS = [
     } },
   { key: 'fader',        label: 'Fader down',        blurb: 'A channel fader is all the way down.',                    par: 1, apply: (s, rng) => { const i = pbPick(pbInputs(s), rng); if (i >= 0) s.channels[i].fader = 0; } },
   { key: 'mute',         label: 'Channel muted',     blurb: 'A channel is muted.',                                    par: 1, apply: (s, rng) => { const i = pbPick(pbInputs(s), rng); if (i >= 0) s.channels[i].mute = true; } },
+  // Routing: the channel is set up correctly and its meter reads, it just was
+  // never assigned to the main mix. Nastier to find than a mute, because every
+  // control on the strip looks right and PFL sounds fine. One of the handful of
+  // faults that actually turn up on a real show.
+  { key: 'unassigned',   label: 'Not assigned to the main mix', blurb: 'A channel is not assigned to the main mix, so it never reaches the audience.', par: 1, apply: (s, rng) => { const i = pbPick(pbInputs(s), rng); if (i >= 0) s.channels[i].toMain = false; } },
   // NOTE: no 'pan' fault. The win reads the LOUDER PA side (pan is a free
   // creative choice, not a fault — see PRACTICE_CONDITIONS below), so a hard
   // pan still passes every condition. It was an automatic win, so it's out.
