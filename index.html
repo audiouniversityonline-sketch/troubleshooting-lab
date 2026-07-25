@@ -98,6 +98,14 @@
     0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
     50%      { box-shadow: 0 0 12px 2px rgba(74,222,128,0.55); }
   }
+  /* MONITOR EQ, while a wedge is ringing. Outside the ring-out lessons the panel
+     no longer opens itself, so this button is the only thing telling a student
+     where the fix lives. A steady red tint sits still and reads as decoration
+     next to the meters; the flash is what actually gets looked at. */
+  @keyframes eqRingFlash {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,70,48,0.35); border-color: var(--hot); }
+    50%      { box-shadow: 0 0 14px 3px rgba(255,70,48,0.75); border-color: #ff8a75; }
+  }
   /* The guided walkthrough's spotlight ring — a gentle pulse around the control
      the current step is about, so the eye goes straight to it. */
   @keyframes walkPulse {
@@ -124,7 +132,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=99"></script>
+<script src="content.js?v=100"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -10307,6 +10315,13 @@ function App() {
   // (where only the flag changed, not the ring) still re-evaluates. Closing the panel
   // by hand mid-ring still sticks, because neither dependency changes when you do.
   uE(() => { if (wedgeRinging && eqIsTheFix) setEqPanelOpen(true); }, [wedgeRinging, eqIsTheFix]);
+  // Gating the auto-open ALSO went and gated the red MONITOR EQ button, and that
+  // was wrong (Kyle 2026-07-24: Start Here "Ring Out the Feedback" left a student
+  // with a ringing wedge and nothing pointing at the fix, so they never reached
+  // the level objective or the opt-in). The panel opening itself is a teaching
+  // choice per lesson; the button going red is just the truth about the system.
+  // So: any WEDGE ring lights it, everywhere. `wedgeRing` already excludes a mains
+  // howl, which the monitor EQ cannot fix.
 
   // Fault warning modal. Pops and distortion announce themselves in a centered
   // dismissible modal instead of stacking text into the brief card. Feedback is
@@ -12372,12 +12387,14 @@ function App() {
         trackPick={trackPick}
         completed={completed}
         eqOpen={eqPanelOpen} onToggleEq={() => setEqPanelOpen(o => !o)}
-        /* The red MONITOR EQ glow is the same nudge as the auto-open, just quieter,
-           so it obeys the same rule: only light it where the graphic EQ is actually
-           the tool for the job. In a lesson whose fix is a mute, an HPF, or where the
-           microphone stands, a red EQ button sends the student to cut frequencies for
-           no reason (Kyle 2026-07-22). Sandbox has no prescribed fix, so it keeps it. */
-        eqRinging={wedgeRinging && (eqIsTheFix || !!level.isSandbox)}
+        /* A ringing wedge lights it, everywhere. This was briefly tied to the
+           auto-open's eqIsTheFix gate, which meant a lesson that rings but is not
+           flagged as a ring-out (Start Here 105, the last step before the opt-in)
+           showed no signpost at all. Opening the panel over a lesson is a teaching
+           decision; saying "the wedge is ringing and this is where you fix it" is
+           not, and a student who is stuck needs it most in the lessons that do not
+           hold their hand. Mains howls are already out via `wedgeRing`. */
+        eqRinging={wedgeRinging}
         onOpenProgress={() => setSaveModalOpen(true)} streak={streak}
         stageHidden={effStageHidden}
         onToggleStage={state.big16 ? (() => setStage16Open(v => !v)) : ((stageHideable && !level.isBand) ? () => setStageHidden(v => !v) : null)}
@@ -13133,6 +13150,10 @@ function TopBar({ level, levelIdx, totalLevels, solved, audioOn, setAudioOn, onR
             color: eqOpen ? '#0a0a0c' : (eqRinging ? 'var(--hot)' : 'var(--ink-2)'),
             borderColor: eqOpen ? '#c79a1f' : (eqRinging ? 'var(--hot)' : '#38383e'),
             boxShadow: eqRinging && !eqOpen ? '0 0 8px rgba(255,70,48,0.4)' : 'none', fontWeight: 700,
+            // Flash while it rings and the panel is still shut. It stops the moment
+            // the panel opens, because by then the student has found it and a
+            // blinking button behind an open panel is just noise.
+            animation: eqRinging && !eqOpen ? 'eqRingFlash 1s ease-in-out infinite' : 'none',
           }} data-walk="monitor-eq">MONITOR EQ</button>
         )}
         {onOpenIoList && (
