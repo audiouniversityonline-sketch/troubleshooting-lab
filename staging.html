@@ -132,7 +132,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=232"></script>
+<script src="content-staging.js?v=233"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -12366,6 +12366,17 @@ function App() {
   const guideActiveIndex = guideSteps ? lessonActiveIndex(guideSteps, hintCtx) : -1;
   const guideTarget = (guideSteps && guideActiveIndex >= 0 && guideActiveIndex < guideSteps.length)
     ? guideSteps[guideActiveIndex].target : null;
+  // While a wedge is RINGING and the Monitor EQ is still shut, the spotlight
+  // leaves the step's own control and rings the MONITOR EQ button instead
+  // (Kyle 2026-07-24: the flash alone was "too subtle"). The button is the only
+  // way into the fix now that the panel does not open itself, and by lesson 7 a
+  // student has followed this green ring six times, so it is the signal they
+  // already read as "here". The step target comes back the moment the panel
+  // opens — and the spotlight is suppressed then anyway, because the glowing EQ
+  // band takes over inside the panel. Guided lessons only: Free Play is a
+  // sandbox and a nagging ring there would be wrong, and Practice and Ear
+  // Training never reach this because the panel has already opened itself.
+  const coachTarget = (guideSteps && wedgeRinging && !eqPanelOpen) ? 'monitor-eq' : guideTarget;
 
   // The active step can also ask the board to TRACE a signal path — light one
   // channel's whole run and flow signal along it (see FlowTraceContext). Read
@@ -12429,7 +12440,7 @@ function App() {
       {/* Any pop-up (Monitor EQ, Input List, catalog, pitch, CTA) owns the top
           layer: the spotlight ring hides while one is open so it can't draw in
           front of the window. */}
-      <WalkthroughSpotlight target={(eqPanelOpen || catalogOpen || pitchFor || ctaOpen) ? null : (walkPhase === 'steps' ? (walkSteps[walkStep] && walkSteps[walkStep].target) : (guideTarget || null))}/>
+      <WalkthroughSpotlight target={(eqPanelOpen || catalogOpen || pitchFor || ctaOpen) ? null : (walkPhase === 'steps' ? (walkSteps[walkStep] && walkSteps[walkStep].target) : (coachTarget || null))}/>
       {/* Hovering a definition washes the matching controls in amber. The
           Monitor EQ stays allowed here (unlike the spotlight above) because
           "graphic EQ" points AT that panel; the rest hide behind a pop-up

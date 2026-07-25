@@ -961,7 +961,7 @@ window.START_HERE = [
     hint: 'Turn up AUX 1 on the Vocal 1 channel to raise it in Wedge 1. When it rings, look at the Wedge 1 Monitor EQ: the ringing frequency glows. Pull that band down far enough to stop the ring. Cuts cost a little level, so keep them small.',
     hints: [
       { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', text: 'Bring AUX 1 on the Vocal 1 input channel up until Wedge 1 reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
-      { title: 'Ring it out', target: 'out-wedge1', text: 'When Wedge 1 rings, pull the glowing band down on the Wedge 1 Monitor EQ until the ringing stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
+      { title: 'Ring it out', target: ['monitor-eq', 'out-wedge1'], text: 'Open MONITOR EQ in the top bar, then pull Wedge 1\'s glowing band down until the ringing stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },
