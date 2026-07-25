@@ -602,8 +602,8 @@ window.LEVELS = [
     defs: ['feedback', 'ring out'],
     hint: 'Turn AUX 1 up on the Vocal 1 channel until Wedge 1 is loud. When it rings, look at the Wedge 1 Monitor EQ and pull the glowing band down until the ring stops. Every cut takes away a little level, so cut only as much as you need.',
     hints: [
-      { title: 'Raise Vocal 1 in Wedge 1', target: ['ch1-aux', 'out-wedge1'], text: 'Bring AUX 1 on the Vocal 1 channel up until Wedge 1 rings.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
-      { title: 'Ring it out', target: ['monitor-eq', 'out-wedge1'], text: 'Pull the glowing band down on the Wedge 1 Monitor EQ until the ringing stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
+      { title: 'Raise Vocal 1 in Wedge 1', target: ['ch1-aux', 'out-wedge1'], text: 'Bring AUX 1 on the Vocal 1 channel up until Wedge 1 rings.', done: (ctx) => ctx.hasRung || hintReaches(ctx, 'vocal', 'wedge', 0.8) },
+      { title: 'Ring it out', target: ['monitor-eq', 'out-wedge1'], text: 'Cut each glowing band on the Wedge 1 Monitor EQ until the ringing stops, turning AUX 1 back up between cuts until Vocal 1 is strong in the wedge.', done: (ctx) => !ctx.feedback && hintReaches(ctx, 'vocal', 'wedge', 0.8) && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     // Wedge min 0.8 under the real-dB loop (2026-07-02): the ring point on
     // the primed wedge sits at a send of ~0.66, and 0.8 lands about 1.2 dB
@@ -960,8 +960,8 @@ window.START_HERE = [
     defs: ['feedback', 'ring out', 'graphic EQ'],
     hint: 'Turn up AUX 1 on the Vocal 1 channel to raise it in Wedge 1. When it rings, look at the Wedge 1 Monitor EQ: the ringing frequency glows. Pull that band down far enough to stop the ring. Cuts cost a little level, so keep them small.',
     hints: [
-      { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', text: 'Bring AUX 1 on the Vocal 1 input channel up until Wedge 1 reaches a strong level.', done: (ctx) => hintReaches(ctx, 'vocal', 'wedge', 0.8) },
-      { title: 'Ring it out', target: ['monitor-eq', 'out-wedge1'], text: 'Open MONITOR EQ in the top bar, then pull Wedge 1\'s glowing band down until the ringing stops.', done: (ctx) => !ctx.feedback && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
+      { title: 'Raise Vocal 1 in Wedge 1', target: 'ch1-aux', text: 'Bring AUX 1 on the Vocal 1 input channel up until Wedge 1 starts to ring.', done: (ctx) => ctx.hasRung || hintReaches(ctx, 'vocal', 'wedge', 0.8) },
+      { title: 'Ring it out', target: ['monitor-eq', 'out-wedge1'], text: 'Open MONITOR EQ in the top bar and cut each glowing band until the ringing stops, turning AUX 1 back up between cuts until Vocal 1 is strong in Wedge 1.', done: (ctx) => !ctx.feedback && hintReaches(ctx, 'vocal', 'wedge', 0.8) && (((ctx.state.outputs.wedge || {}).eq) || []).some((v) => v < 0) },
     ],
     conditions: [
       { source: 'vocal', dest: 'pa',    min: 0.3 },

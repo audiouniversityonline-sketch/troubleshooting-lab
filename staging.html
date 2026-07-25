@@ -132,7 +132,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=233"></script>
+<script src="content-staging.js?v=234"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -10185,6 +10185,14 @@ function App() {
   // Cleared only when the level actually changes.
   const hasPoppedRef = uR(false);
 
+  // Same idea for a wedge that has RUNG at some point this attempt. A ring-out
+  // lesson's first step is "turn it up until it rings", and the only honest
+  // moment to tick that off is the moment it rings — but the ring is the very
+  // thing the next step removes, so a live `feedback` test would un-tick itself
+  // the instant the student fixes it and throw the guide back a step. Latched,
+  // and cleared with hasPopped when the level changes.
+  const hasRungRef = uR(false);
+
   // Which channels have been PFL'd at some point this attempt (channel number
   // -> true). Drives requirePflEach (Mic Inputs / DI Boxes: PFL each input
   // before you bring it up). Reset on level change.
@@ -10315,6 +10323,9 @@ function App() {
   // (where only the flag changed, not the ring) still re-evaluates. Closing the panel
   // by hand mid-ring still sticks, because neither dependency changes when you do.
   uE(() => { if (wedgeRinging && eqIsTheFix) setEqPanelOpen(true); }, [wedgeRinging, eqIsTheFix]);
+  // Latch the first ring for ctx.hasRung (see hasRungRef). Set here, on the same
+  // signal the panel and the flash read, so all three agree on when it started.
+  uE(() => { if (wedgeRinging) hasRungRef.current = true; }, [wedgeRinging]);
   // Gating the auto-open ALSO went and gated the red MONITOR EQ button, and that
   // was wrong (Kyle 2026-07-24: Start Here "Ring Out the Feedback" left a student
   // with a ringing wedge and nothing pointing at the fix, so they never reached
@@ -11569,6 +11580,10 @@ function App() {
     // The popped latch survives a same-level Reset (the pop forces one) and
     // clears only when the player moves to a different level.
     if (i !== levelIdx) hasPoppedRef.current = false;
+    // The rung latch does NOT survive a Reset, unlike hasPopped: START OVER puts
+    // the send back to zero, so nothing is ringing and "turn it up until it
+    // rings" is genuinely undone. Clearing it re-opens that step.
+    hasRungRef.current = false;
     // Reset the per-speaker verify latches so each attempt starts unchecked.
     verifiedRef.current = {};
     verifiedPatchSigRef.current = null;
@@ -12348,6 +12363,7 @@ function App() {
     zeroStatus, patchStatus, feedback, audioOn, adjustBase: adjustBaseRef.current, adjustLatched: adjustLatchRef.current,
     pflChannels: pflChannelsRef.current, pflChecked: pflCheckedRef.current,
     ioListOpen: ioListOpen || ioListOpenedRef.current, hasPopped: hasPoppedRef.current,
+    hasRung: hasRungRef.current,
     // 16-channel view: which page is showing right now, and whether the stage
     // has been opened at all this level (the latch, so a step that sends them
     // to the stage stays checked once they come back to the mixer).
