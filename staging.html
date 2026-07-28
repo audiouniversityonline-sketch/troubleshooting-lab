@@ -132,7 +132,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=237"></script>
+<script src="content-staging.js?v=238"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1906,11 +1906,25 @@ window.DEFAULT_MIC_SETUP = DEFAULT_MIC_SETUP;
 // Returned as a dB delta against the default placement, so an unset mic is 0 dB
 // and no existing lesson's calibration moves. Backing further off buys little,
 // which is correct: the lateral offset already dominates the distance.
-const PA_LAT = 3.0;      // metres the mains sit to the SIDE of the mic
+// Kyle 2026-07-24: with a properly set gain structure and the mains dragged fully
+// upstage, well in front of the vocal mics, it STILL would not ring. You had to
+// boost the gain to demonstrate it, which means the lesson never lands. Measured
+// on Free Play's own state, the mains loop at the extreme sat 3.2 dB short.
+//
+// The cause was these two numbers, not the loop. At PA_LAT 3.0 the mic can never
+// get closer than 3 m to the side of a box, so even dragged as far in front as
+// the control allows it stood 67 deg round the cabinet at 3.3 m — outside the
+// pattern, never really in the coverage — and the whole swing from behind to in
+// front was only 9 dB. On a small stage running an 8-channel system the mains sit
+// nearer 2.2 m either side of the vocal line, and a full-range box holds its level
+// much further round than 62 deg; level only really collapses past about 75, where
+// the cabinet starts shadowing. Those two give ~18 dB of swing, which is the right
+// order for on-axis versus behind a box plus the distance change.
+const PA_LAT = 2.2;      // metres the mains sit to the SIDE of the mic
 const PA_RISE = 0.6;     // metres the box sits above the capsule (on a stick)
 const PA_TILT = 10;      // degrees the box is aimed down into the audience
 const PA_REAR_DB = 20;   // on-axis vs behind the box, full-range cabinet
-const PA_KNEE = 62;      // degrees off the box axis where the level starts falling away
+const PA_KNEE = 75;      // degrees off the box axis where the level starts falling away
 const PA_SOFT = 11;      // how many degrees that fall-off is spread over
 function paPathDb(x) {
   const d = Math.sqrt(x * x + PA_LAT * PA_LAT + PA_RISE * PA_RISE);
@@ -1937,8 +1951,13 @@ const REF_PA_DB = paPathDb(PA_LINE_DEFAULT);
 // stage, and it was invisible on the stage plot. So it reads one number off the
 // state and every open mic shares it. A state that has never set it reads the
 // default and contributes 0 dB, so no existing lesson moves.
+// Ceiling 24, not 16: the strengthened curve reaches ~18 dB at the far end of the
+// drag, so a 16 dB cap would have silently flattened the last third of the travel
+// and put back the same "why is it not ringing yet" the model was just fixed for.
+// The floor stays at -6, and the whole thing is still a delta against the default,
+// so a state that has not moved the mains is exactly 0 either way.
 function paPlacementDb(s) {
-  return Math.max(-6, Math.min(16, paPathDb(paLineOf(s)) - REF_PA_DB));
+  return Math.max(-6, Math.min(24, paPathDb(paLineOf(s)) - REF_PA_DB));
 }
 window.paPlacementDb = paPlacementDb;
 const _ringActive = {};
@@ -4220,14 +4239,22 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
   const VW = 700, VH = 380, X0 = -1.70, Z1 = 2.86, S = VW / 5.35;
   const px = (x) => (x - X0) * S;
   const pz = (z) => (Z1 - z) * S;
-  const EAR = [-0.25, 1.60], MOUTH = [-0.15, 1.55], HEAD = [-0.28, 1.67];
+  const EAR = [-0.30, 1.60], MOUTH = [-0.20, 1.55], HEAD = [-0.33, 1.67];
   const MIC = [px(0), pz(1.52)];
   // Wedge cabinet in side elevation: bottom edge on the floor, vertical back
   // downstage, and the baffle running from the front-bottom corner up to the
-  // back-top corner. 0.50 m deep by 0.255 m tall puts that baffle at 27 deg off
-  // the floor and its acoustic centre at (0.50, 0.128) — which is 0.75 m in
-  // front of the ear (on axis, as required) and 70 deg below the capsule.
-  const WA = [0.250, 0], WB = [0.750, 0], WC = [0.750, 0.255];
+  // back-top corner. 0.45 m deep by 0.249 m tall puts that baffle at 29.0 deg
+  // off the floor, its acoustic centre at (0.518, 0.124), 0.82 m in front of the
+  // ear (on axis, as required) and 69.6 deg below the capsule, which is the 70
+  // the engine reads.
+  //
+  // 29 and not 27 (Kyle asked me to re-check this against the survey). The
+  // surveyed low-profile pair is EAW MicroWedge at 27 published and Rat Sound at
+  // 31 computed from dims, and 27 is the ONE figure the survey itself flags as
+  // not matching its own manufacturer's mechanical drawing, which computes to 37.
+  // Sitting between the two rests the scene on both wedges instead of on the
+  // single disputed number, and costs almost nothing in the illustration.
+  const WA = [0.293, 0], WB = [0.743, 0], WC = [0.743, 0.249];
   const WBC = [(WA[0] + WC[0]) / 2, (WA[1] + WC[1]) / 2]; // baffle centre
   const WEDGE = [px(WBC[0]), pz(WBC[1])];
   const SPK = [px(paNow), pz(2.12)];
