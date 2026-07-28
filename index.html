@@ -132,7 +132,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content.js?v=103"></script>
+<script src="content.js?v=104"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1822,12 +1822,29 @@ const POLAR_FLOOR = 0.045;
 // placement guidance gives. With the capsule 0.15 m in front of the mouth at
 // 1.52 m, that puts the wedge 55 deg below the capsule.
 //
-// This is why a SUPERCARDIOID is the standard stage vocal mic. At 55 deg below,
-// with the mic angled up at the mouth, the wedge sits ~135 deg off axis, and a
-// supercardioid rejects 6.7 dB harder there than a cardioid. Level the mic and
-// the wedge lands on its 127 deg null exactly. Tilt well up and a cardioid takes
-// over. The right pattern depends on where the wedge is, which is the point.
-const FLOOR_DROP = 55;
+// 70, and the number is not free: it falls out of the cabinet. A wedge is pinned
+// by two real things, its baffle angle and the fact that its axis has to land on
+// the singer's ear, and solving those together puts a LOW-PROFILE wedge (27 deg,
+// the EAW MicroWedge figure, with Rat Sound at 31) tight to the singer and firing
+// steeply up: 0.75 m in front of the ear, 70 deg below the capsule. A deep 40-50
+// deg cabinet has to sit 1.2 to 1.5 m out to hit the same ear, which drops it to
+// 49-55 deg below.
+//
+// That geometry is the whole teaching point (Kyle 2026-07-24). At 70 deg below,
+// with the mic angled up at the mouth, the wedge sits ~120 deg off axis, where a
+// supercardioid rejects 12 dB harder than a cardioid and a HYPERCARDIOID 6 dB
+// harder — so both beat a cardioid, which is why a hypercardioid is worth
+// reaching for. At the old 55 the wedge sat ~135 deg off axis, past a
+// hypercardioid's 110 deg null and back up its rear lobe, so a hyper read 5.6 dB
+// WORSE than a cardioid and the panel argued against the pattern Kyle recommends.
+// Level the mic and the wedge lands on the hyper's null exactly; tilt well up and
+// a cardioid takes over. The right pattern depends on where the wedge is, which
+// is still the point.
+//
+// Normalisation makes this safe for existing lessons: micRejection3D divides by
+// REF_REJ, the DEFAULT setup, so a default mic reads 1.0 at any FLOOR_DROP. Only
+// deliberately-changed patterns and tilts move.
+const FLOOR_DROP = 70;
 // A mic's sensitivity at an angle whose cosine is cosT, for pattern `pat`.
 // One shared polar law for both loops (wedge and mains) so a pattern change
 // can never move one and not the other.
@@ -4170,8 +4187,6 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
   const dragRef = React.useRef(false);
   if (!open) return null;
   const A = { cardioid: 0.5, super: 0.375, hyper: 0.25 };
-  const NAME = { cardioid: 'cardioid', super: 'supercardioid', hyper: 'hypercardioid' };
-  const capFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
   const DEF = window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 10 };
   const pat = (setup && setup.pattern) || DEF.pattern;
   const tilt = (setup && setup.tilt != null) ? setup.tilt : DEF.tilt;
@@ -4179,7 +4194,6 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
   const a = A[pat];
   const d2r = (d) => d * Math.PI / 180;
   const rOf = (aa, deg) => Math.abs(aa + (1 - aa) * Math.cos(d2r(deg)));
-  const FLOOR_DROP = 55;
   const eff = { pattern: pat, az: 180, tilt };
 
   // Both readings straight off the engine, converted to gain before feedback:
@@ -4192,14 +4206,17 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
   const sign = (db) => (db >= 0 ? '+' : '') + db.toFixed(0);
 
   // ---- scene, in metres, uniformly scaled so every drawn angle is true ----
-  // The whole scene is pinned by one constraint (Kyle 2026-07-24): the wedge is
-  // aimed ON AXIS at the singer's ear, so a line drawn perpendicular to its
-  // angled baffle lands on the ear. The cabinet is 17" deep by 14" tall, which
-  // makes its baffle 40 deg off the floor: the mean AND median of seven
-  // purpose-built wedges across six companies, not one brand's figure. Aimed at
-  // an ear at 1.60 m that lands 3.9 ft in front of the performer, inside the
-  // 3-to-6 ft the placement guidance gives, and puts the wedge 55 deg below a
-  // capsule sitting 0.15 m in front of the mouth. The engine reads the same 55.
+  // Still pinned by the one constraint (Kyle 2026-07-24): the wedge is aimed ON
+  // AXIS at the singer's ear, so a line perpendicular to its angled baffle lands
+  // on the ear. What changed is WHICH wedge. This is now the low-profile cabinet
+  // from the survey — 20" deep by 10" tall, a 27 deg baffle, the EAW MicroWedge
+  // figure with Rat Sound at 31 — instead of the 40 deg mean. Those two solve to
+  // completely different places, because a shallower baffle throws a STEEPER
+  // axis: at 27 deg the wedge reaches the ear from 0.75 m in front of the singer,
+  // where the 40 deg box had to sit 1.17 m out. Tight and steep is how these
+  // wedges are actually used, and it puts the cabinet 70 deg below the capsule,
+  // which is the FLOOR_DROP the engine reads. See the engine's note for why that
+  // angle is the difference between a hypercardioid helping and hurting.
   const VW = 700, VH = 380, X0 = -1.70, Z1 = 2.86, S = VW / 5.35;
   const px = (x) => (x - X0) * S;
   const pz = (z) => (Z1 - z) * S;
@@ -4207,9 +4224,10 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
   const MIC = [px(0), pz(1.52)];
   // Wedge cabinet in side elevation: bottom edge on the floor, vertical back
   // downstage, and the baffle running from the front-bottom corner up to the
-  // back-top corner. 0.50 m deep by 0.60 m tall makes that baffle 50 deg off the
-  // floor, the published angle, and puts its acoustic centre at (1.30, 0.30).
-  const WA = [0.727, 0], WB = [1.157, 0], WC = [1.157, 0.36];
+  // back-top corner. 0.50 m deep by 0.255 m tall puts that baffle at 27 deg off
+  // the floor and its acoustic centre at (0.50, 0.128) — which is 0.75 m in
+  // front of the ear (on axis, as required) and 70 deg below the capsule.
+  const WA = [0.250, 0], WB = [0.750, 0], WC = [0.750, 0.255];
   const WBC = [(WA[0] + WC[0]) / 2, (WA[1] + WC[1]) / 2]; // baffle centre
   const WEDGE = [px(WBC[0]), pz(WBC[1])];
   const SPK = [px(paNow), pz(2.12)];
@@ -4258,27 +4276,12 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
     ' L' + c1[0].toFixed(1) + ' ' + c1[1].toFixed(1) +
     ' A' + covR.toFixed(1) + ' ' + covR.toFixed(1) + ' 0 0 1 ' + c2[0].toFixed(1) + ' ' + c2[1].toFixed(1) + ' Z';
 
-  // Pattern scoring, wedge path only. The mic's pattern no longer touches the
-  // mains path at all, because the mains stand off to the SIDE of the stage where
-  // a supercardioid or hypercardioid already rejects them in the horizontal
-  // plane. So there is exactly one place a pattern recommendation can come from,
-  // and it is this one.
-  const scoreW = (p) => (window.micRejection3D ? -20 * Math.log10(window.micRejection3D({ pattern: p, az: 180, tilt })) : 0);
-  let bestW = pat, bestWs = scoreW(pat);
-  ['cardioid', 'super', 'hyper'].forEach((p) => { const sc = scoreW(p); if (sc > bestWs + 1) { bestWs = sc; bestW = p; } });
-
-  let wedgeCoach;
-  if (wedgeDb >= 2) wedgeCoach = 'The ' + NAME[pat] + ' rejects sound coming from the wedge well at this angle, so you have level in hand before it rings.';
-  else if (bestW !== pat) wedgeCoach = capFirst(NAME[pat]) + ' is not the best fit for this wedge angle. A ' + NAME[bestW] + ' would put a null closer to it.';
-  else if (tilt < FLOOR_DROP - 20) wedgeCoach = 'The wedge is in a live part of the pattern. Tilt the mic up and its null swings down onto the wedge.';
-  else wedgeCoach = 'The wedge sits in a live part of the pattern and tilt alone will not clear it. Try another pattern.';
-
-  let mainsCoach;
-  if (paNow < 0) mainsCoach = 'The mic is out past the main speaker, inside its coverage, with the full main mix pointed at it. No pattern saves a mic from that. Drag the speaker downstage until the mic is behind it.';
-  else if (paNow < 0.8) mainsCoach = 'The mic is right at the front face of the main speaker, still in its coverage. Drag the speaker downstage until the mic sits behind it.';
-  else if (mainsDb < -3) mainsCoach = 'The mic is close to the front of the speaker. Every open microphone belongs behind the front face of the mains.';
-  else mainsCoach = 'The mic is behind the speaker, which is what protects it here. The mains stand off to the side of the stage, so this path is set by that spacing and by the cabinet shadowing the mic, not by the pattern on the mic.';
-
+  // No written coaching here any more (Kyle 2026-07-24). The panel used to close
+  // with two paragraphs telling you which pattern to pick and where to stand;
+  // they ate a lot of height and the two dB readouts already say it. Swapping the
+  // pattern buttons and watching WEDGE PATH move is the lesson. Everything that
+  // existed only to phrase that advice (the per-pattern scoring, the best-pattern
+  // search) went with it.
   const patBtn = (p, txt) => (
     <div key={p} data-walk={'mic-pattern-' + p} onClick={() => onChange({ pattern: p })} className="mono ui-no-select"
       style={{ fontSize: 9, padding: '4px 9px', borderRadius: 4, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.4,
@@ -4390,15 +4393,12 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+        {/* The numbers carry it now. The caption stays, because "+12 dB" means
+            nothing without saying what it is measured against. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 22, marginTop: 10 }}>
           {stat(wedgeDb, wTone, 'WEDGE PATH')}
           {stat(mainsDb, mTone, 'MAIN SPEAKER PATH')}
-          <div style={{ flex: 1, borderLeft: '1px solid #2a2a2e', paddingLeft: 12 }}>
-            <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, marginBottom: 4 }}>GAIN BEFORE FEEDBACK, AGAINST A STANDARD SETUP</div>
-            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45 }}>{wedgeCoach}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--ink-2)', lineHeight: 1.45, marginTop: 4 }}>{mainsCoach}</div>
-
-          </div>
+          <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, maxWidth: 150, lineHeight: 1.5 }}>GAIN BEFORE FEEDBACK, AGAINST A STANDARD SETUP</div>
         </div>
       </div>
     </div>

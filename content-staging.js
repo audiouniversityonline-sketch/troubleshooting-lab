@@ -3216,7 +3216,7 @@ window.MANAGE_FEEDBACK = [
     task: true,
     defs: ['polar pattern', 'null', 'feedback'],
     requireMargin: { wedge: 6 },
-    hint: 'Nothing on the console is wrong here. The mic is the problem. A wedge in front of a singer sits low and close, about 55 degrees below the capsule, so it is not straight behind the mic, it is well under it. A supercardioid rejects hardest at about that angle, which is why it is the standard stage vocal mic. Open PLACEMENT on the Vocal 1 mic and watch the WEDGE PATH number as you change the pattern.',
+    hint: 'Nothing on the console is wrong here. The mic is the problem. A floor wedge sits low and close, about 70 degrees below the capsule, so it is not behind the mic, it is under it. That puts it around 120 degrees off the front, where a supercardioid and a hypercardioid both reject hard and a cardioid barely rejects at all. Open PLACEMENT on the Vocal 1 mic and watch the WEDGE PATH number as you change the pattern.',
     hints: [
       { title: 'Point the null at the wedge', target: 'placement-vocal', text: 'Open PLACEMENT on the Vocal 1 mic and put a null on the wedge, with the pattern or the tilt, until Wedge 1 reads at least +6 dB to feedback.', done: (ctx) => { const fm = window.feedbackMargins ? window.feedbackMargins(ctx.state, ctx.audio) : null; const c = ctx.audio && ctx.audio.contributions && ctx.audio.contributions.vocal; return !ctx.feedback && !!fm && -fm.wedge >= 6 && !!c && (c.wedge || 0) >= 0.25; } },
     ],
@@ -3226,20 +3226,21 @@ window.MANAGE_FEEDBACK = [
     ],
     sabotage: (s) => {
       // The console is set correctly. The fault is the microphone on the stand.
-      // The wedge sits 55 deg below the capsule (surveyed geometry: a 40 deg
-      // cabinet, the mean of seven wedges across six brands, aimed at the ear
-      // 3.9 ft out) and the mic is angled up at the mouth, which puts the wedge
-      // about 135 deg off axis. Measured at aux 0.70: hypercardioid -3.1 and
-      // ringing, cardioid +2.6 which stops the ring but misses the 6 dB gate,
-      // supercardioid +9.4 which passes. Levelling the supercardioid drops the
-      // wedge onto its 127 deg null for +12.8, and a cardioid tilted well up
-      // reaches +12.5. Wrong mic, more than one right answer.
+      // Surveyed geometry: a low-profile 27 deg wedge aimed at the ear sits 0.75 m
+      // in front of the singer and 70 deg below the capsule, which with the mic
+      // angled up at the mouth puts it about 120 deg off the front. A CARDIOID
+      // rejects straight out the back, so almost none of that rejection lands on
+      // the wedge. Measured at aux 0.76: cardioid +0.3, which is the fault, and
+      // the gate wants 6. Supercardioid +10.8 and hypercardioid +6.4 both clear it
+      // on the pattern swap alone. Levelling the hyper drops the wedge onto its
+      // 110 deg null for +10.8, and a cardioid tilted well up reaches +6.9.
+      // Wrong mic, more than one right answer.
       mwBoard(s);
-      s.channels[0].aux1 = 0.70;
-      s.micSetup = { vocal: { pattern: 'hyper', az: 180, tilt: 10 } };
+      s.channels[0].aux1 = 0.76;
+      s.micSetup = { vocal: { pattern: 'cardioid', az: 180, tilt: 10 } };
       return s;
     },
-    solution: 'A floor wedge is not straight behind the mic, it is low and close, about 55 degrees under the capsule. A supercardioid rejects hardest around 125 degrees off the front, which is almost exactly where that wedge sits, and that is why a supercardioid is the standard stage vocal mic. A cardioid rejects straight out the back, so it wants the mic tilted well up, or the wedge further out and flatter. A hypercardioid reaches furthest round, about 110 degrees, so it suits a wedge off to one side rather than straight ahead. There is no best pattern, only the one that puts a null where your wedge actually is.',
+    solution: 'A floor wedge is not straight behind the mic, it is low and close, about 70 degrees under the capsule and roughly 120 degrees off the front. A cardioid rejects straight out the back, so hardly any of that rejection reaches the wedge and the number barely moves. A supercardioid nulls near 125 degrees and a hypercardioid near 110, so both of them put real rejection where the wedge actually sits. That is why reaching for a supercardioid or a hypercardioid on a stage vocal buys you level that a cardioid cannot. A cardioid can still get there, but only by tilting the mic well up so its back end swings down onto the wedge.',
     defaultInspect: 'wedge',
   },
   {
