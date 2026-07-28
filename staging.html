@@ -132,7 +132,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=234"></script>
+<script src="content-staging.js?v=235"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4165,7 +4165,7 @@ window.MonitorEqPanel = MonitorEqPanel;
 // picture and the loop can never disagree. Both are reported as gain before
 // feedback against a standard setup: positive means this placement bought
 // headroom, negative means it gave headroom away.
-function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onClose }) {
+function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine, onClose }) {
   const svgRef = React.useRef(null);
   const dragRef = React.useRef(false);
   if (!open) return null;
@@ -4215,6 +4215,25 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onClose 
   const SPK = [px(paNow), pz(2.12)];
   const sa = d2r(10); // the box is aimed down into the audience, matching PA_TILT
 
+  // Dragging the main speaker HERE writes the same state.paLine the stage plot
+  // writes, because where the mains stand is one fact about the system, not a
+  // per-microphone setting. Move it on any downstage mic's panel and it moves on
+  // every other panel and on the stage plot too.
+  // Screen x back to metres: px(x) = (x - X0) * S, so x = u / S + X0, where u is
+  // the pointer in viewBox units (the svg is width:100%, so scale by the rect).
+  const dragPaTo = (clientX) => {
+    const el = svgRef.current;
+    if (!el || !onPaLine) return;
+    const r = el.getBoundingClientRect();
+    if (!r.width) return;
+    const u = (clientX - r.left) / r.width * VW;
+    const lo = window.PA_LINE_MIN != null ? window.PA_LINE_MIN : -1.2;
+    const hi = window.PA_LINE_MAX != null ? window.PA_LINE_MAX : 2.6;
+    // Same 0.05 m quantisation as the stage plot, so dragging in one place and
+    // reading in the other can never disagree by a rounding step.
+    onPaLine(Math.round(Math.max(lo, Math.min(hi, u / S + X0)) * 20) / 20);
+  };
+
   // Mic polar pattern in the plane of the view. faAng is the screen angle of the
   // mic axis: it points upstage at the performer, tilted up by `tilt`.
   const faAng = Math.atan2(-Math.sin(d2r(tilt)), -Math.cos(d2r(tilt)));
@@ -4255,8 +4274,8 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onClose 
   else wedgeCoach = 'The wedge sits in a live part of the pattern and tilt alone will not clear it. Try another pattern.';
 
   let mainsCoach;
-  if (paNow < 0) mainsCoach = 'The mic is out past the main speaker, inside its coverage, with the full main mix pointed at it. No pattern saves a mic from that. Move the main speakers downstage on the stage plot until the mic is behind them.';
-  else if (paNow < 0.8) mainsCoach = 'The mic is right at the front face of the main speaker, still in its coverage. Move the main speakers downstage on the stage plot until the mic sits behind them.';
+  if (paNow < 0) mainsCoach = 'The mic is out past the main speaker, inside its coverage, with the full main mix pointed at it. No pattern saves a mic from that. Drag the speaker downstage until the mic is behind it.';
+  else if (paNow < 0.8) mainsCoach = 'The mic is right at the front face of the main speaker, still in its coverage. Drag the speaker downstage until the mic sits behind it.';
   else if (mainsDb < -3) mainsCoach = 'The mic is close to the front of the speaker. Every open microphone belongs behind the front face of the mains.';
   else mainsCoach = 'The mic is behind the speaker, which is what protects it here. The mains stand off to the side of the stage, so this path is set by that spacing and by the cabinet shadowing the mic, not by the pattern on the mic.';
 
@@ -4316,13 +4335,15 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onClose 
             <text x={(WEDGE[0] + px(EAR[0])) / 2} y={(WEDGE[1] + pz(EAR[1])) / 2 - 6} textAnchor="middle" style={{ fontSize: 8.5, fill: 'var(--green)' }}>on axis</text>
             <text x={px(WB[0]) + 8} y={pz(0) - 8} style={{ fontSize: 9, fill: 'var(--ink-2)' }}>wedge</text>
 
-            {/* the two loop paths into the capsule */}
+            {/* The ONE loop path this view is about: the wedge into the capsule.
+                There is deliberately no matching line to the mains (Kyle
+                2026-07-24). Drawing one put the mic's rear lobe on the boxes and
+                made a hypercardioid read as a liability, when a hypercardioid is
+                the pattern that HELPS here. What the mains contribute is which
+                side of them the mic stands on, not what the pattern does, and
+                that is already shown by where the box sits and where it throws. */}
             <line x1={WEDGE[0]} y1={WEDGE[1]} x2={MIC[0]} y2={MIC[1]} stroke={wTone} strokeWidth="1.8" strokeDasharray="4 4"/>
-            {/* the mains stand off to the SIDE of the stage. A side elevation
-                cannot show that, and without saying so the drawing reads as if
-                the mic's rear lobe were pointed at the boxes, which it is not. */}
             <text x={SPK[0]} y={pz(2.12) - 0.42 * S} textAnchor="middle" style={{ fontSize: 8.5, fill: 'var(--ink-3)' }}>off to the side of the stage</text>
-            <line x1={mouth[0].toFixed(1)} y1={mouth[1].toFixed(1)} x2={MIC[0]} y2={MIC[1]} stroke={mTone} strokeWidth="1.8" strokeDasharray="4 4"/>
 
             {/* mic pattern, nulls, and the mic itself */}
             <path d={polarD} fill="var(--accent)" fillOpacity="0.10" stroke="var(--accent)" strokeWidth="1.4"/>
@@ -4340,9 +4361,17 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onClose 
             <circle cx={MIC[0]} cy={MIC[1]} r="4" fill="var(--ink)"/>
             <text x={MIC[0]} y={MIC[1] - 0.32 * S} textAnchor="middle" style={{ fontSize: 9, fill: 'var(--ink-2)' }}>mic</text>
 
-            {/* main speaker on a pole. The hit area is the whole column so it is
-                easy to grab at any height. */}
-            <g data-walk="pa-position">
+            {/* Main speaker on a pole, and it DRAGS. The invisible bar behind it
+                is the grab area, wide enough and full height so the pole, the box
+                and the label all pick up the drag. Pointer capture keeps the drag
+                alive when the pointer runs off the speaker. */}
+            <g data-walk="pa-position" style={{ cursor: onPaLine ? 'ew-resize' : 'default' }}
+              onPointerDown={(e) => { if (!onPaLine) return; dragRef.current = true;
+                try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} dragPaTo(e.clientX); }}
+              onPointerMove={(e) => { if (dragRef.current) dragPaTo(e.clientX); }}
+              onPointerUp={() => { dragRef.current = false; }}
+              onPointerCancel={() => { dragRef.current = false; }}>
+              <rect x={SPK[0] - 0.34 * S} y={pz(2.86)} width={0.68 * S} height={pz(0) - pz(2.86)} fill="transparent"/>
               <line x1={SPK[0]} y1={pz(0)} x2={SPK[0]} y2={SPK[1]} stroke="#4a4a52" strokeWidth="3"/>
               <g transform={'translate(' + SPK[0].toFixed(1) + ',' + SPK[1].toFixed(1) + ') rotate(10)'}>
                 <rect x={-0.17 * S} y={-0.27 * S} width={0.34 * S} height={0.54 * S} rx="3" fill="#1c1c20" stroke={mTone} strokeWidth="1.6"/>
@@ -12483,6 +12512,10 @@ function App() {
         setup={state.micSetup && placementFor ? state.micSetup[placementFor] : null}
         paLine={window.paLineOf ? window.paLineOf(state) : null}
         onChange={(patch) => setState(prev => ({ ...prev, micSetup: { ...(prev.micSetup || {}), [placementFor]: { ...(window.DEFAULT_MIC_SETUP || { pattern: 'cardioid', az: 180, tilt: 10 }), ...(prev.micSetup && prev.micSetup[placementFor]), ...patch } } }))}
+        /* Writes the SAME state.paLine the stage plot drags, so the mains land in
+           one place for the whole system: every downstage mic's panel and the
+           stage plot all read this one number. */
+        onPaLine={(v) => setState(prev => ({ ...prev, paLine: v }))}
         onClose={() => setPlacementFor(null)}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
