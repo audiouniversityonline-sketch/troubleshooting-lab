@@ -132,7 +132,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=238"></script>
+<script src="content-staging.js?v=239"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -1844,7 +1844,43 @@ const POLAR_FLOOR = 0.045;
 // Normalisation makes this safe for existing lessons: micRejection3D divides by
 // REF_REJ, the DEFAULT setup, so a default mic reads 1.0 at any FLOOR_DROP. Only
 // deliberately-changed patterns and tilts move.
-const FLOOR_DROP = 70;
+// FLOOR_DROP is no longer one number, because the wedge is no longer one wedge
+// (Kyle 2026-07-24). Which pattern wins depends on the CABINET as much as on the
+// mic, so the wedge is now switchable between three real, documented monitors and
+// the whole scene re-solves for each.
+//
+// The counterintuitive bit, and the reason this teaches well: a SHALLOWER baffle
+// fires a STEEPER axis. Lay a wedge flat and its face points nearly straight up,
+// so it has to sit at the performer's feet to reach their ears. Stand it up and it
+// fires forward, so it has to sit further out. Each cabinet's position here is
+// SOLVED from its own baffle angle plus the requirement that its axis lands on the
+// ear, and `drop` is where that leaves it relative to the capsule:
+//
+//   wedge                 baffle   sits    drop   cardioid  super  hyper
+//   EAW MicroWedge MW12     27°   0.76 m    72°       +0    +10    +8
+//   Meyer MJF-212A          40°   1.14 m    57°       +5    +14     0
+//   EV PXM-12MP             55°   1.83 m    38°      +13     +4    -4
+//
+// All three baffle angles are the manufacturer's own cabinet figure, not a
+// coverage pattern (Kyle asked me to check that specifically, and it is a real
+// trap: the Martin LE400C's horn is 40 x 70 while its angle of fire is also ~40).
+// EAW's 27 is marked on their mechanical drawing; Meyer publish "enclosure front
+// angle 40 degrees" against a 50 x 50 horn; EV publish a "55-degree floor angle"
+// against 90 x 90 coverage.
+const WEDGE_MODELS = [
+  { deg: 27, drop: 72, name: 'LOW',  detail: 'low-profile, tight to the singer' },
+  { deg: 40, drop: 57, name: 'MID',  detail: 'the common wedge' },
+  { deg: 55, drop: 38, name: 'HIGH', detail: 'stood up, singer further back' },
+];
+const WEDGE_DEG_DEFAULT = 27;
+window.WEDGE_MODELS = WEDGE_MODELS;
+window.WEDGE_DEG_DEFAULT = WEDGE_DEG_DEFAULT;
+function wedgeModelOf(s) {
+  const deg = (s && s.wedgeDeg != null) ? s.wedgeDeg : WEDGE_DEG_DEFAULT;
+  return WEDGE_MODELS.find((w) => w.deg === deg) || WEDGE_MODELS[0];
+}
+window.wedgeModelOf = wedgeModelOf;
+const FLOOR_DROP_DEFAULT = WEDGE_MODELS[0].drop;
 // A mic's sensitivity at an angle whose cosine is cosT, for pattern `pat`.
 // One shared polar law for both loops (wedge and mains) so a pattern change
 // can never move one and not the other.
@@ -1852,10 +1888,12 @@ function micPolar(pat, cosT) {
   const a = MIC_A3[pat] != null ? MIC_A3[pat] : 0.5;
   return Math.max(POLAR_FLOOR, Math.abs(a + (1 - a) * cosT));
 }
-function micRejectionRaw(setup) {
+// `drop` is optional and defaults to the default wedge, so every existing call
+// site keeps its old meaning without being touched.
+function micRejectionRaw(setup, drop) {
   const az = (setup.az != null ? setup.az : 180) * Math.PI / 180;
   const tilt = (setup.tilt != null ? setup.tilt : 0) * Math.PI / 180;
-  const phi = FLOOR_DROP * Math.PI / 180;
+  const phi = (drop != null ? drop : FLOOR_DROP_DEFAULT) * Math.PI / 180;
   const cosT = Math.cos(tilt) * Math.cos(phi) * Math.cos(az) - Math.sin(tilt) * Math.sin(phi);
   return micPolar(setup.pattern, cosT);
 }
@@ -1876,10 +1914,15 @@ window.micRejectionRaw = micRejectionRaw;
 // lesson's feedback calibration is untouched; only when a student aims the mic
 // does the loop move.
 const DEFAULT_MIC_SETUP = { pattern: 'cardioid', az: 180, tilt: 10 };
-const REF_REJ = micRejectionRaw(DEFAULT_MIC_SETUP);
-function micRejection3D(setup) {
-  if (!setup) return 1.0;
-  return Math.max(0.3, Math.min(4.5, micRejectionRaw(setup) / REF_REJ));
+// The reference stays pinned to the DEFAULT mic on the DEFAULT wedge. That is what
+// keeps every existing lesson still: a lesson that changes neither reads exactly
+// 1.0. It also means swapping the WEDGE moves the number even for an untouched
+// cardioid, which is the lesson — a different cabinet is a different amount of
+// gain before feedback before you have touched the microphone at all.
+const REF_REJ = micRejectionRaw(DEFAULT_MIC_SETUP, FLOOR_DROP_DEFAULT);
+function micRejection3D(setup, drop) {
+  if (!setup && (drop == null || drop === FLOOR_DROP_DEFAULT)) return 1.0;
+  return Math.max(0.3, Math.min(4.5, micRejectionRaw(setup || DEFAULT_MIC_SETUP, drop) / REF_REJ));
 }
 window.micRejection3D = micRejection3D;
 window.DEFAULT_MIC_SETUP = DEFAULT_MIC_SETUP;
@@ -2034,7 +2077,8 @@ function detectFeedback(s, audio) {
     const eqg = audio.eqGain || { wedge: 1, wedge2: 1, wedge3: 1, wedge4: 1 };
     // Mic placement rejection: aiming the wedge into the mic's null attenuates
     // the loop (no placement set = 1.0, so nothing changes until the student aims).
-    const rej = micRejection3D(s.micSetup && s.micSetup[srcKey]);
+    // Wedge model is a property of the stage, so both loops read it off the state.
+    const rej = micRejection3D(s.micSetup && s.micSetup[srcKey], wedgeModelOf(s).drop);
     checkWedge('wedge', o.wedge, (c.wedge || 0) / (eqg.wedge || 1) * rej, ch.highpass, i);
     checkWedge('wedge2', o.wedge2, (c.wedge2 || 0) / (eqg.wedge2 || 1) * rej, ch.highpass, i);
     // W3/W4 exist only on the 16-ch band stage. On the MX-8 they aren't present,
@@ -2107,7 +2151,8 @@ function feedbackMargins(s, audio) {
     if (!srcDef || !srcDef.canFeedback) continue;
     if (srcDef.kind === 'condenser' && !ch.phantom) continue;
     const c = audio.contributions[srcKey]; if (!c) continue;
-    const rej = micRejection3D(s.micSetup && s.micSetup[srcKey]);
+    // Wedge model is a property of the stage, so both loops read it off the state.
+    const rej = micRejection3D(s.micSetup && s.micSetup[srcKey], wedgeModelOf(s).drop);
     for (const wKey of keys) {
       const m = maxLoopFor(wKey, o[wKey], (c[wKey] || 0) / (eqg[wKey] || 1) * rej, ch.highpass);
       if (m > out[wKey]) out[wKey] = m;
@@ -4201,7 +4246,7 @@ window.MonitorEqPanel = MonitorEqPanel;
 // picture and the loop can never disagree. Both are reported as gain before
 // feedback against a standard setup: positive means this placement bought
 // headroom, negative means it gave headroom away.
-function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine, onClose }) {
+function PlacementPanel({ open, srcKey, label, setup, paLine, wedgeDeg, onChange, onPaLine, onWedgeDeg, onClose }) {
   const svgRef = React.useRef(null);
   const dragRef = React.useRef(false);
   if (!open) return null;
@@ -4214,11 +4259,14 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
   const d2r = (d) => d * Math.PI / 180;
   const rOf = (aa, deg) => Math.abs(aa + (1 - aa) * Math.cos(d2r(deg)));
   const eff = { pattern: pat, az: 180, tilt };
+  const MODELS = window.WEDGE_MODELS || [{ deg: 27, drop: 72, name: 'LOW' }];
+  const wDeg = wedgeDeg != null ? wedgeDeg : (window.WEDGE_DEG_DEFAULT != null ? window.WEDGE_DEG_DEFAULT : 27);
+  const model = MODELS.find((w) => w.deg === wDeg) || MODELS[0];
 
   // Both readings straight off the engine, converted to gain before feedback:
   // micRejection3D returns a coupling ratio (>1 = hotter loop = less headroom),
   // paPlacementDb returns dB added to the mains loop, so both get negated.
-  const wedgeDb = window.micRejection3D ? -20 * Math.log10(window.micRejection3D(eff)) : 0;
+  const wedgeDb = window.micRejection3D ? -20 * Math.log10(window.micRejection3D(eff, model.drop)) : 0;
   const mainsDb = window.paPlacementDb ? -window.paPlacementDb({ paLine: paNow }) : 0;
   const tone = (db) => (db >= 1 ? 'var(--green)' : db > -3 ? 'var(--accent)' : 'var(--hot)');
   const wTone = tone(wedgeDb), mTone = tone(mainsDb);
@@ -4227,15 +4275,9 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
   // ---- scene, in metres, uniformly scaled so every drawn angle is true ----
   // Still pinned by the one constraint (Kyle 2026-07-24): the wedge is aimed ON
   // AXIS at the singer's ear, so a line perpendicular to its angled baffle lands
-  // on the ear. What changed is WHICH wedge. This is now the low-profile cabinet
-  // from the survey — 20" deep by 10" tall, a 27 deg baffle, the EAW MicroWedge
-  // figure with Rat Sound at 31 — instead of the 40 deg mean. Those two solve to
-  // completely different places, because a shallower baffle throws a STEEPER
-  // axis: at 27 deg the wedge reaches the ear from 0.75 m in front of the singer,
-  // where the 40 deg box had to sit 1.17 m out. Tight and steep is how these
-  // wedges are actually used, and it puts the cabinet 70 deg below the capsule,
-  // which is the FLOOR_DROP the engine reads. See the engine's note for why that
-  // angle is the difference between a hypercardioid helping and hurting.
+  // on the ear. The cabinet is no longer hard-coded, because the wedge is now
+  // switchable: the polygon is SOLVED from whichever model is selected, so all
+  // three draw truthfully and the picture can never drift from the engine.
   const VW = 700, VH = 380, X0 = -1.70, Z1 = 2.86, S = VW / 5.35;
   const px = (x) => (x - X0) * S;
   const pz = (z) => (Z1 - z) * S;
@@ -4243,18 +4285,17 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
   const MIC = [px(0), pz(1.52)];
   // Wedge cabinet in side elevation: bottom edge on the floor, vertical back
   // downstage, and the baffle running from the front-bottom corner up to the
-  // back-top corner. 0.45 m deep by 0.249 m tall puts that baffle at 29.0 deg
-  // off the floor, its acoustic centre at (0.518, 0.124), 0.82 m in front of the
-  // ear (on axis, as required) and 69.6 deg below the capsule, which is the 70
-  // the engine reads.
-  //
-  // 29 and not 27 (Kyle asked me to re-check this against the survey). The
-  // surveyed low-profile pair is EAW MicroWedge at 27 published and Rat Sound at
-  // 31 computed from dims, and 27 is the ONE figure the survey itself flags as
-  // not matching its own manufacturer's mechanical drawing, which computes to 37.
-  // Sitting between the two rests the scene on both wedges instead of on the
-  // single disputed number, and costs almost nothing in the illustration.
-  const WA = [0.293, 0], WB = [0.743, 0], WC = [0.743, 0.249];
+  // back-top corner. Solved, not typed in. Given the model's baffle angle and its
+  // real depth, the height follows (H = D tan b), and the position follows from
+  // the aim-at-the-ear rule: the baffle's normal sits (90 - b) above horizontal,
+  // so the cabinet has to stand back far enough for that ray to reach the ear.
+  // Shallower baffle, steeper ray, closer wedge — which is why the low-profile
+  // box ends up under the mic and the stood-up one ends up out in front of it.
+  const WDEPTH = { 27: 0.44, 40: 0.58, 55: 0.45 }; // the real cabinets' depths
+  const wD = WDEPTH[model.deg] || 0.45;
+  const wH = wD * Math.tan(d2r(model.deg));
+  const wCx = EAR[0] + (EAR[1] - wH / 2) / Math.tan(d2r(90 - model.deg));
+  const WA = [wCx - wD / 2, 0], WB = [wCx + wD / 2, 0], WC = [wCx + wD / 2, wH];
   const WBC = [(WA[0] + WC[0]) / 2, (WA[1] + WC[1]) / 2]; // baffle centre
   const WEDGE = [px(WBC[0]), pz(WBC[1])];
   const SPK = [px(paNow), pz(2.12)];
@@ -4321,6 +4362,18 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
       <div className="mono" style={{ fontSize: 8, color: 'var(--ink-3)', letterSpacing: 0.5, marginTop: 3 }}>{name}</div>
     </div>
   );
+  // Wedge selector. Same shape as the pattern buttons because it is the same kind
+  // of choice: the right pattern is a function of the cabinet, so the two controls
+  // belong side by side and you read the answer off WEDGE PATH either way.
+  const wedgeBtn = (w) => (
+    <div key={w.deg} data-walk={'wedge-deg-' + w.deg}
+      onClick={() => onWedgeDeg && onWedgeDeg(w.deg)} className="mono ui-no-select"
+      title={w.deg + ' degree cabinet, ' + w.detail}
+      style={{ fontSize: 9, padding: '4px 9px', borderRadius: 4, cursor: onWedgeDeg ? 'pointer' : 'default',
+        fontWeight: 700, letterSpacing: 0.4,
+        background: wDeg === w.deg ? 'var(--aux)' : '#0a0a0c', color: wDeg === w.deg ? '#0a0a0c' : 'var(--ink-2)',
+        border: '1px solid ' + (wDeg === w.deg ? 'var(--aux)' : '#38383e') }}>{w.deg + '°'}</div>
+  );
 
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 62, background: 'rgba(0,0,0,0.5)' }}>
@@ -4329,12 +4382,17 @@ function PlacementPanel({ open, srcKey, label, setup, paLine, onChange, onPaLine
           <div className="display" style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>Mic placement</div>
           <div className="mono" style={{ fontSize: 9, color: 'var(--ink-3)', letterSpacing: 0.6 }}>{(label || '').toUpperCase()}</div>
           <div style={{ flex: 1 }}/>
+          <span className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.6, marginRight: 1 }}>WEDGE</span>
+          <div style={{ display: 'flex', gap: 4, marginRight: 6 }}>{MODELS.map(wedgeBtn)}</div>
+          <span className="mono" style={{ fontSize: 7.5, color: 'var(--ink-3)', letterSpacing: 0.6, marginRight: 1 }}>MIC</span>
           <div style={{ display: 'flex', gap: 5 }}>{patBtn('cardioid', 'CARDIOID')}{patBtn('super', 'SUPER')}{patBtn('hyper', 'HYPER')}</div>
           <div onClick={onClose} className="mono ui-no-select" style={{ fontSize: 12, color: 'var(--ink-2)', cursor: 'pointer', padding: '2px 6px', marginLeft: 4 }}>✕</div>
         </div>
 
         <div style={{ background: '#0d0d10', border: '1px solid #2a2a2e', borderRadius: 6, padding: '5px 6px 2px' }}>
-          <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 1 }}>SIDE VIEW · THE MIC, ITS WEDGE AND THE MAINS</div>
+          <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink-3)', letterSpacing: 0.8, marginBottom: 1 }}>
+            {'SIDE VIEW · ' + model.deg + '° WEDGE, ' + model.detail.toUpperCase()}
+          </div>
           <svg ref={svgRef} viewBox={'0 0 ' + VW + ' ' + VH} style={{ width: '100%', display: 'block' }}>
             {/* main speaker coverage, drawn first so everything sits on top */}
             <path d={covD} fill={mTone} fillOpacity="0.06" stroke={mTone} strokeOpacity="0.22" strokeWidth="1"/>
@@ -12543,6 +12601,11 @@ function App() {
            one place for the whole system: every downstage mic's panel and the
            stage plot all read this one number. */
         onPaLine={(v) => setState(prev => ({ ...prev, paLine: v }))}
+        /* Which wedge is on the floor is a fact about the stage too, not about one
+           microphone, so it lives on the state next to paLine and every mic's
+           panel reads the same cabinet. */
+        wedgeDeg={state.wedgeDeg}
+        onWedgeDeg={(v) => setState(prev => ({ ...prev, wedgeDeg: v }))}
         onClose={() => setPlacementFor(null)}/>
       <window.MonitorEqPanel
         open={eqPanelOpen} onClose={() => setEqPanelOpen(false)}
