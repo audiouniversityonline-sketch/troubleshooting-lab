@@ -3359,30 +3359,46 @@ window.MANAGE_FEEDBACK = [
 // one group per course lesson, so a student finishing a video can open the Lab
 // and find the matching hands-on exercise by its lesson number.
 //
-// `code` is the LS101 lesson coordinate. NOTE the Section 4 numbering assumes
-// the new "Powering Up the System" video is inserted as S4.L1, which bumps
-// Channel Strip -> 4.2, Busses -> 4.3, Calibrating -> 4.4.
+// `code` is the LS101 lesson coordinate. Lesson names below are copied from the
+// PUBLISHED Circle course, re-verified 2026-07-29 (space live-sound-101, 17
+// lessons, no drafts) — the whole promise is number-matching, so they have to be
+// exact.
+//
+// >>> OPEN DECISION, SECTION 4 <<<
+// These codes assume a new "Powering Up the System" video goes in as S4.L1,
+// bumping Channel Strip -> 4.2, Busses -> 4.3, Calibrating -> 4.4. That video
+// does not exist yet: the published Section 4 is 4.1 Channel Strip, 4.2 Auxes/
+// Busses/Master, 4.3 Calibrating. Until it ships, three groups here read one
+// number high. If the video is dropped instead, the whole fix is: retag 4.3 ->
+// 4.2 and 4.4 -> 4.3, and rehome the three POWER rows (they have no other
+// lesson to attach to, so they would become a second LAB ORIENTATION group).
 //
 // Lessons with NO exercise (deliberately, not an oversight):
-//   1.2 Tracing        - same skill as 1.1, folded in
 //   2.1 Power/cables/placement - venue planning, no console action
-//   3.4 Consumer Devices - the real takeaway is gain structure, folded into 4.4
+//   3.4 Playback Devices - the real takeaway is gain structure, folded into 4.4
 //   4.2 Channel Strip  - would need channel EQ + compressor on every strip;
 //                        Kyle's existing walkthrough videos cover it instead
 //   5.4 Workbox        - physical kit
 //
-// PENDING mechanics (rows appear once the mechanic is built):
-//   3.3 hum / ground lift, 4.3 main-mix assign + pre/post fader,
-//   3.2 mic placement (null aiming + mic vs the mains)
+// PENDING mechanic (rows appear once it is built):
+//   3.3 hum / ground lift. (Routing shipped v220-v222 and mic placement shipped
+//   v224-v225; both are now placed above.)
 // ============================================================
 window.LS101_TRACK = [
   { code: '1.1', lesson: 'Signal Flow', id: 'pt0' },
   { code: '1.1', lesson: 'Signal Flow', id: 'pt3' },
+  // 1.2 is trace-the-chain, and "Crossed at the Console" is exactly that. It
+  // also keeps the Patching course's own order (pt0 then pt0b) intact.
+  { code: '1.2', lesson: 'Tracing a Signal Chain', id: 'pt0b' },
   { code: '2.2', lesson: 'Outputs', id: 'pt2' },
   { code: '2.2', lesson: 'Outputs', id: 'ptSwap' },
-  { code: '3.1', lesson: 'Mic Types', id: 'is2' },
+  { code: '3.1', lesson: 'Microphone Types', id: 'is2' },
+  // Published 3.2 covers positioning for feedback mitigation, so the two
+  // placement exercises belong here, in their home course's order.
   { code: '3.2', lesson: 'Microphone Feedback', id: 'fb1' },
   { code: '3.2', lesson: 'Microphone Feedback', id: 'fb2' },
+  { code: '3.2', lesson: 'Microphone Feedback', id: 'fbAim' },
+  { code: '3.2', lesson: 'Microphone Feedback', id: 'fbPa' },
   { code: '3.2', lesson: 'Microphone Feedback', id: 'fb3' },
   { code: '3.2', lesson: 'Microphone Feedback', id: 'fb4' },
   { code: '3.2', lesson: 'Microphone Feedback', id: 'fb5' },
@@ -3390,7 +3406,14 @@ window.LS101_TRACK = [
   { code: '4.1', lesson: 'Powering Up the System', id: 'pwPop' },
   { code: '4.1', lesson: 'Powering Up the System', id: 'pwUp' },
   { code: '4.1', lesson: 'Powering Up the System', id: 'pwDown' },
-  { code: '4.3', lesson: 'Busses and Master', id: 'mw1' },
+  // Master section first (Start Here 106 is the only step-by-step teaching of
+  // the LR assign), then the aux sends the rest of the lesson is about.
+  { code: '4.3', lesson: 'Auxes, Busses & Master Section', id: 106 },
+  { code: '4.3', lesson: 'Auxes, Busses & Master Section', id: 'mw1' },
+  { code: '4.3', lesson: 'Auxes, Busses & Master Section', id: 'mw2' },
+  { code: '4.3', lesson: 'Auxes, Busses & Master Section', id: 'mw3' },
+  { code: '4.3', lesson: 'Auxes, Busses & Master Section', id: 'mw4' },
+  { code: '4.3', lesson: 'Auxes, Busses & Master Section', id: 'mwMoreMe' },
   { code: '4.4', lesson: 'Calibrating the System', id: 'is1' },
   { code: '4.4', lesson: 'Calibrating the System', id: 'sy1' },
   { code: '4.4', lesson: 'Calibrating the System', id: 'sy2' },
