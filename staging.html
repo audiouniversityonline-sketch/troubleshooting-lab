@@ -132,7 +132,7 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 <!-- Bump the ?v= number whenever content.js changes so browsers fetch the new
      scenarios immediately instead of a cached copy. -->
-<script src="content-staging.js?v=240"></script>
+<script src="content-staging.js?v=241"></script>
 </head>
 <body>
 <div id="root"><div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Menlo,monospace;color:#8a8a92;background:#08080a;font-size:12px;letter-spacing:1px">LOADING THE LAB…</div></div>
@@ -4037,7 +4037,7 @@ function PASpeaker({ side, on, mute, volume, level, signalArriving, onTogglePowe
       {/* Click-to-listen indicator. A powered speaker has an input-signal LED:
           signal is reaching the speaker independent of where the volume knob
           is set. Click to inspect (route audio to this destination). */}
-      <div onClick={onSelect} className="ui-no-select" style={{
+      <div onClick={onSelect} data-nodrag="1" className="ui-no-select" style={{
         cursor: 'pointer',
         padding: '2px 6px', borderRadius: 3,
         background: isInspected ? 'rgba(255,201,58,0.15)' : 'transparent',
@@ -5190,6 +5190,16 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
   // reset itself the moment the first pointermove called setState and the drag
   // died after one frame. It has to be a ref that survives renders.
   const paDragRef = React.useRef(false);
+  // The speaker's own controls live INSIDE the drag wrapper, so a pointerdown on
+  // one of them used to start a position drag as well. Capturing the pointer on
+  // the wrapper retargets every later move, pointerup and click to the wrapper,
+  // so the volume knob, the mute pad, the power button and the SIG lamp all went
+  // dead and the cabinet slid upstage instead. That broke every lesson that asks
+  // a student to set the main speaker level (Kyle hit it on a live stream,
+  // 2026-07-30). The cabinet drags; anything that is its own control does not.
+  // Any NEW control added to PASpeaker must be a <button>, carry role="slider",
+  // or be marked data-nodrag, or it will be swallowed the same way.
+  const paCtl = (t) => !!(t && t.closest && t.closest('[role="slider"], button, .toggle, [data-nodrag]'));
 
   const positions = big16 ? {
     // Drum kit tucked hard against the UPSTAGE edge, bird's-eye tight cluster:
@@ -5279,7 +5289,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
             the front of the stage. Each one's cable comes out of its bottom
             edge and runs along the front rail back to the stage box. */}
         <div ref={paLRef} data-walk="out-pa-l" title="Drag upstage or downstage. Every open mic belongs behind the front face of the mains."
-          onPointerDown={(e) => { paDragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} }}
+          onPointerDown={(e) => { if (paCtl(e.target)) return; paDragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} }}
           onPointerMove={(e) => { if (paDragRef.current) setPaLine(e.clientY, e.currentTarget); }}
           onPointerUp={() => { paDragRef.current = false; }} onPointerCancel={() => { paDragRef.current = false; }}
           style={{ position: 'absolute', cursor: 'ns-resize', bottom: paBottom, left: big16 ? '11%' : '7%', transform: 'translateX(-50%)' }}>
@@ -5350,7 +5360,7 @@ function StageRow({ state, setState, audio, sourceKeys, sourceRefs, portRefs, sn
         )}
 
         <div ref={paRRef} data-walk="out-pa-r" title="Drag upstage or downstage. Every open mic belongs behind the front face of the mains."
-          onPointerDown={(e) => { paDragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} }}
+          onPointerDown={(e) => { if (paCtl(e.target)) return; paDragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} }}
           onPointerMove={(e) => { if (paDragRef.current) setPaLine(e.clientY, e.currentTarget); }}
           onPointerUp={() => { paDragRef.current = false; }} onPointerCancel={() => { paDragRef.current = false; }}
           style={{ position: 'absolute', cursor: 'ns-resize', bottom: paBottom, left: big16 ? '89%' : '73%', transform: 'translateX(-50%)' }}>
